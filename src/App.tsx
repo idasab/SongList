@@ -12,27 +12,25 @@ import { SongPage } from './pages/SongPage';
 import { startAutoSync } from './services/sync';
 import { useStore } from './store/useStore';
 
+const TABS = [
+  { to: '/', label: 'Låtar', Icon: Music },
+  { to: '/setlists', label: 'Setlistor', Icon: ListMusic },
+  { to: '/import', label: 'Importera', Icon: FileUp },
+  { to: '/settings', label: 'Inställningar', Icon: Settings },
+];
+
 function TabLayout() {
   return (
     <>
       <Outlet />
       <nav className="tabbar">
-        <NavLink to="/" end>
-          <Music size={22} />
-          Låtar
-        </NavLink>
-        <NavLink to="/setlists">
-          <ListMusic size={22} />
-          Setlistor
-        </NavLink>
-        <NavLink to="/import">
-          <FileUp size={22} />
-          Importera
-        </NavLink>
-        <NavLink to="/settings">
-          <Settings size={22} />
-          Inställningar
-        </NavLink>
+        {TABS.map(({ to, label, Icon }) => (
+          <NavLink key={to} to={to} end={to === '/'} aria-label={label} title={label}>
+            <span className="tab-icon">
+              <Icon size={22} />
+            </span>
+          </NavLink>
+        ))}
       </nav>
     </>
   );

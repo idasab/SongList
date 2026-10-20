@@ -52,7 +52,8 @@ async function doSync(): Promise<SyncResult> {
       if (!isBackupFile(remote)) continue;
       devices++;
       const incoming = mergeLibrary(useStore.getState().exportLibrary(true), remote);
-      received += incoming.songs.length + incoming.setlists.length + incoming.categories.length;
+      received +=
+        incoming.songs.length + incoming.setlists.length + incoming.categories.length + incoming.folders.length;
       await useStore.getState().applyIncoming(incoming);
     } catch (e) {
       console.warn('Kunde inte läsa synkfil', f.name, e);

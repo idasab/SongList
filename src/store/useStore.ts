@@ -6,6 +6,7 @@ import {
   type Category,
   type LibraryData,
   type Setlist,
+  type SetlistFolder,
   type Settings,
   type Song,
 } from '../lib/model';
@@ -25,6 +26,7 @@ interface State {
   songs: Record<string, Song>;
   setlists: Record<string, Setlist>;
   categories: Record<string, Category>;
+  folders: Record<string, SetlistFolder>;
   settings: Settings;
   draft: Draft | null;
   /** Ökar vid varje lokal ändring (används för att trigga synk) */
@@ -33,12 +35,14 @@ interface State {
   init(): Promise<void>;
   saveSong(input: { id?: string; content: string; tags?: string[]; categoryId?: string }): Promise<Song>;
   importSongs(contents: { content: string; tags?: string[]; categoryId?: string }[]): Promise<Song[]>;
-  updateSongPrefs(id: string, prefs: Partial<Pick<Song, 'transpose' | 'scrollSpeed'>>): Promise<void>;
+  updateSongPrefs(id: string, prefs: Partial<Pick<Song, 'transpose' | 'scrollSpeed' | 'annotations'>>): Promise<void>;
   deleteSong(id: string): Promise<void>;
   saveSetlist(input: Partial<Setlist> & { name: string }): Promise<Setlist>;
   deleteSetlist(id: string): Promise<void>;
   saveCategory(input: { id?: string; name: string }): Promise<Category>;
   deleteCategory(id: string): Promise<void>;
+  saveFolder(input: { id?: string; name: string }): Promise<SetlistFolder>;
+  deleteFolder(id: string): Promise<void>;
   updateSettings(patch: Partial<Settings>): Promise<void>;
   /** Tar emot poster från synk/backup utan att ändra deras tidsstämplar */
   applyIncoming(data: LibraryData, opts?: { local?: boolean }): Promise<void>;
@@ -62,38 +66,46 @@ function toRecord<T extends { id: string }>(list: T[]): Record<string, T> {
   return Object.fromEntries(list.map((x) => [x.id, x]));
 }
 
+let initPromise: Promise<void> | null = null;
+
 export const useStore = create<State>((set, get) => ({
   ready: false,
   deviceId: '',
   songs: {},
   setlists: {},
   categories: {},
+  folders: {},
   settings: DEFAULT_SETTINGS,
   draft: null,
   revision: 0,
 
-  async init() {
-    if (get().ready) return;
-    void requestPersistentStorage();
-    const [songs, setlists, categories, settings, deviceId, firstRun] = await Promise.all([
-      db.songs.all(),
-      db.setlists.all(),
-      db.categories.all(),
-      db.getSettings(),
-      db.getDeviceId(),
-      db.isFirstRun(),
-    ]);
-    set({
-      songs: toRecord(songs),
-      setlists: toRecord(setlists),
-      categories: toRecord(categories),
-      settings,
-      deviceId,
-      ready: true,
-    });
-    if (firstRun && songs.length === 0) {
-      await get().saveSong({ content: SAMPLE_SONG, tags: ['exempel'] });
-    }
+  init() {
+    // Körs bara en gång även om den anropas flera gånger samtidigt (t.ex. i StrictMode)
+    initPromise ??= (async () => {
+      void requestPersistentStorage();
+      const [songs, setlists, categories, folders, settings, deviceId, firstRun] = await Promise.all([
+        db.songs.all(),
+        db.setlists.all(),
+        db.categories.all(),
+        db.folders.all(),
+        db.getSettings(),
+        db.getDeviceId(),
+        db.isFirstRun(),
+      ]);
+      set({
+        songs: toRecord(songs),
+        setlists: toRecord(setlists),
+        categories: toRecord(categories),
+        folders: toRecord(folders),
+        settings,
+        deviceId,
+        ready: true,
+      });
+      if (firstRun && songs.length === 0) {
+        await get().saveSong({ content: SAMPLE_SONG, tags: ['exempel'] });
+      }
+    })();
+    return initPromise;
   },
 
   async saveSong({ id, content, tags, categoryId }) {
@@ -105,6 +117,7 @@ export const useStore = create<State>((set, get) => ({
       updatedAt: now,
       transpose: existing?.transpose ?? 0,
       scrollSpeed: existing?.scrollSpeed,
+      annotations: existing?.annotations,
       ...deriveSongMeta(content),
       content,
       tags: normalizeTags(tags ?? existing?.tags ?? []),
@@ -145,7 +158,7 @@ export const useStore = create<State>((set, get) => ({
     if (!song) return;
     const now = Date.now();
     // Behåll en gravsten utan innehåll så att raderingen synkas till andra enheter
-    const tomb: Song = { ...song, content: '', tags: [], deletedAt: now, updatedAt: now };
+    const tomb: Song = { ...song, content: '', tags: [], annotations: undefined, deletedAt: now, updatedAt: now };
     set((s) => ({ songs: { ...s.songs, [id]: tomb }, revision: s.revision + 1 }));
     await db.songs.put(tomb);
   },
@@ -199,6 +212,37 @@ export const useStore = create<State>((set, get) => ({
     await db.categories.put(tomb);
   },
 
+  async saveFolder({ id, name }) {
+    const now = Date.now();
+    const existing = id ? get().folders[id] : undefined;
+    const f: SetlistFolder = {
+      id: existing?.id ?? newId(),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      name: name.trim(),
+    };
+    set((s) => ({ folders: { ...s.folders, [f.id]: f }, revision: s.revision + 1 }));
+    await db.folders.put(f);
+    return f;
+  },
+
+  async deleteFolder(id) {
+    const f = get().folders[id];
+    if (!f) return;
+    const now = Date.now();
+    const tomb: SetlistFolder = { ...f, deletedAt: now, updatedAt: now };
+    // Setlistorna i mappen flyttas ut (hamnar under "Utan mapp")
+    const moved = Object.values(get().setlists)
+      .filter((sl) => sl.folderId === id)
+      .map((sl) => ({ ...sl, folderId: undefined, updatedAt: now }));
+    set((s) => ({
+      folders: { ...s.folders, [id]: tomb },
+      setlists: { ...s.setlists, ...toRecord(moved) },
+      revision: s.revision + 1,
+    }));
+    await Promise.all([db.folders.put(tomb), db.setlists.putMany(moved)]);
+  },
+
   async updateSettings(patch) {
     const settings = { ...get().settings, ...patch };
     set({ settings });
@@ -206,11 +250,12 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async applyIncoming(data, opts) {
-    if (!data.songs.length && !data.setlists.length && !data.categories.length) return;
+    if (!data.songs.length && !data.setlists.length && !data.categories.length && !data.folders.length) return;
     set((s) => ({
       songs: { ...s.songs, ...toRecord(data.songs) },
       setlists: { ...s.setlists, ...toRecord(data.setlists) },
       categories: { ...s.categories, ...toRecord(data.categories) },
+      folders: { ...s.folders, ...toRecord(data.folders) },
       // Ändringar från en återställning ska synkas vidare; ändringar från synk behöver inte det
       revision: opts?.local ? s.revision + 1 : s.revision,
     }));
@@ -218,6 +263,7 @@ export const useStore = create<State>((set, get) => ({
       db.songs.putMany(data.songs),
       db.setlists.putMany(data.setlists),
       db.categories.putMany(data.categories),
+      db.folders.putMany(data.folders),
     ]);
   },
 
@@ -228,6 +274,7 @@ export const useStore = create<State>((set, get) => ({
       songs: Object.values(s.songs).filter(keep),
       setlists: Object.values(s.setlists).filter(keep),
       categories: Object.values(s.categories).filter(keep),
+      folders: Object.values(s.folders).filter(keep),
     };
   },
 
@@ -262,6 +309,12 @@ export function liveSetlists(setlists: Record<string, Setlist>): Setlist[] {
 export function liveCategories(categories: Record<string, Category>): Category[] {
   return Object.values(categories)
     .filter((c) => !c.deletedAt)
+    .sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+}
+
+export function liveFolders(folders: Record<string, SetlistFolder>): SetlistFolder[] {
+  return Object.values(folders)
+    .filter((f) => !f.deletedAt)
     .sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 }
 

@@ -6,6 +6,7 @@ import { looksLikeChordPro, textToChordPro, type Measure } from './textImport';
 import { ocrToChordPro, type OcrPage } from './ocrLayout';
 import { getPianoChord, normalizeSuffix } from './chordShapes';
 import { mergeRecords, restoreMerge } from './merge';
+import { anchorAt, anchorToPx, hitStroke, strokeFromPx, strokeToPx } from './annotations';
 
 describe('ackord', () => {
   it('känner igen ackord men inte vanliga ord', () => {
@@ -214,5 +215,31 @@ describe('synk', () => {
     const backup = [{ id: 'a', createdAt: 0, updatedAt: 10 }];
     const out = restoreMerge(local, backup, 100);
     expect(out).toEqual([{ id: 'a', createdAt: 0, updatedAt: 100, deletedAt: undefined }]);
+  });
+});
+
+describe('anteckningar', () => {
+  const m20 = { tops: [0, 40, 70, 100], fontPx: 20 };
+  const m30 = { tops: [0, 60, 105, 150], fontPx: 30 };
+
+  it('fäster en punkt vid raden ovanför och mäter i em', () => {
+    const a = anchorAt(m20, 50, 80);
+    expect(a).toEqual({ line: 2, dx: 2.5, dy: 0.5 });
+    expect(anchorToPx(m20, a)).toEqual({ x: 50, y: 80 });
+  });
+
+  it('följer med texten när textstorleken ändras', () => {
+    const a = anchorAt(m20, 50, 80);
+    // Samma rad, 1,5 gånger större text
+    expect(anchorToPx(m30, a)).toEqual({ x: 75, y: 120 });
+  });
+
+  it('skapar streck och hittar dem med suddet', () => {
+    const s = strokeFromPx(m20, [10, 45, 50, 45, 90, 45], 'red', 0.1, 's1');
+    expect(s.anchor.line).toBe(1);
+    const px = strokeToPx(m20, s);
+    expect(px).toEqual([10, 45, 50, 45, 90, 45]);
+    expect(hitStroke(px, 70, 48, 5)).toBe(true);
+    expect(hitStroke(px, 70, 60, 5)).toBe(false);
   });
 });

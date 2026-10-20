@@ -1,7 +1,7 @@
 // Lokal lagring i IndexedDB via localForage. En "store" per posttyp.
 
 import localforage from 'localforage';
-import { DEFAULT_SETTINGS, newId, type Category, type Setlist, type Settings, type Song } from '../lib/model';
+import { DEFAULT_SETTINGS, newId, type Category, type Setlist, type SetlistFolder, type Settings, type Song } from '../lib/model';
 
 const DB_NAME = 'SongList';
 
@@ -16,6 +16,7 @@ function store(storeName: string) {
 const songsStore = store('songs');
 const setlistsStore = store('setlists');
 const categoriesStore = store('categories');
+const foldersStore = store('folders');
 const metaStore = store('meta');
 
 async function all<T>(s: LocalForage): Promise<T[]> {
@@ -42,6 +43,11 @@ export const db = {
     all: () => all<Category>(categoriesStore),
     put: (c: Category) => categoriesStore.setItem(c.id, c),
     putMany: (list: Category[]) => Promise.all(list.map((c) => categoriesStore.setItem(c.id, c))),
+  },
+  folders: {
+    all: () => all<SetlistFolder>(foldersStore),
+    put: (f: SetlistFolder) => foldersStore.setItem(f.id, f),
+    putMany: (list: SetlistFolder[]) => Promise.all(list.map((f) => foldersStore.setItem(f.id, f))),
   },
   async getSettings(): Promise<Settings> {
     const s = await metaStore.getItem<Partial<Settings>>('settings');

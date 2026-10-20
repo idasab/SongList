@@ -26,6 +26,7 @@ export function mergeLibrary(local: LibraryData, remote: LibraryData): LibraryDa
     songs: mergeRecords(local.songs, remote.songs).incoming,
     setlists: mergeRecords(local.setlists, remote.setlists).incoming,
     categories: mergeRecords(local.categories, remote.categories).incoming,
+    folders: mergeRecords(local.folders, remote.folders ?? []).incoming,
   };
 }
 

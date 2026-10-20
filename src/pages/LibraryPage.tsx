@@ -61,7 +61,7 @@ export function LibraryPage() {
   return (
     <div className="screen">
       <Header title="Låtar">
-        <button className="btn primary" onClick={() => navigate('/new')}>
+        <button className="btn primary icon-mobile" aria-label="Ny låt" onClick={() => navigate('/new')}>
           <Plus size={18} /> <span className="hide-mobile">Ny låt</span>
         </button>
       </Header>

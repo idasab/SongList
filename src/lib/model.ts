@@ -1,5 +1,6 @@
 // Datamodell för låtar, setlistor och kategorier.
 
+import type { Annotations } from './annotations';
 import type { Instrument } from './chordShapes';
 import type { Notation } from './chords';
 
@@ -26,6 +27,8 @@ export interface Song extends SyncRecord {
   transpose: number;
   /** Hastighet för automatisk scroll (1–10) */
   scrollSpeed?: number;
+  /** Post-it-lappar och handritade anteckningar */
+  annotations?: Annotations;
 }
 
 export interface SetlistItem {
@@ -36,12 +39,19 @@ export interface SetlistItem {
 
 export interface Setlist extends SyncRecord {
   name: string;
+  /** Mapp som setlistan ligger i */
+  folderId?: string;
   date?: string;
   notes?: string;
   items: SetlistItem[];
 }
 
 export interface Category extends SyncRecord {
+  name: string;
+}
+
+/** Mapp för att organisera setlistor */
+export interface SetlistFolder extends SyncRecord {
   name: string;
 }
 
@@ -53,6 +63,7 @@ export interface Settings {
   theme: Theme;
   fontSize: number;
   showDiagrams: boolean;
+  showAnnotations: boolean;
   autoSync: boolean;
   autoBackup: boolean;
   lastSyncAt?: number;
@@ -66,6 +77,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   fontSize: 20,
   showDiagrams: false,
+  showAnnotations: true,
   autoSync: true,
   autoBackup: true,
   librarySort: 'title',
@@ -75,6 +87,7 @@ export interface LibraryData {
   songs: Song[];
   setlists: Setlist[];
   categories: Category[];
+  folders: SetlistFolder[];
 }
 
 export interface BackupFile extends LibraryData {
@@ -93,7 +106,10 @@ export function newId(): string {
 export function isBackupFile(data: unknown): data is BackupFile {
   if (!data || typeof data !== 'object') return false;
   const d = data as Partial<BackupFile>;
+  // Äldre säkerhetskopior saknar mappar
+  if (d.folders === undefined) d.folders = [];
   return (
+    Array.isArray(d.folders) &&
     (d.format === 'songlist-backup' || d.format === 'songlist-sync') &&
     Array.isArray(d.songs) &&
     Array.isArray(d.setlists) &&

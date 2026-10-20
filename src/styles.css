@@ -6,13 +6,13 @@
   --text: #1b1d22;
   --text-muted: #6b6f78;
   --border: #dcdad3;
-  --accent: #2f6fdf;
+  --accent: #458268;
   --accent-text: #ffffff;
-  --accent-soft: #e3ecfc;
-  --chord: #c0392b;
-  --chorus-bar: #2f6fdf;
+  --accent-soft: #e1f1e9;
+  --chord: #a45f66;
+  --chorus-bar: #68af90;
   --danger: #c62828;
-  --ok: #2e7d32;
+  --ok: #458268;
   --shadow: 0 6px 24px rgba(20, 22, 30, 0.12);
   --radius: 12px;
   --tabbar-h: 58px;
@@ -35,13 +35,13 @@
     --text: #eceef2;
     --text-muted: #9aa0ab;
     --border: #2f3441;
-    --accent: #6ea1ff;
-    --accent-text: #0b1020;
-    --accent-soft: #1f2b45;
-    --chord: #f5b942;
-    --chorus-bar: #6ea1ff;
+    --accent: #458268;
+    --accent-text: #ffffff;
+    --accent-soft: #1d3a2e;
+    --chord: #c98a90;
+    --chorus-bar: #8cc8ad;
     --danger: #ff6b6b;
-    --ok: #66bb6a;
+    --ok: #8cc8ad;
     --shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
     color-scheme: dark;
   }
@@ -55,13 +55,13 @@
   --text: #eceef2;
   --text-muted: #9aa0ab;
   --border: #2f3441;
-  --accent: #6ea1ff;
-  --accent-text: #0b1020;
-  --accent-soft: #1f2b45;
-  --chord: #f5b942;
-  --chorus-bar: #6ea1ff;
+  --accent: #458268;
+  --accent-text: #ffffff;
+  --accent-soft: #1d3a2e;
+  --chord: #c98a90;
+  --chorus-bar: #8cc8ad;
   --danger: #ff6b6b;
-  --ok: #66bb6a;
+  --ok: #8cc8ad;
   --shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
   color-scheme: dark;
 }
@@ -180,18 +180,26 @@ a {
 .tabbar a {
   flex: 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
   height: var(--tabbar-h);
-  font-size: 11px;
   color: var(--text-muted);
   text-decoration: none;
 }
 
-.tabbar a.active {
-  color: var(--accent);
+.tab-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tabbar a.active .tab-icon {
+  background: var(--accent);
+  color: var(--accent-text);
 }
 
 /* --- Knappar och fält --- */
@@ -203,7 +211,7 @@ a {
   gap: 6px;
   min-height: 40px;
   padding: 0 14px;
-  border-radius: 10px;
+  border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
   cursor: pointer;
@@ -457,7 +465,7 @@ a {
 .segmented {
   display: inline-flex;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 999px;
   overflow: hidden;
   background: var(--surface);
 }
@@ -561,7 +569,7 @@ a {
 
 .key-badge {
   font-weight: 700;
-  color: var(--chord);
+  color: var(--text);
   min-width: 32px;
   text-align: right;
   font-size: 15px;
@@ -614,7 +622,7 @@ a {
   align-items: center;
   gap: 2px;
   background: var(--surface-2);
-  border-radius: 10px;
+  border-radius: 999px;
   padding: 2px;
   flex-shrink: 0;
 }
@@ -642,16 +650,190 @@ a {
   font-weight: 600;
 }
 
+.song-area {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Rund play-knapp för scroll, alltid nåbar längst ner till höger */
+.scroll-fab {
+  position: absolute;
+  right: calc(16px + var(--safe-right));
+  bottom: 16px;
+  z-index: 5;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--accent-text);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.scroll-fab:active {
+  transform: scale(0.95);
+}
+
 .song-scroll {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   padding: 18px calc(20px + var(--safe-right)) 40vh calc(20px + var(--safe-left));
 }
 
 .song {
+  position: relative;
   max-width: 1000px;
   margin: 0 auto;
+}
+
+/* --- Anteckningar --- */
+
+.song-scroll.annotating {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: crosshair;
+}
+
+.annot-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.annot-svg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.note {
+  position: absolute;
+  box-sizing: border-box;
+  padding: 0.45em 0.55em;
+  border-radius: 3px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18), 0 8px 18px rgba(0, 0, 0, 0.08);
+  color: #2a2a2a;
+  font-family: 'Noteworthy', 'Marker Felt', 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', cursive;
+  line-height: 1.25;
+  transform-origin: center;
+}
+
+.annot-layer.on .note {
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.note.selected {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+}
+
+.note-text {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+textarea.note-text {
+  display: block;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  line-height: inherit;
+  user-select: text;
+  -webkit-user-select: text;
+  touch-action: auto;
+  cursor: text;
+}
+
+.note-hint {
+  opacity: 0.45;
+  font-size: 0.8em;
+}
+
+.note-handle {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  touch-action: none;
+}
+
+.note-handle.rotate {
+  left: 50%;
+  top: -40px;
+  margin-left: -13px;
+  cursor: grab;
+}
+
+.note-handle.rotate::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 2px;
+  height: 14px;
+  margin-left: -1px;
+  background: var(--accent);
+}
+
+.note-handle.resize {
+  right: -13px;
+  bottom: -13px;
+  cursor: nwse-resize;
+}
+
+.swatch-btn .swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  display: block;
+}
+
+.swatch-btn .note-swatch {
+  border-radius: 4px;
+}
+
+.swatch-btn.active {
+  background: var(--surface) !important;
+  box-shadow: 0 0 0 2px var(--accent) inset;
+}
+
+.width-dot {
+  display: block;
+  border-radius: 50%;
+  background: var(--text);
+}
+
+.annot-toolbar .btn.primary {
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .song-head {
@@ -684,7 +866,7 @@ a {
 }
 
 .song-info .chordish {
-  color: var(--chord);
+  color: var(--text);
   font-weight: 700;
 }
 
@@ -720,6 +902,11 @@ a {
   min-height: 1.35em;
 }
 
+/* Luft ovanför ackordraden så att ackorden hör ihop med texten under */
+.ln:not(.plain) {
+  margin-top: 0.45em;
+}
+
 .ln.plain {
   display: block;
   white-space: pre-wrap;
@@ -731,12 +918,14 @@ a {
 }
 
 .seg .ch {
-  color: var(--chord);
+  color: var(--text);
+  font-size: 0.85em;
   font-weight: 700;
   white-space: pre;
-  line-height: 1.25;
+  line-height: 1;
   padding-right: 0.35em;
-  min-height: 1.25em;
+  min-height: 1em;
+  margin-bottom: 0.05em;
   cursor: pointer;
 }
 
@@ -749,7 +938,7 @@ a {
 
 .seg .ly {
   white-space: pre;
-  line-height: 1.35;
+  line-height: 1.25;
 }
 
 .no-chords .seg .ch {
@@ -810,7 +999,7 @@ a {
 
 .diagram .name {
   font-weight: 700;
-  color: var(--chord);
+  color: var(--text);
   font-size: 14px;
 }
 
@@ -1011,7 +1200,7 @@ a {
 }
 
 .editor-tools .chordbtn {
-  color: var(--chord);
+  color: var(--text);
   font-weight: 700;
 }
 
@@ -1102,10 +1291,10 @@ a {
 }
 
 .big-action {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 6px 10px;
   padding: 16px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
@@ -1123,12 +1312,28 @@ a {
 }
 
 .big-action span {
+  grid-column: 1 / -1;
   font-size: 13px;
   color: var(--text-muted);
 }
 
 .big-action svg {
   color: var(--accent);
+}
+
+.tip {
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 14px;
+  color: var(--text-muted);
+}
+
+.tip b {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
 }
 
 .import-item {
@@ -1201,6 +1406,42 @@ a {
 
 /* --- Setlistor --- */
 
+.folder {
+  margin-bottom: 14px;
+}
+
+.folder-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.folder-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+}
+
+.folder-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-empty {
+  padding: 4px 30px 8px;
+}
+
 .sortable-item {
   display: flex;
   align-items: center;
@@ -1267,5 +1508,11 @@ a {
 @media (max-width: 640px) {
   .hide-mobile {
     display: none;
+  }
+
+  /* Knapp med ikon och text: blir en rund ikonknapp när texten döljs */
+  .btn.icon-mobile {
+    width: 40px;
+    padding: 0;
   }
 }

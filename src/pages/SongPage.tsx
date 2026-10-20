@@ -11,6 +11,7 @@ import {
   Minus,
   Moon,
   MoreHorizontal,
+  PenLine,
   Pause,
   Pencil,
   Play,
@@ -19,6 +20,8 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
+import { AnnotationLayer, useLineMetrics, type LiveStroke } from '../components/AnnotationLayer';
+import { AnnotationToolbar } from '../components/AnnotationToolbar';
 import { ChordDiagram, ChordSheet } from '../components/ChordDiagram';
 import { SongRenderer } from '../components/SongRenderer';
 import { Header, Sheet, toast, toastError } from '../components/ui';
@@ -28,6 +31,8 @@ import { liveSetlists, useStore } from '../store/useStore';
 import { safeFileName, saveTextFile } from '../services/files';
 import { newId } from '../lib/model';
 import { useWakeLock } from '../hooks/useWakeLock';
+import { useAnnotationGestures, type AnnotTool } from '../hooks/useAnnotationGestures';
+import { EMPTY_ANNOTATIONS, INK_WIDTHS, type Annotations, type InkColor, type StickyNote } from '../lib/annotations';
 
 const MIN_FONT = 12;
 const MAX_FONT = 44;
@@ -57,6 +62,19 @@ export function SongPage() {
   const [menu, setMenu] = useState(false);
   const [addToSetlist, setAddToSetlist] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const songRef = useRef<HTMLDivElement>(null);
+
+  // Anteckningar
+  const [annotating, setAnnotating] = useState(false);
+  const [tool, setTool] = useState<AnnotTool>('pen');
+  const [inkColor, setInkColor] = useState<InkColor>('red');
+  const [inkWidth, setInkWidth] = useState(INK_WIDTHS[1]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [live, setLive] = useState<LiveStroke | null>(null);
+  /** Lokal version medan en gest pågår; sparas när gesten är klar */
+  const [draft, setDraft] = useState<Annotations | null>(null);
+  const history = useRef<Annotations[]>([]);
 
   useWakeLock(true);
 
@@ -64,6 +82,50 @@ export function SongPage() {
   const transpose = song?.transpose ?? 0;
   const preferFlats = songPrefersFlats(parsed, transpose);
   const speed = song?.scrollSpeed ?? 3;
+
+  const saved = song?.annotations ?? EMPTY_ANNOTATIONS;
+  const annotations = draft ?? saved;
+  const metrics = useLineMetrics(songRef, [parsed, showChords, settings.fontSize, transpose, stage, song?.id]);
+
+  const updateAnnotations = useCallback(
+    (next: Annotations, commit: boolean) => {
+      if (!commit) {
+        setDraft(next);
+        return;
+      }
+      history.current.push(saved);
+      if (history.current.length > 50) history.current.shift();
+      setDraft(null);
+      void updateSongPrefs(id, { annotations: next });
+    },
+    [id, saved, updateSongPrefs],
+  );
+
+  const gestures = useAnnotationGestures({
+    enabled: annotating,
+    tool,
+    setTool,
+    scrollRef,
+    songRef,
+    metrics,
+    annotations,
+    inkColor,
+    inkWidth,
+    update: updateAnnotations,
+    selectedId,
+    setSelectedId,
+    editingId,
+    setEditingId,
+    setLive,
+  });
+
+  // Ny låt: nollställ anteckningsläget
+  useEffect(() => {
+    setDraft(null);
+    setSelectedId(null);
+    setEditingId(null);
+    history.current = [];
+  }, [id]);
 
   // Position i setlistan
   const setlistIndex = setlist ? Number(params.get('i') ?? 0) : -1;
@@ -186,10 +248,48 @@ export function SongPage() {
   };
 
   const backTo = setlist ? `/setlists/${setlist.id}` : '/';
+  const tapToHide = (stage || !!setlist) && !annotating;
+
+  const selectedNote = annotations.notes.find((n) => n.id === selectedId) ?? null;
+  const changeNote = (patch: Partial<StickyNote>) => {
+    if (!selectedNote) return;
+    updateAnnotations(
+      { ...annotations, notes: annotations.notes.map((n) => (n.id === selectedNote.id ? { ...n, ...patch } : n)) },
+      true,
+    );
+  };
+  const startAnnotating = () => {
+    setControlsHidden(false);
+    setScrolling(false);
+    setAnnotating(true);
+    if (!settings.showAnnotations) void updateSettings({ showAnnotations: true });
+  };
+  const stopAnnotating = () => {
+    if (draft) updateAnnotations(draft, true);
+    setAnnotating(false);
+    setSelectedId(null);
+    setEditingId(null);
+    setLive(null);
+  };
+  const undo = () => {
+    const prev = history.current.pop();
+    if (!prev) return;
+    setDraft(null);
+    setSelectedId(null);
+    setEditingId(null);
+    void updateSongPrefs(song.id, { annotations: prev });
+  };
+  const clearAnnotations = () => {
+    if (!annotations.notes.length && !annotations.strokes.length) return;
+    if (!confirm('Radera alla anteckningar på den här låten?')) return;
+    updateAnnotations(EMPTY_ANNOTATIONS, true);
+    setSelectedId(null);
+  };
+  const showLayer = metrics && (settings.showAnnotations || annotating);
 
   return (
     <div className={`screen${stage ? ' stage' : ''}`}>
-      {!stage && (
+      {!stage && !controlsHidden && (
         <Header title={song.title} back={backTo}>
           <button className="btn ghost icon" aria-label="Redigera" onClick={() => navigate(`/song/${song.id}/edit`)}>
             <Pencil size={20} />
@@ -208,7 +308,38 @@ export function SongPage() {
         </div>
       )}
 
-      {!controlsHidden && (
+      {annotating && (
+        <AnnotationToolbar
+          style={stage ? { paddingTop: 'calc(6px + var(--safe-top))', paddingRight: 64 } : undefined}
+          tool={tool}
+          setTool={(t) => {
+            setTool(t);
+            if (t !== 'move') setSelectedId(null);
+            setEditingId(null);
+          }}
+          inkColor={inkColor}
+          setInkColor={setInkColor}
+          inkWidth={inkWidth}
+          setInkWidth={setInkWidth}
+          canUndo={history.current.length > 0}
+          onUndo={undo}
+          visible={settings.showAnnotations}
+          onToggleVisible={() => updateSettings({ showAnnotations: !settings.showAnnotations })}
+          onClear={clearAnnotations}
+          onDone={stopAnnotating}
+          note={selectedNote}
+          onNoteChange={changeNote}
+          onNoteDelete={() => {
+            if (!selectedNote) return;
+            updateAnnotations({ ...annotations, notes: annotations.notes.filter((n) => n.id !== selectedNote.id) }, true);
+            setSelectedId(null);
+            setEditingId(null);
+          }}
+          onNoteEdit={() => selectedNote && setEditingId(selectedNote.id)}
+        />
+      )}
+
+      {!controlsHidden && !annotating && (
         <div className="song-toolbar" style={stage ? { paddingTop: 'calc(6px + var(--safe-top))', paddingRight: 64 } : undefined}>
           <div className="tool-group" title="Transponera">
             <button className="btn icon" aria-label="Transponera ner" onClick={() => setTranspose(transpose - 1)}>
@@ -265,6 +396,9 @@ export function SongPage() {
             >
               <Guitar size={18} />
             </button>
+            <button className="btn icon" aria-label="Anteckna" title="Anteckna och rita" onClick={startAnnotating}>
+              <PenLine size={18} />
+            </button>
             <button
               className={`btn icon${stage ? ' active' : ''}`}
               aria-label="Scenläge"
@@ -285,25 +419,62 @@ export function SongPage() {
         </div>
       )}
 
-      <div
-        className="song-scroll"
-        ref={scrollRef}
-        onClick={(e) => {
-          // I scenläge: tryck på texten för att visa/dölja kontrollerna
-          if (stage && !(e.target as HTMLElement).closest('.ch')) setControlsHidden((v) => !v);
-        }}
-      >
-        <SongRenderer
-          song={parsed}
-          opts={{
-            transpose,
-            preferFlats,
-            notation: settings.notation,
-            showChords,
-            fontSize: settings.fontSize,
-            onChordClick: setChordSheet,
+      <div className="song-area">
+        <div
+          className={`song-scroll${annotating ? ' annotating' : ''}`}
+          ref={scrollRef}
+          onPointerDown={annotating ? gestures.onPointerDown : undefined}
+          onPointerMove={annotating ? gestures.onPointerMove : undefined}
+          onPointerUp={annotating ? gestures.onPointerUp : undefined}
+          onPointerCancel={annotating ? gestures.onPointerCancel : undefined}
+          style={controlsHidden && !stage ? { paddingTop: 'calc(18px + var(--safe-top))' } : undefined}
+          onClick={(e) => {
+            // I setlistläge och scenläge: tryck på låten för att visa/dölja kontrollerna överst
+            if (tapToHide && !(e.target as HTMLElement).closest('.ch')) setControlsHidden((v) => !v);
           }}
-        />
+        >
+          <SongRenderer
+            song={parsed}
+            opts={{
+              transpose,
+              preferFlats,
+              notation: settings.notation,
+              showChords,
+              fontSize: settings.fontSize,
+              onChordClick: annotating ? undefined : setChordSheet,
+            }}
+            containerRef={songRef}
+            overlay={
+              showLayer ? (
+                <AnnotationLayer
+                  annotations={settings.showAnnotations || annotating ? annotations : EMPTY_ANNOTATIONS}
+                  metrics={metrics}
+                  live={live}
+                  interactive={annotating}
+                  selectedId={selectedId}
+                  editingId={editingId}
+                  onTextChange={(nid, text) =>
+                    updateAnnotations(
+                      { ...annotations, notes: annotations.notes.map((n) => (n.id === nid ? { ...n, text } : n)) },
+                      false,
+                    )
+                  }
+                  onTextDone={() => {
+                    if (draft) updateAnnotations(draft, true);
+                    setEditingId(null);
+                  }}
+                />
+              ) : null
+            }
+          />
+        </div>
+        <button
+          className={`scroll-fab${scrolling ? ' on' : ''}`}
+          aria-label={scrolling ? 'Pausa scroll' : 'Starta scroll'}
+          onClick={() => setScrolling((v) => !v)}
+        >
+          {scrolling ? <Pause size={24} /> : <Play size={24} />}
+        </button>
       </div>
 
       {setlist && (

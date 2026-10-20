@@ -1,18 +1,26 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ListMusic, Plus } from 'lucide-react';
+import { ChevronDown, ChevronRight, Folder, FolderPlus, ListMusic, Pencil, Plus, Trash } from 'lucide-react';
 import { Header, Sheet } from '../components/ui';
-import { liveSetlists, useStore } from '../store/useStore';
+import type { Setlist, Song } from '../lib/model';
+import { liveFolders, liveSetlists, useStore } from '../store/useStore';
+
+// Ihopfällda mappar sparas mellan sidbyten under sessionen
+const collapsed = new Set<string>();
 
 export function SetlistsPage() {
   const navigate = useNavigate();
   const setlistsRec = useStore((s) => s.setlists);
+  const foldersRec = useStore((s) => s.folders);
   const songs = useStore((s) => s.songs);
   const saveSetlist = useStore((s) => s.saveSetlist);
-  const [creating, setCreating] = useState(false);
-  const [name, setName] = useState('');
-  const [date, setDate] = useState('');
+  const saveFolder = useStore((s) => s.saveFolder);
+  const deleteFolder = useStore((s) => s.deleteFolder);
+  const [creating, setCreating] = useState<{ folderId: string } | null>(null);
+  const [folderSheet, setFolderSheet] = useState<{ id?: string; name: string } | null>(null);
+  const [, rerender] = useState(0);
 
+  const folders = useMemo(() => liveFolders(foldersRec), [foldersRec]);
   const setlists = useMemo(
     () =>
       liveSetlists(setlistsRec).sort(
@@ -21,86 +29,278 @@ export function SetlistsPage() {
     [setlistsRec],
   );
 
-  const create = async () => {
-    if (!name.trim()) return;
-    const sl = await saveSetlist({ name: name.trim(), date: date || undefined, items: [] });
-    setCreating(false);
-    setName('');
-    setDate('');
-    navigate(`/setlists/${sl.id}`);
+  // Setlistor vars mapp saknas (t.ex. raderad på en annan enhet) hamnar under "Utan mapp"
+  const byFolder = useMemo(() => {
+    const map = new Map<string, Setlist[]>();
+    for (const sl of setlists) {
+      const key = sl.folderId && foldersRec[sl.folderId] && !foldersRec[sl.folderId].deletedAt ? sl.folderId : '';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(sl);
+    }
+    return map;
+  }, [setlists, foldersRec]);
+
+  const toggle = (id: string) => {
+    if (collapsed.has(id)) collapsed.delete(id);
+    else collapsed.add(id);
+    rerender((n) => n + 1);
   };
+
+  const unfiled = byFolder.get('') ?? [];
+  const empty = setlists.length === 0 && folders.length === 0;
 
   return (
     <div className="screen">
       <Header title="Setlistor">
-        <button className="btn primary" onClick={() => setCreating(true)}>
+        <button className="btn ghost icon" aria-label="Ny mapp" title="Ny mapp" onClick={() => setFolderSheet({ name: '' })}>
+          <FolderPlus size={21} />
+        </button>
+        <button className="btn primary icon-mobile" aria-label="Ny setlista" onClick={() => setCreating({ folderId: '' })}>
           <Plus size={18} /> <span className="hide-mobile">Ny setlista</span>
         </button>
       </Header>
       <div className="content narrow">
         <div>
-          {setlists.length === 0 ? (
+          {empty ? (
             <div className="empty">
               <ListMusic size={48} />
               <p>Inga setlistor ännu.</p>
-              <button className="btn primary" onClick={() => setCreating(true)}>
+              <button className="btn primary" onClick={() => setCreating({ folderId: '' })}>
                 Skapa setlista
               </button>
             </div>
           ) : (
-            <div className="list">
-              {setlists.map((sl) => {
-                const count = sl.items.filter((i) => songs[i.songId] && !songs[i.songId].deletedAt).length;
+            <>
+              {folders.map((f) => {
+                const list = byFolder.get(f.id) ?? [];
+                const open = !collapsed.has(f.id);
                 return (
-                  <Link key={sl.id} className="list-item" to={`/setlists/${sl.id}`}>
-                    <div className="main">
-                      <div className="title">{sl.name}</div>
-                      <div className="sub">
-                        {sl.date ? formatDate(sl.date) + ' · ' : ''}
-                        {count} {count === 1 ? 'låt' : 'låtar'}
-                      </div>
+                  <div className="folder" key={f.id}>
+                    <div className="folder-head">
+                      <button className="folder-toggle" onClick={() => toggle(f.id)} aria-expanded={open}>
+                        {open ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                        <Folder size={18} />
+                        <span className="folder-name">{f.name}</span>
+                        <span className="muted small-text">{list.length}</span>
+                      </button>
+                      <button
+                        className="btn ghost icon small"
+                        aria-label={`Ny setlista i ${f.name}`}
+                        title="Ny setlista i mappen"
+                        onClick={() => setCreating({ folderId: f.id })}
+                      >
+                        <Plus size={18} />
+                      </button>
+                      <button
+                        className="btn ghost icon small"
+                        aria-label={`Byt namn på ${f.name}`}
+                        title="Byt namn"
+                        onClick={() => setFolderSheet({ id: f.id, name: f.name })}
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      <button
+                        className="btn ghost icon small danger"
+                        aria-label={`Radera ${f.name}`}
+                        title="Radera mappen"
+                        onClick={async () => {
+                          const msg = list.length
+                            ? `Radera mappen "${f.name}"? Setlistorna i den flyttas till "Utan mapp".`
+                            : `Radera mappen "${f.name}"?`;
+                          if (confirm(msg)) await deleteFolder(f.id);
+                        }}
+                      >
+                        <Trash size={16} />
+                      </button>
                     </div>
-                  </Link>
+                    {open &&
+                      (list.length ? (
+                        <SetlistList setlists={list} songs={songs} />
+                      ) : (
+                        <div className="muted small-text folder-empty">Mappen är tom.</div>
+                      ))}
+                  </div>
                 );
               })}
-            </div>
+
+              {unfiled.length > 0 && (
+                <div className="folder">
+                  {folders.length > 0 && (
+                    <div className="folder-head">
+                      <button className="folder-toggle" onClick={() => toggle('')} aria-expanded={!collapsed.has('')}>
+                        {collapsed.has('') ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
+                        <span className="folder-name muted">Utan mapp</span>
+                        <span className="muted small-text">{unfiled.length}</span>
+                      </button>
+                    </div>
+                  )}
+                  {!collapsed.has('') && <SetlistList setlists={unfiled} songs={songs} />}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
 
       {creating && (
-        <Sheet
-          title="Ny setlista"
-          onClose={() => setCreating(false)}
-          footer={
-            <>
-              <button className="btn" onClick={() => setCreating(false)}>
-                Avbryt
-              </button>
-              <button className="btn primary" disabled={!name.trim()} onClick={create}>
-                Skapa
-              </button>
-            </>
-          }
-        >
-          <label className="field">
-            <span>Namn</span>
-            <input
-              className="input"
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && create()}
-              placeholder="t.ex. Spelning på Kulturhuset"
-            />
-          </label>
-          <label className="field">
-            <span>Datum (valfritt)</span>
-            <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </label>
-        </Sheet>
+        <CreateSetlistSheet
+          folderId={creating.folderId}
+          onClose={() => setCreating(null)}
+          onCreate={async (v) => {
+            const sl = await saveSetlist({ ...v, items: [] });
+            setCreating(null);
+            navigate(`/setlists/${sl.id}`);
+          }}
+        />
+      )}
+
+      {folderSheet && (
+        <FolderSheet
+          initial={folderSheet.name}
+          isNew={!folderSheet.id}
+          onClose={() => setFolderSheet(null)}
+          onSave={async (name) => {
+            await saveFolder({ id: folderSheet.id, name });
+            setFolderSheet(null);
+          }}
+        />
       )}
     </div>
+  );
+}
+
+function SetlistList({ setlists, songs }: { setlists: Setlist[]; songs: Record<string, Song> }) {
+  return (
+    <div className="list">
+      {setlists.map((sl) => {
+        const count = sl.items.filter((i) => songs[i.songId] && !songs[i.songId].deletedAt).length;
+        return (
+          <Link key={sl.id} className="list-item" to={`/setlists/${sl.id}`}>
+            <div className="main">
+              <div className="title">{sl.name}</div>
+              <div className="sub">
+                {sl.date ? formatDate(sl.date) + ' · ' : ''}
+                {count} {count === 1 ? 'låt' : 'låtar'}
+              </div>
+            </div>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Väljare för mapp, används när en setlista skapas eller redigeras. */
+export function FolderSelect({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+  const foldersRec = useStore((s) => s.folders);
+  const folders = useMemo(() => liveFolders(foldersRec), [foldersRec]);
+  if (!folders.length) return null;
+  return (
+    <label className="field">
+      <span>Mapp</span>
+      <select className="select" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Utan mapp</option>
+        {folders.map((f) => (
+          <option key={f.id} value={f.id}>
+            {f.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function CreateSetlistSheet({
+  folderId: initialFolder,
+  onClose,
+  onCreate,
+}: {
+  folderId: string;
+  onClose: () => void;
+  onCreate: (v: { name: string; date?: string; folderId?: string }) => void;
+}) {
+  const [name, setName] = useState('');
+  const [date, setDate] = useState('');
+  const [folderId, setFolderId] = useState(initialFolder);
+  const create = () => {
+    if (!name.trim()) return;
+    onCreate({ name: name.trim(), date: date || undefined, folderId: folderId || undefined });
+  };
+  return (
+    <Sheet
+      title="Ny setlista"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Avbryt
+          </button>
+          <button className="btn primary" disabled={!name.trim()} onClick={create}>
+            Skapa
+          </button>
+        </>
+      }
+    >
+      <label className="field">
+        <span>Namn</span>
+        <input
+          className="input"
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && create()}
+          placeholder="t.ex. Spelning på Kulturhuset"
+        />
+      </label>
+      <label className="field">
+        <span>Datum (valfritt)</span>
+        <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+      </label>
+      <FolderSelect value={folderId} onChange={setFolderId} />
+    </Sheet>
+  );
+}
+
+function FolderSheet({
+  initial,
+  isNew,
+  onClose,
+  onSave,
+}: {
+  initial: string;
+  isNew: boolean;
+  onClose: () => void;
+  onSave: (name: string) => void;
+}) {
+  const [name, setName] = useState(initial);
+  const save = () => name.trim() && onSave(name.trim());
+  return (
+    <Sheet
+      title={isNew ? 'Ny mapp' : 'Byt namn på mappen'}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Avbryt
+          </button>
+          <button className="btn primary" disabled={!name.trim()} onClick={save}>
+            {isNew ? 'Skapa' : 'Spara'}
+          </button>
+        </>
+      }
+    >
+      <label className="field">
+        <span>Namn</span>
+        <input
+          className="input"
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && save()}
+          placeholder="t.ex. Bröllop, Kyrkan, Övningar"
+        />
+      </label>
+    </Sheet>
   );
 }
 

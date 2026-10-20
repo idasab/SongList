@@ -65,11 +65,13 @@ export async function restoreBackup(data: BackupFile, mode: RestoreMode): Promis
           songs: restoreMerge(local.songs, data.songs, now),
           setlists: restoreMerge(local.setlists, data.setlists, now),
           categories: restoreMerge(local.categories, data.categories, now),
+          folders: restoreMerge(local.folders, data.folders ?? [], now),
         }
       : {
           songs: replaceList(local.songs, data.songs, (s) => ({ ...s, content: '', tags: [] })),
           setlists: replaceList(local.setlists, data.setlists, (s) => ({ ...s, items: [] })),
           categories: replaceList(local.categories, data.categories, (c) => c),
+          folders: replaceList(local.folders, data.folders ?? [], (f) => f),
         };
   await store.applyIncoming(incoming, { local: true });
   return incoming.songs.filter((s) => !s.deletedAt).length;

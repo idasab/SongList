@@ -1,4 +1,4 @@
-import { memo, type CSSProperties } from 'react';
+import { memo, type CSSProperties, type ReactNode, type Ref } from 'react';
 import type { Line, ParsedSong, Section, Segment } from '../lib/chordpro';
 import { formatChord, formatKey, parseKey, type ChordContext } from '../lib/chords';
 
@@ -11,6 +11,17 @@ export interface RenderOptions {
   /** Visa titel/artist/tonart överst */
   showHeader?: boolean;
   onChordClick?: (chord: string) => void;
+}
+
+/** Varje renderad rad får ett index (data-ln) som anteckningar fästs vid. 0 = låthuvudet. */
+function sectionStarts(sections: Section[]): number[] {
+  const starts: number[] = [];
+  let n = 1;
+  for (const s of sections) {
+    starts.push(n);
+    n += (s.label ? 1 : 0) + s.lines.length;
+  }
+  return starts;
 }
 
 /** Delar upp segment ord för ord så att raderna kan radbrytas mellan orden. */
@@ -27,23 +38,35 @@ function splitWords(segments: Segment[]): Segment[] {
   return out;
 }
 
-function LineView({ line, ctx, opts }: { line: Line; ctx: ChordContext; opts: RenderOptions }) {
+function LineView({ line, ctx, opts, ln }: { line: Line; ctx: ChordContext; opts: RenderOptions; ln: number }) {
   switch (line.type) {
     case 'empty':
-      return <div className="ln-empty" />;
+      return <div className="ln-empty" data-ln={ln} />;
     case 'comment':
-      return <div className={`comment ${line.style}`}>{line.text}</div>;
+      return (
+        <div className={`comment ${line.style}`} data-ln={ln}>
+          {line.text}
+        </div>
+      );
     case 'pre':
-      return <div className="pre">{line.text || ' '}</div>;
+      return (
+        <div className="pre" data-ln={ln}>
+          {line.text || ' '}
+        </div>
+      );
     case 'lyrics': {
       const hasChord = opts.showChords && line.segments.some((s) => s.chord !== undefined);
       if (!hasChord) {
         const text = line.segments.map((s) => s.text).join('');
-        return <div className="ln plain">{text.trim() ? text : ' '}</div>;
+        return (
+          <div className="ln plain" data-ln={ln}>
+            {text.trim() ? text : ' '}
+          </div>
+        );
       }
       const lyricsEmpty = line.segments.every((s) => !s.text.trim());
       return (
-        <div className="ln">
+        <div className="ln" data-ln={ln}>
           {splitWords(line.segments).map((s, i) => {
             const annot = s.chord?.startsWith('*');
             const chord = s.chord !== undefined ? formatChord(s.chord, ctx) : '';
@@ -65,19 +88,46 @@ function LineView({ line, ctx, opts }: { line: Line; ctx: ChordContext; opts: Re
   }
 }
 
-function SectionView({ section, ctx, opts }: { section: Section; ctx: ChordContext; opts: RenderOptions }) {
+function SectionView({
+  section,
+  ctx,
+  opts,
+  start,
+}: {
+  section: Section;
+  ctx: ChordContext;
+  opts: RenderOptions;
+  start: number;
+}) {
+  const first = start + (section.label ? 1 : 0);
   const cls = ['sec', section.type, section.isRepeat ? 'repeat' : ''].filter(Boolean).join(' ');
   return (
     <div className={cls}>
-      {section.label && <div className="sec-label">{section.label}</div>}
+      {section.label && (
+        <div className="sec-label" data-ln={start}>
+          {section.label}
+        </div>
+      )}
       {section.lines.map((l, i) => (
-        <LineView key={i} line={l} ctx={ctx} opts={opts} />
+        <LineView key={i} line={l} ctx={ctx} opts={opts} ln={first + i} />
       ))}
     </div>
   );
 }
 
-export const SongRenderer = memo(function SongRenderer({ song, opts }: { song: ParsedSong; opts: RenderOptions }) {
+export const SongRenderer = memo(function SongRenderer({
+  song,
+  opts,
+  containerRef,
+  overlay,
+}: {
+  song: ParsedSong;
+  opts: RenderOptions;
+  /** Ref till låtens behållare (används för att mäta rader) */
+  containerRef?: Ref<HTMLDivElement>;
+  /** Lager som ritas ovanpå låten, t.ex. anteckningar */
+  overlay?: ReactNode;
+}) {
   const ctx: ChordContext = {
     transpose: opts.transpose,
     preferFlats: opts.preferFlats,
@@ -88,11 +138,12 @@ export const SongRenderer = memo(function SongRenderer({ song, opts }: { song: P
   const key = parseKey(meta.key, { hNotation: song.hNotation });
   const capo = meta.capo ? parseInt(meta.capo, 10) : 0;
   const style: CSSProperties = { fontSize: opts.fontSize };
+  const starts = sectionStarts(song.sections);
 
   return (
-    <div className={`song${opts.showChords ? '' : ' no-chords'}`} style={style}>
+    <div className={`song${opts.showChords ? '' : ' no-chords'}`} style={style} ref={containerRef}>
       {opts.showHeader !== false && (
-        <div className="song-head">
+        <div className="song-head" data-ln={0}>
           <h2>{meta.title || 'Namnlös'}</h2>
           {(meta.artist || meta.subtitle) && <div className="artist">{meta.artist || meta.subtitle}</div>}
           <div className="song-info">
@@ -128,8 +179,9 @@ export const SongRenderer = memo(function SongRenderer({ song, opts }: { song: P
         </div>
       )}
       {song.sections.map((s, i) => (
-        <SectionView key={i} section={s} ctx={ctx} opts={opts} />
+        <SectionView key={i} section={s} ctx={ctx} opts={opts} start={starts[i]} />
       ))}
+      {overlay}
     </div>
   );
 });

@@ -19,8 +19,12 @@ på iOS.
   avgör var de placeras i texten. Resultatet öppnas i editorn med originalbilden som referens.
 - **Editor**: ChordPro med förhandsvisning (sida vid sida på iPad), fält för titel/artist/tonart/kapo/tempo,
   knappar för sektioner och snabbknappar för låtens ackord, samt "Konvertera" för inklistrad text.
+- **Anteckningar**: post-it-lappar (flytta, snurra gradlöst och ändra storlek med fingrarna, egen
+  textstorlek och färg) och att rita direkt på låten med fingret eller Apple Pencil. Anteckningarna fästs
+  vid raden de sitter på och följer med när textstorlek eller transponering ändras.
 - **Organisering**: taggar (flera per låt), kategorier (en per låt), sökning på titel/artist med
-  möjlighet att söka i hela texterna, setlistor med dra-och-släpp och bläddring mellan låtar.
+  möjlighet att söka i hela texterna, setlistor i mappar med dra-och-släpp och bläddring mellan låtar.
+  När en setlista spelas döljs kontrollerna med ett tryck mitt på låten.
 - **Backup och synk**: automatisk veckobackup och manuell backup till iCloud Drive › SongList,
   synk mellan iPhone och iPad via iCloud, samt export/import av backupfil på alla plattformar.
 

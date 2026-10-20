@@ -18,7 +18,7 @@ import { filterSongs, sortSongs } from '../lib/search';
 import { formatKey, parseKey } from '../lib/chords';
 import { newId, type SetlistItem, type Song } from '../lib/model';
 import { liveSongs, useStore } from '../store/useStore';
-import { formatDate } from './SetlistsPage';
+import { FolderSelect, formatDate } from './SetlistsPage';
 
 export function SetlistPage() {
   const { id = '' } = useParams();
@@ -129,17 +129,25 @@ export function SetlistPage() {
 
       {editing && (
         <EditSetlistSheet
+          folderId={setlist.folderId ?? ''}
           name={setlist.name}
           date={setlist.date ?? ''}
           notes={setlist.notes ?? ''}
           onClose={() => setEditing(false)}
           onSave={(v) => {
-            void saveSetlist({ ...setlist, ...v, date: v.date || undefined, notes: v.notes || undefined });
+            void saveSetlist({
+              ...setlist,
+              ...v,
+              date: v.date || undefined,
+              notes: v.notes || undefined,
+              folderId: v.folderId || undefined,
+            });
             setEditing(false);
           }}
           onDuplicate={async () => {
             const copy = await saveSetlist({
               name: `${setlist.name} (kopia)`,
+              folderId: setlist.folderId,
               date: setlist.date,
               notes: setlist.notes,
               items: items.map((i) => ({ id: newId(), songId: i.songId })),
@@ -253,17 +261,19 @@ function AddSongsSheet({
 }
 
 function EditSetlistSheet(props: {
+  folderId: string;
   name: string;
   date: string;
   notes: string;
   onClose: () => void;
-  onSave: (v: { name: string; date: string; notes: string }) => void;
+  onSave: (v: { name: string; date: string; notes: string; folderId: string }) => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
   const [name, setName] = useState(props.name);
   const [date, setDate] = useState(props.date);
   const [notes, setNotes] = useState(props.notes);
+  const [folderId, setFolderId] = useState(props.folderId);
   return (
     <Sheet
       title="Setlista"
@@ -276,7 +286,7 @@ function EditSetlistSheet(props: {
           <button className="btn" onClick={props.onDuplicate}>
             Duplicera
           </button>
-          <button className="btn primary" disabled={!name.trim()} onClick={() => props.onSave({ name: name.trim(), date, notes })}>
+          <button className="btn primary" disabled={!name.trim()} onClick={() => props.onSave({ name: name.trim(), date, notes, folderId })}>
             Spara
           </button>
         </>
@@ -290,6 +300,7 @@ function EditSetlistSheet(props: {
         <span>Datum</span>
         <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </label>
+      <FolderSelect value={folderId} onChange={setFolderId} />
       <label className="field">
         <span>Anteckningar</span>
         <textarea className="textarea" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />

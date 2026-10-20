@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, ChevronDown, ChevronUp, ClipboardPaste, FileUp, Image as ImageIcon, Pencil, X } from 'lucide-react';
+import { Camera, ChevronDown, ChevronUp, ClipboardPaste, FileUp, Image as ImageIcon, Lightbulb, Pencil, X } from 'lucide-react';
 import { SongRenderer } from '../components/SongRenderer';
 import { TagInput } from '../components/TagInput';
 import { Header, Sheet, toast, toastError } from '../components/ui';
@@ -127,22 +127,22 @@ export function ImportPage() {
         <div>
           <div className="import-actions">
             <button className="big-action" onClick={chooseFiles}>
-              <FileUp size={26} />
+              <FileUp size={22} />
               <b>Välj filer</b>
               <span>ChordPro (.cho, .chopro, .pro) eller textfiler med ackord ovanför texten</span>
             </button>
             <button className="big-action" onClick={() => setPasting(true)}>
-              <ClipboardPaste size={26} />
+              <ClipboardPaste size={22} />
               <b>Klistra in text</b>
               <span>Från en webbsida, ett dokument eller ett mejl</span>
             </button>
             <button className="big-action" onClick={nativeScanner ? scanWithCamera : () => scanImage(true)}>
-              <Camera size={26} />
+              <Camera size={22} />
               <b>Skanna papper</b>
               <span>Fotografera ett papper med text och ackord – texten tolkas direkt på enheten</span>
             </button>
             <button className="big-action" onClick={() => scanImage(false)}>
-              <ImageIcon size={26} />
+              <ImageIcon size={22} />
               <b>Läs från bild</b>
               <span>Välj ett foto eller en skärmbild med text och ackord</span>
             </button>
@@ -208,8 +208,10 @@ export function ImportPage() {
           )}
 
           {items.length === 0 && !busy && (
-            <div className="card small-text muted">
-              <b style={{ color: 'var(--text)' }}>Tips</b>
+            <div className="tip small-text">
+              <b>
+                <Lightbulb size={16} /> Tips
+              </b>
               <p style={{ margin: '6px 0 0' }}>
                 Textfiler där ackorden står på raden ovanför texten konverteras automatiskt till ChordPro. Om filen
                 skrevs i ett typsnitt utan fast teckenbredd (t.ex. Arial i Word) kan du välja typsnittet, så hamnar
