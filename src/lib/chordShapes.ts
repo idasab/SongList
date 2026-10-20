@@ -118,6 +118,11 @@ const BASS_NAMES: Record<number, string[]> = {
   11: ['B'],
 };
 
+/** Laddar greppdatabasen i förväg (används för förladdning i bakgrunden). */
+export function preloadChordDb(instrument: Instrument): Promise<unknown> {
+  return instrument === 'piano' ? Promise.resolve() : loadDb(instrument);
+}
+
 export interface FrettedShapes {
   strings: number;
   positions: FretPosition[];

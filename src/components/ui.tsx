@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { ChevronLeft, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { isChunkLoadError } from '../appUpdate';
 
 export function Header({
   title,
@@ -140,6 +141,10 @@ export function toast(text: string, opts: { error?: boolean } = {}) {
 }
 
 export function toastError(e: unknown, prefix = '') {
+  if (isChunkLoadError(e)) {
+    toast('En ny version av SongList finns. Ladda om sidan och försök igen.', { error: true });
+    return;
+  }
   const text = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Något gick fel';
   toast(prefix ? `${prefix}: ${text}` : text, { error: true });
 }

@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
 import { NavLink, Outlet, RouterProvider, createHashRouter } from 'react-router-dom';
 import { FileUp, ListMusic, Music, Settings } from 'lucide-react';
-import { Toaster } from './components/ui';
+import { Toaster, toast } from './components/ui';
+import { consumeUpdateNotice, prefetchLazyParts } from './appUpdate';
+import { preloadChordDb } from './lib/chordShapes';
 import { EditorPage } from './pages/EditorPage';
 import { ImportPage } from './pages/ImportPage';
 import { LibraryPage } from './pages/LibraryPage';
@@ -75,7 +77,14 @@ export function App() {
     useStore
       .getState()
       .init()
-      .then(() => startAutoSync())
+      .then(() => {
+        if (consumeUpdateNotice()) toast('SongList har uppdaterats till senaste versionen. Försök igen.');
+        prefetchLazyParts([
+          () => import('jspdf'),
+          () => preloadChordDb(useStore.getState().settings.instrument),
+        ]);
+        return startAutoSync();
+      })
       .catch((e) => console.error('Uppstarten misslyckades', e));
   }, []);
 
