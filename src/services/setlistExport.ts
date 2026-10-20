@@ -573,8 +573,9 @@ function textBlob(text: string): Blob {
   return new Blob([text], { type: 'text/plain;charset=utf-8' });
 }
 
+/** Mejlets ämne är setlistans namn. */
 export function mailSubject(setlist: Setlist): string {
-  return `Setlista: ${setlist.name}${setlist.date ? ' (' + formatDateSv(setlist.date) + ')' : ''}`;
+  return setlist.name;
 }
 
 /** Mejlets text: hela setlistan med titel och artist. */

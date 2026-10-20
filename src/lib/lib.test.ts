@@ -282,7 +282,7 @@ describe('export av setlista', () => {
   });
 
   it('mejl: ämne och setlistan med titel och artist', () => {
-    expect(mailSubject({ ...setlist, date: '2026-10-24' })).toBe('Setlista: Spelning (24 oktober 2026)');
+    expect(mailSubject({ ...setlist, date: '2026-10-24' })).toBe('Spelning');
     const body = mailBody(setlist, songs, 'international');
     expect(body.split('\n').slice(0, 4)).toEqual(['Spelning', '', '1. a – Test', '2. b – Test']);
   });

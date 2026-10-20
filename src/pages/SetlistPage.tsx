@@ -23,8 +23,15 @@ import {
   mailSubject,
   type SetlistExportFormat,
 } from '../services/setlistExport';
-import { sendMail, type MailOutcome } from '../services/mail';
-import { hasNativePlugin } from '../native/songlistNative';
+import {
+  canComposeNatively,
+  canShareFiles,
+  composeNativeMail,
+  downloadAndOpenMail,
+  shareFilesWeb,
+  type MailOutcome,
+  type MailRequest,
+} from '../services/mail';
 import { filterSongs, sortSongs } from '../lib/search';
 import { formatKey, parseKey } from '../lib/chords';
 import { newId, type SetlistItem, type Song } from '../lib/model';
@@ -332,6 +339,14 @@ function EditSetlistSheet(props: {
   );
 }
 
+const MAIL_MESSAGES: Record<MailOutcome, string> = {
+  sent: 'Mejlet är skickat',
+  saved: 'Mejlet är sparat som utkast',
+  cancelled: '',
+  shared: 'Filerna är delade',
+  downloaded: 'Filerna är nedladdade – bifoga dem i mejlet som öppnades',
+};
+
 function ExportSheet({ setlistId, onClose }: { setlistId: string; onClose: () => void }) {
   const setlist = useStore((s) => s.setlists[setlistId]);
   const songs = useStore((s) => s.songs);
@@ -342,6 +357,19 @@ function ExportSheet({ setlistId, onClose }: { setlistId: string; onClose: () =>
   const [format, setFormat] = useState<SetlistExportFormat>('pdf-annotated');
   const [to, setTo] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  /** Webben: färdiga filer som väntar på att delas med ett nytt tryck */
+  const [prepared, setPrepared] = useState<MailRequest | null>(null);
+
+  const finish = (outcome: MailOutcome) => {
+    if (MAIL_MESSAGES[outcome]) toast(MAIL_MESSAGES[outcome]);
+    if (outcome !== 'cancelled') onClose();
+  };
+
+  const fail = (e: unknown) => {
+    // Användaren stängde delningsmenyn
+    if ((e as Error)?.message?.toLowerCase().includes('cancel')) return;
+    toastError(e, mode === 'mail' ? 'Mejlet kunde inte skapas' : 'Exporten misslyckades');
+  };
 
   const run = async () => {
     setBusy(true);
@@ -353,29 +381,66 @@ function ExportSheet({ setlistId, onClose }: { setlistId: string; onClose: () =>
       }
       const files = await buildSongFiles(format, setlist, songs, notation);
       void updateSettings({ recentEmails: rememberEmails(recentEmails, to) });
-      const outcome = await sendMail({
-        to,
-        subject: mailSubject(setlist),
-        body: mailBody(setlist, songs, notation),
-        files,
-      });
-      const messages: Record<MailOutcome, string> = {
-        sent: 'Mejlet är skickat',
-        saved: 'Mejlet är sparat som utkast',
-        cancelled: '',
-        shared: 'Filerna är delade',
-        downloaded: 'Filerna är nedladdade – bifoga dem i mejlet som öppnades',
-      };
-      if (messages[outcome]) toast(messages[outcome]);
-      if (outcome !== 'cancelled') onClose();
+      const req: MailRequest = { to, subject: mailSubject(setlist), body: mailBody(setlist, songs, notation), files };
+      if (canComposeNatively()) finish(await composeNativeMail(req));
+      else setPrepared(req);
     } catch (e) {
-      // Användaren stängde delningsmenyn
-      if ((e as Error)?.message?.toLowerCase().includes('cancel')) return;
-      toastError(e, mode === 'mail' ? 'Mejlet kunde inte skapas' : 'Exporten misslyckades');
+      fail(e);
     } finally {
       setBusy(false);
     }
   };
+
+  const webAction = async (action: (r: MailRequest) => Promise<MailOutcome>) => {
+    if (!prepared) return;
+    try {
+      finish(await action(prepared));
+    } catch (e) {
+      fail(e);
+    }
+  };
+
+  // Webben, steg 2: dela med ett eget tryck (Safari kräver det) och kopiera mottagarna
+  if (prepared) {
+    const shareable = canShareFiles(prepared.files);
+    return (
+      <Sheet
+        title="Mejlet är klart"
+        onClose={onClose}
+        footer={
+          <button className="btn" onClick={() => setPrepared(null)}>
+            Tillbaka
+          </button>
+        }
+      >
+        <p style={{ marginTop: 0 }}>
+          {prepared.files.length} {prepared.files.length === 1 ? 'fil' : 'filer'} till {prepared.to.join(', ')}.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {shareable && (
+            <>
+              <button className="btn primary" onClick={() => webAction(shareFilesWeb)}>
+                Dela till Mail
+              </button>
+              <p className="muted small-text" style={{ margin: 0 }}>
+                Välj Mail i delningsmenyn. Mottagarna kopieras när du trycker, så att du kan klistra in dem i
+                Till-fältet. I webbläsaren går det inte att fylla i mottagare när filer bifogas – det gör iOS-appen.
+              </p>
+            </>
+          )}
+          <button
+            className={`btn${shareable ? '' : ' primary'}`}
+            onClick={() => webAction(downloadAndOpenMail)}
+          >
+            Ladda ner filerna och öppna mejl
+          </button>
+          <p className="muted small-text" style={{ margin: 0 }}>
+            Mejlet öppnas med mottagare, ämne och setlistan ifyllda. Bifoga sedan de nedladdade filerna.
+          </p>
+        </div>
+      </Sheet>
+    );
+  }
 
   const canRun = mode === 'file' || to.length > 0;
 
@@ -426,9 +491,6 @@ function ExportSheet({ setlistId, onClose }: { setlistId: string; onClose: () =>
           ? 'Varje låt bifogas som en egen fil. Hela setlistan med titel och artist står i mejlet. '
           : ''}
         Ackorden exporteras med låtarnas transponering, precis som de visas i appen.
-        {mode === 'mail' && !hasNativePlugin()
-          ? ' I webbläsaren kan filerna inte bifogas automatiskt: de delas via delningsmenyn eller laddas ner så att du kan bifoga dem i mejlet som öppnas.'
-          : ''}
       </p>
     </Sheet>
   );

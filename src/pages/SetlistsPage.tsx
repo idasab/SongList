@@ -1,10 +1,10 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type TouchEvent as ReactTouchEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Folder, FolderPlus, GripVertical, ListMusic, Pencil, Plus, Trash } from 'lucide-react';
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
   TouchSensor,
   pointerWithin,
   useDraggable,
@@ -24,6 +24,16 @@ const collapsed = new Set<string>();
 // Tidpunkt då en dragning senast avslutades – så att släppet inte räknas som ett tryck på länken
 let lastDragEnd = 0;
 
+/** Så länge fingret ska hållas still innan en setlista blir dragbar (ms). */
+const HOLD_DELAY = 500;
+/** Hur långt fingret får röra sig under väntan innan det tolkas som scroll (px). */
+const HOLD_TOLERANCE = 8;
+
+/** Stoppar sidans scroll medan en setlista dras med fingret. */
+function blockTouchScroll(e: TouchEvent) {
+  e.preventDefault();
+}
+
 export function SetlistsPage() {
   const navigate = useNavigate();
   const setlistsRec = useStore((s) => s.setlists);
@@ -37,14 +47,23 @@ export function SetlistsPage() {
   const [, rerender] = useState(0);
   const [dragId, setDragId] = useState<string | null>(null);
 
-  // Mus: dra direkt. Pekskärm: håll in en kort stund, så att vanlig scroll fortsätter fungera.
+  // Mus: dra direkt. Pekskärm: håll fingret still en stund först, annars scrollar sidan som vanligt.
+  // Separata sensorer för mus och beröring, så att en scrollande fingerrörelse aldrig startar en dragning.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 6 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: HOLD_DELAY, tolerance: HOLD_TOLERANCE } }),
   );
 
-  const onDragStart = (e: DragStartEvent) => setDragId(String(e.active.id));
+  const stopBlocking = () => document.removeEventListener('touchmove', blockTouchScroll);
+  useEffect(() => stopBlocking, []);
+
+  const onDragStart = (e: DragStartEvent) => {
+    setDragId(String(e.active.id));
+    document.addEventListener('touchmove', blockTouchScroll, { passive: false });
+    navigator.vibrate?.(15);
+  };
   const onDragEnd = (e: DragEndEvent) => {
+    stopBlocking();
     setDragId(null);
     lastDragEnd = Date.now();
     const sl = setlistsRec[String(e.active.id)];
@@ -112,7 +131,10 @@ export function SetlistsPage() {
               collisionDetection={pointerWithin}
               onDragStart={onDragStart}
               onDragEnd={onDragEnd}
-              onDragCancel={() => setDragId(null)}
+              onDragCancel={() => {
+                stopBlocking();
+                setDragId(null);
+              }}
             >
               {folders.length > 0 && setlists.length > 0 && (
                 <p className="muted small-text" style={{ margin: '0 4px 10px' }}>
@@ -257,15 +279,45 @@ function SetlistList({ setlists, songs }: { setlists: Setlist[]; songs: Record<s
 function SetlistRow({ setlist: sl, songs }: { setlist: Setlist; songs: Record<string, Song> }) {
   const { setNodeRef, listeners, isDragging } = useDraggable({ id: sl.id });
   const count = sl.items.filter((i) => songs[i.songId] && !songs[i.songId].deletedAt).length;
+
+  // Visar att raden är på väg att bli dragbar medan fingret hålls still
+  const [holding, setHolding] = useState(false);
+  const hold = useRef<{ timer: number; x: number; y: number } | null>(null);
+  const endHold = () => {
+    if (hold.current) clearTimeout(hold.current.timer);
+    hold.current = null;
+    setHolding(false);
+  };
+  useEffect(() => endHold, []);
+  useEffect(() => {
+    if (isDragging) endHold();
+  }, [isDragging]);
+
+  const onTouchStart = (e: ReactTouchEvent<HTMLAnchorElement>) => {
+    listeners?.onTouchStart?.(e);
+    const t = e.touches[0];
+    endHold();
+    hold.current = { timer: window.setTimeout(() => setHolding(true), 150), x: t.clientX, y: t.clientY };
+  };
+  const onTouchMove = (e: ReactTouchEvent<HTMLAnchorElement>) => {
+    const t = e.touches[0];
+    if (hold.current && Math.hypot(t.clientX - hold.current.x, t.clientY - hold.current.y) > HOLD_TOLERANCE) endHold();
+  };
+
   return (
     <Link
       ref={setNodeRef}
-      className={`list-item draggable-row${isDragging ? ' dragging' : ''}`}
+      className={`list-item draggable-row${isDragging ? ' dragging' : ''}${holding ? ' holding' : ''}`}
       to={`/setlists/${sl.id}`}
       onClick={(e) => {
         if (Date.now() - lastDragEnd < 400) e.preventDefault();
       }}
+      onContextMenu={(e) => e.preventDefault()}
       {...listeners}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={endHold}
+      onTouchCancel={endHold}
     >
       <div className="main">
         <div className="title">{sl.name}</div>
