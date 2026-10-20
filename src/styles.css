@@ -1438,6 +1438,36 @@ textarea.note-text {
   white-space: nowrap;
 }
 
+.folder.drop-target {
+  border-radius: var(--radius);
+  outline: 2px dashed transparent;
+  outline-offset: 4px;
+  transition: outline-color 0.12s, background 0.12s;
+}
+
+.folder.drop-over {
+  outline-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.draggable-row {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.list-item.dragging {
+  opacity: 0.35;
+}
+
+.drag-overlay {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  cursor: grabbing;
+  color: var(--text);
+}
+
 .folder-empty {
   padding: 4px 30px 8px;
 }

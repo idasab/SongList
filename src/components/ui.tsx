@@ -29,6 +29,27 @@ export function Header({
   );
 }
 
+/**
+ * Den del av skärmen som faktiskt syns. På mobilen krymper den när tangentbordet visas,
+ * medan fönstret (window) behåller sin höjd – därför hamnade ark bakom tangentbordet.
+ */
+function useVisibleViewport(): { top: number; height: number } | null {
+  const [vp, setVp] = useState<{ top: number; height: number } | null>(null);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setVp({ top: vv.offsetTop, height: vv.height });
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, []);
+  return vp;
+}
+
 export function Sheet({
   title,
   onClose,
@@ -45,9 +66,20 @@ export function Sheet({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+  const vp = useVisibleViewport();
   return (
-    <div className="backdrop" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+    <div
+      className="backdrop"
+      onClick={onClose}
+      style={vp ? { top: vp.top, height: vp.height, bottom: 'auto' } : undefined}
+    >
+      <div
+        className="sheet"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        style={vp ? { maxHeight: vp.height * 0.92 } : undefined}
+      >
         <div className="sheet-head">
           <h3>{title}</h3>
           <button className="btn ghost icon" onClick={onClose} aria-label="Stäng">

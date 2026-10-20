@@ -1,12 +1,28 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Folder, FolderPlus, ListMusic, Pencil, Plus, Trash } from 'lucide-react';
-import { Header, Sheet } from '../components/ui';
+import { ChevronDown, ChevronRight, Folder, FolderPlus, GripVertical, ListMusic, Pencil, Plus, Trash } from 'lucide-react';
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core';
+import { Header, Sheet, toast } from '../components/ui';
 import type { Setlist, Song } from '../lib/model';
 import { liveFolders, liveSetlists, useStore } from '../store/useStore';
 
 // Ihopfällda mappar sparas mellan sidbyten under sessionen
 const collapsed = new Set<string>();
+
+// Tidpunkt då en dragning senast avslutades – så att släppet inte räknas som ett tryck på länken
+let lastDragEnd = 0;
 
 export function SetlistsPage() {
   const navigate = useNavigate();
@@ -19,6 +35,26 @@ export function SetlistsPage() {
   const [creating, setCreating] = useState<{ folderId: string } | null>(null);
   const [folderSheet, setFolderSheet] = useState<{ id?: string; name: string } | null>(null);
   const [, rerender] = useState(0);
+  const [dragId, setDragId] = useState<string | null>(null);
+
+  // Mus: dra direkt. Pekskärm: håll in en kort stund, så att vanlig scroll fortsätter fungera.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 6 } }),
+  );
+
+  const onDragStart = (e: DragStartEvent) => setDragId(String(e.active.id));
+  const onDragEnd = (e: DragEndEvent) => {
+    setDragId(null);
+    lastDragEnd = Date.now();
+    const sl = setlistsRec[String(e.active.id)];
+    const over = e.over ? String(e.over.id) : null;
+    if (!sl || !over?.startsWith('folder:')) return;
+    const folderId = over.slice('folder:'.length);
+    if ((sl.folderId ?? '') === folderId) return;
+    void saveSetlist({ ...sl, folderId: folderId || undefined });
+    toast(folderId ? `Flyttad till ${foldersRec[folderId]?.name ?? 'mappen'}` : 'Flyttad till Utan mapp');
+  };
 
   const folders = useMemo(() => liveFolders(foldersRec), [foldersRec]);
   const setlists = useMemo(
@@ -48,6 +84,7 @@ export function SetlistsPage() {
 
   const unfiled = byFolder.get('') ?? [];
   const empty = setlists.length === 0 && folders.length === 0;
+  const dragged = dragId ? setlistsRec[dragId] : undefined;
 
   return (
     <div className="screen">
@@ -70,12 +107,23 @@ export function SetlistsPage() {
               </button>
             </div>
           ) : (
-            <>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={pointerWithin}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+              onDragCancel={() => setDragId(null)}
+            >
+              {folders.length > 0 && setlists.length > 0 && (
+                <p className="muted small-text" style={{ margin: '0 4px 10px' }}>
+                  Håll in en setlista och dra den till en mapp för att flytta den.
+                </p>
+              )}
               {folders.map((f) => {
                 const list = byFolder.get(f.id) ?? [];
                 const open = !collapsed.has(f.id);
                 return (
-                  <div className="folder" key={f.id}>
+                  <DropZone id={`folder:${f.id}`} key={f.id}>
                     <div className="folder-head">
                       <button className="folder-toggle" onClick={() => toggle(f.id)} aria-expanded={open}>
                         {open ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
@@ -117,14 +165,16 @@ export function SetlistsPage() {
                       (list.length ? (
                         <SetlistList setlists={list} songs={songs} />
                       ) : (
-                        <div className="muted small-text folder-empty">Mappen är tom.</div>
+                        <div className="muted small-text folder-empty">
+                          {dragId ? 'Släpp här för att flytta hit' : 'Mappen är tom.'}
+                        </div>
                       ))}
-                  </div>
+                  </DropZone>
                 );
               })}
 
-              {unfiled.length > 0 && (
-                <div className="folder">
+              {(unfiled.length > 0 || (dragId && folders.length > 0)) && (
+                <DropZone id="folder:">
                   {folders.length > 0 && (
                     <div className="folder-head">
                       <button className="folder-toggle" onClick={() => toggle('')} aria-expanded={!collapsed.has('')}>
@@ -134,10 +184,26 @@ export function SetlistsPage() {
                       </button>
                     </div>
                   )}
-                  {!collapsed.has('') && <SetlistList setlists={unfiled} songs={songs} />}
-                </div>
+                  {!collapsed.has('') &&
+                    (unfiled.length ? (
+                      <SetlistList setlists={unfiled} songs={songs} />
+                    ) : (
+                      <div className="muted small-text folder-empty">Släpp här för att ta ut ur mappen</div>
+                    ))}
+                </DropZone>
               )}
-            </>
+
+              <DragOverlay dropAnimation={null}>
+                {dragged ? (
+                  <div className="list-item drag-overlay">
+                    <div className="main">
+                      <div className="title">{dragged.name}</div>
+                    </div>
+                    <GripVertical size={18} />
+                  </div>
+                ) : null}
+              </DragOverlay>
+            </DndContext>
           )}
         </div>
       </div>
@@ -169,24 +235,46 @@ export function SetlistsPage() {
   );
 }
 
+function DropZone({ id, children }: { id: string; children: ReactNode }) {
+  const { setNodeRef, isOver, active } = useDroppable({ id });
+  return (
+    <div ref={setNodeRef} className={`folder${active ? ' drop-target' : ''}${isOver ? ' drop-over' : ''}`}>
+      {children}
+    </div>
+  );
+}
+
 function SetlistList({ setlists, songs }: { setlists: Setlist[]; songs: Record<string, Song> }) {
   return (
     <div className="list">
-      {setlists.map((sl) => {
-        const count = sl.items.filter((i) => songs[i.songId] && !songs[i.songId].deletedAt).length;
-        return (
-          <Link key={sl.id} className="list-item" to={`/setlists/${sl.id}`}>
-            <div className="main">
-              <div className="title">{sl.name}</div>
-              <div className="sub">
-                {sl.date ? formatDate(sl.date) + ' · ' : ''}
-                {count} {count === 1 ? 'låt' : 'låtar'}
-              </div>
-            </div>
-          </Link>
-        );
-      })}
+      {setlists.map((sl) => (
+        <SetlistRow key={sl.id} setlist={sl} songs={songs} />
+      ))}
     </div>
+  );
+}
+
+function SetlistRow({ setlist: sl, songs }: { setlist: Setlist; songs: Record<string, Song> }) {
+  const { setNodeRef, listeners, isDragging } = useDraggable({ id: sl.id });
+  const count = sl.items.filter((i) => songs[i.songId] && !songs[i.songId].deletedAt).length;
+  return (
+    <Link
+      ref={setNodeRef}
+      className={`list-item draggable-row${isDragging ? ' dragging' : ''}`}
+      to={`/setlists/${sl.id}`}
+      onClick={(e) => {
+        if (Date.now() - lastDragEnd < 400) e.preventDefault();
+      }}
+      {...listeners}
+    >
+      <div className="main">
+        <div className="title">{sl.name}</div>
+        <div className="sub">
+          {sl.date ? formatDate(sl.date) + ' · ' : ''}
+          {count} {count === 1 ? 'låt' : 'låtar'}
+        </div>
+      </div>
+    </Link>
   );
 }
 
