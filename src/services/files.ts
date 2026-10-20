@@ -30,6 +30,28 @@ export async function saveTextFile(fileName: string, text: string, mime = 'text/
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
+/** Sparar en binär fil (t.ex. PDF): nedladdning på webben, delningsmenyn på iOS. */
+export async function saveBinaryFile(fileName: string, blob: Blob, mime: string): Promise<void> {
+  if (isNative) {
+    const dataUrl = await readFileAsDataUrl(blob);
+    const { uri } = await Filesystem.writeFile({
+      path: fileName,
+      data: dataUrl.slice(dataUrl.indexOf(',') + 1),
+      directory: Directory.Cache,
+    });
+    await Share.share({ title: fileName, files: [uri] });
+    return;
+  }
+  const url = URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: mime }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
 /** Öppnar filväljaren och returnerar valda filer. */
 export function pickFiles(options: { accept?: string; multiple?: boolean; capture?: boolean } = {}): Promise<File[]> {
   return new Promise((resolve) => {

@@ -69,6 +69,8 @@ export interface Settings {
   lastSyncAt?: number;
   lastBackupAt?: number;
   librarySort: 'title' | 'artist' | 'updated';
+  /** Senast använda e-postadresser för export (sparas bara på enheten) */
+  recentEmails?: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {

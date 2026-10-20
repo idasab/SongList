@@ -7,6 +7,8 @@ import { ocrToChordPro, type OcrPage } from './ocrLayout';
 import { getPianoChord, normalizeSuffix } from './chordShapes';
 import { mergeRecords, restoreMerge } from './merge';
 import { anchorAt, anchorToPx, hitStroke, strokeFromPx, strokeToPx } from './annotations';
+import { buildChordProExport, buildSongFiles, buildTextExport, mailBody, mailSubject } from '../services/setlistExport';
+import { isValidEmail } from '../services/mail';
 
 describe('ackord', () => {
   it('känner igen ackord men inte vanliga ord', () => {
@@ -241,5 +243,69 @@ describe('anteckningar', () => {
     expect(px).toEqual([10, 45, 50, 45, 90, 45]);
     expect(hitStroke(px, 70, 48, 5)).toBe(true);
     expect(hitStroke(px, 70, 60, 5)).toBe(false);
+  });
+});
+
+describe('export av setlista', () => {
+  const now = 1;
+  const mk = (id: string, content: string, transpose = 0) => ({
+    id,
+    createdAt: now,
+    updatedAt: now,
+    title: id,
+    artist: 'Test',
+    content,
+    tags: [],
+    transpose,
+  });
+  const songs = {
+    a: mk('a', '{title: Första}\n{key: G}\n\n{start_of_verse: Vers 1}\n[G]Solen går [C]upp\n{end_of_verse}\n'),
+    b: mk('b', '{title: Andra}\n\n[D]Kvällen [A]kommer\n', 2),
+  };
+  const setlist = {
+    id: 's',
+    createdAt: now,
+    updatedAt: now,
+    name: 'Spelning',
+    items: [
+      { id: '1', songId: 'a' },
+      { id: '2', songId: 'b' },
+    ],
+  };
+
+  it('ren text utan ackord', () => {
+    const t = buildTextExport(setlist, songs, 'international');
+    expect(t).toContain('1. a – Test');
+    expect(t).toContain('VERS 1');
+    expect(t).toContain('Solen går upp');
+    expect(t).not.toContain('[G]');
+  });
+
+  it('mejl: ämne och setlistan med titel och artist', () => {
+    expect(mailSubject({ ...setlist, date: '2026-10-24' })).toBe('Setlista: Spelning (24 oktober 2026)');
+    const body = mailBody(setlist, songs, 'international');
+    expect(body.split('\n').slice(0, 4)).toEqual(['Spelning', '', '1. a – Test', '2. b – Test']);
+  });
+
+  it('en fil per låt, numrerade i setlistans ordning', async () => {
+    const files = await buildSongFiles('chordpro', setlist, songs, 'international');
+    expect(files.map((f) => f.name)).toEqual(['01 a.txt', '02 b.txt']);
+    expect(await files[1].blob.text()).toContain('[E]Kvällen [B]kommer');
+    const texts = await buildSongFiles('text', setlist, songs, 'international');
+    expect(await texts[0].blob.text()).toContain('Solen går upp');
+  });
+
+  it('kontrollerar e-postadresser', () => {
+    expect(isValidEmail('namn@exempel.se')).toBe(true);
+    expect(isValidEmail('namn@exempel')).toBe(false);
+    expect(isValidEmail('namn exempel.se')).toBe(false);
+  });
+
+  it('ChordPro med transponering och new_song', () => {
+    const t = buildChordProExport(setlist, songs, 'international');
+    expect(t).toContain('# Setlista: Spelning');
+    expect(t).toContain('{new_song}');
+    expect(t).toContain('[G]Solen går [C]upp');
+    expect(t).toContain('[E]Kvällen [B]kommer');
   });
 });

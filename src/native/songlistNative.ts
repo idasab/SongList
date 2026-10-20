@@ -19,6 +19,13 @@ export interface SongListNativePlugin {
   deleteFile(options: { scope: ICloudScope; path: string }): Promise<void>;
   scanDocument(): Promise<{ pages: OcrPage[]; imageDataUrl?: string }>;
   recognizeImage(options: { image: string }): Promise<{ page: OcrPage }>;
+  composeMail(options: {
+    to: string[];
+    subject: string;
+    body: string;
+    /** data = base64 utan data:-prefix */
+    attachments: { name: string; mime: string; data: string }[];
+  }): Promise<{ result: 'sent' | 'saved' | 'cancelled' | 'failed' | 'unknown' }>;
 }
 
 export const SongListNative = registerPlugin<SongListNativePlugin>('SongListNative');

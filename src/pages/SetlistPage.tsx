@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { GripVertical, MoreHorizontal, Play, Plus, Search, X } from 'lucide-react';
+import { GripVertical, MoreHorizontal, Play, Plus, Search, Share, X } from 'lucide-react';
 import {
   DndContext,
   KeyboardSensor,
@@ -13,7 +13,18 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Header, Sheet, toast } from '../components/ui';
+import { Header, Segmented, Sheet, toast, toastError } from '../components/ui';
+import { EmailInput, rememberEmails } from '../components/EmailInput';
+import {
+  EXPORT_FORMATS,
+  buildSongFiles,
+  exportSetlist,
+  mailBody,
+  mailSubject,
+  type SetlistExportFormat,
+} from '../services/setlistExport';
+import { sendMail, type MailOutcome } from '../services/mail';
+import { hasNativePlugin } from '../native/songlistNative';
 import { filterSongs, sortSongs } from '../lib/search';
 import { formatKey, parseKey } from '../lib/chords';
 import { newId, type SetlistItem, type Song } from '../lib/model';
@@ -30,6 +41,7 @@ export function SetlistPage() {
   const deleteSetlist = useStore((s) => s.deleteSetlist);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -65,6 +77,15 @@ export function SetlistPage() {
   return (
     <div className="screen">
       <Header title={setlist.name} back="/setlists">
+        <button
+          className="btn ghost icon"
+          aria-label="Exportera setlistan"
+          title="Exportera"
+          disabled={!items.length}
+          onClick={() => setExporting(true)}
+        >
+          <Share size={20} />
+        </button>
         <button className="btn ghost icon" aria-label="Inställningar för setlistan" onClick={() => setEditing(true)}>
           <MoreHorizontal size={22} />
         </button>
@@ -126,6 +147,8 @@ export function SetlistPage() {
           }}
         />
       )}
+
+      {exporting && <ExportSheet setlistId={setlist.id} onClose={() => setExporting(false)} />}
 
       {editing && (
         <EditSetlistSheet
@@ -305,6 +328,108 @@ function EditSetlistSheet(props: {
         <span>Anteckningar</span>
         <textarea className="textarea" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
       </label>
+    </Sheet>
+  );
+}
+
+function ExportSheet({ setlistId, onClose }: { setlistId: string; onClose: () => void }) {
+  const setlist = useStore((s) => s.setlists[setlistId]);
+  const songs = useStore((s) => s.songs);
+  const notation = useStore((s) => s.settings.notation);
+  const recentEmails = useStore((s) => s.settings.recentEmails);
+  const updateSettings = useStore((s) => s.updateSettings);
+  const [mode, setMode] = useState<'file' | 'mail'>('file');
+  const [format, setFormat] = useState<SetlistExportFormat>('pdf-annotated');
+  const [to, setTo] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  const run = async () => {
+    setBusy(true);
+    try {
+      if (mode === 'file') {
+        await exportSetlist(format, setlist, songs, notation);
+        onClose();
+        return;
+      }
+      const files = await buildSongFiles(format, setlist, songs, notation);
+      void updateSettings({ recentEmails: rememberEmails(recentEmails, to) });
+      const outcome = await sendMail({
+        to,
+        subject: mailSubject(setlist),
+        body: mailBody(setlist, songs, notation),
+        files,
+      });
+      const messages: Record<MailOutcome, string> = {
+        sent: 'Mejlet är skickat',
+        saved: 'Mejlet är sparat som utkast',
+        cancelled: '',
+        shared: 'Filerna är delade',
+        downloaded: 'Filerna är nedladdade – bifoga dem i mejlet som öppnades',
+      };
+      if (messages[outcome]) toast(messages[outcome]);
+      if (outcome !== 'cancelled') onClose();
+    } catch (e) {
+      // Användaren stängde delningsmenyn
+      if ((e as Error)?.message?.toLowerCase().includes('cancel')) return;
+      toastError(e, mode === 'mail' ? 'Mejlet kunde inte skapas' : 'Exporten misslyckades');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const canRun = mode === 'file' || to.length > 0;
+
+  return (
+    <Sheet
+      title="Exportera setlistan"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Avbryt
+          </button>
+          <button className="btn primary" disabled={busy || !canRun} onClick={run}>
+            {busy ? 'Skapar…' : mode === 'mail' ? 'Skapa mejl' : 'Exportera'}
+          </button>
+        </>
+      }
+    >
+      <div style={{ marginBottom: 12 }}>
+        <Segmented
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: 'file', label: 'Spara fil' },
+            { value: 'mail', label: 'Skicka med e-post' },
+          ]}
+        />
+      </div>
+
+      {mode === 'mail' && (
+        <div className="field">
+          <span>Mottagare</span>
+          <EmailInput value={to} onChange={setTo} suggestions={recentEmails ?? []} />
+        </div>
+      )}
+
+      {EXPORT_FORMATS.map((f) => (
+        <label key={f.value} className="check-item">
+          <input type="radio" name="export-format" checked={format === f.value} onChange={() => setFormat(f.value)} />
+          <div>
+            <div style={{ fontWeight: 600 }}>{f.label}</div>
+            <div className="muted small-text">{f.description}</div>
+          </div>
+        </label>
+      ))}
+      <p className="muted small-text" style={{ marginBottom: 0 }}>
+        {mode === 'mail'
+          ? 'Varje låt bifogas som en egen fil. Hela setlistan med titel och artist står i mejlet. '
+          : ''}
+        Ackorden exporteras med låtarnas transponering, precis som de visas i appen.
+        {mode === 'mail' && !hasNativePlugin()
+          ? ' I webbläsaren kan filerna inte bifogas automatiskt: de delas via delningsmenyn eller laddas ner så att du kan bifoga dem i mejlet som öppnas.'
+          : ''}
+      </p>
     </Sheet>
   );
 }

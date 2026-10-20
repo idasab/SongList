@@ -1,5 +1,6 @@
 import Foundation
 import Capacitor
+import MessageUI
 import UIKit
 import Vision
 import VisionKit
@@ -7,8 +8,10 @@ import VisionKit
 /// SongLists egna iOS-funktioner:
 /// - Filer i appens iCloud-behållare (backup och synk mellan iPhone och iPad)
 /// - Dokumentskanning med kameran (VisionKit) och textigenkänning på enheten (Vision)
+/// - E-post med bifogade filer (MessageUI)
 @objc(SongListNativePlugin)
-public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCameraViewControllerDelegate {
+public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCameraViewControllerDelegate,
+    MFMailComposeViewControllerDelegate {
     public let identifier = "SongListNativePlugin"
     public let jsName = "SongListNative"
     public let pluginMethods: [CAPPluginMethod] = [
@@ -18,11 +21,13 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
         CAPPluginMethod(name: "listFiles", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "deleteFile", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "scanDocument", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "recognizeImage", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "recognizeImage", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "composeMail", returnType: CAPPluginReturnPromise)
     ]
 
     private let queue = DispatchQueue(label: "se.otimo.songlist.native", qos: .userInitiated)
     private var scanCall: CAPPluginCall?
+    private var mailCall: CAPPluginCall?
 
     // MARK: - iCloud
 
@@ -288,6 +293,57 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
         controller.dismiss(animated: true)
         scanCall?.reject("Skanningen misslyckades: \(error.localizedDescription)")
         scanCall = nil
+    }
+
+    // MARK: - E-post
+
+    /// Öppnar Apples mejlfönster med mottagare, ämne, text och bifogade filer ifyllda.
+    @objc func composeMail(_ call: CAPPluginCall) {
+        guard MFMailComposeViewController.canSendMail() else {
+            call.reject("Det finns inget e-postkonto i appen Mail", "NO_MAIL")
+            return
+        }
+        let to = call.getArray("to", String.self) ?? []
+        let subject = call.getString("subject") ?? ""
+        let body = call.getString("body") ?? ""
+        let attachments = call.getArray("attachments", JSObject.self) ?? []
+        DispatchQueue.main.async {
+            let controller = MFMailComposeViewController()
+            controller.mailComposeDelegate = self
+            controller.setToRecipients(to)
+            controller.setSubject(subject)
+            controller.setMessageBody(body, isHTML: false)
+            for attachment in attachments {
+                guard let name = attachment["name"] as? String,
+                      let mime = attachment["mime"] as? String,
+                      let base64 = attachment["data"] as? String,
+                      let data = Data(base64Encoded: base64, options: .ignoreUnknownCharacters) else { continue }
+                controller.addAttachmentData(data, mimeType: mime, fileName: name)
+            }
+            self.mailCall = call
+            self.bridge?.viewController?.present(controller, animated: true)
+        }
+    }
+
+    public func mailComposeController(
+        _ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?
+    ) {
+        controller.dismiss(animated: true)
+        guard let call = mailCall else { return }
+        mailCall = nil
+        if let error = error {
+            call.reject("Mejlet kunde inte skickas: \(error.localizedDescription)")
+            return
+        }
+        let value: String
+        switch result {
+        case .sent: value = "sent"
+        case .saved: value = "saved"
+        case .cancelled: value = "cancelled"
+        case .failed: value = "failed"
+        @unknown default: value = "unknown"
+        }
+        call.resolve(["result": value])
     }
 
     // MARK: - Textigenkänning
