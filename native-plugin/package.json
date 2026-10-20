@@ -1,0 +1,21 @@
+{
+  "name": "songlist-native",
+  "version": "0.1.0",
+  "description": "SongLists egna iOS-funktioner: iCloud-filer, dokumentskanning och textigenkänning (Vision)",
+  "private": true,
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "ios/Sources",
+    "Package.swift",
+    "SonglistNative.podspec"
+  ],
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=8.0.0"
+  }
+}
