@@ -161,9 +161,6 @@ export function EditorPage() {
         </div>
       )}
       <div className="editor-tools">
-        <button className="btn small" onClick={() => insertChord()} title="Infoga ackord">
-          [ ]
-        </button>
         <button className="btn small" onClick={() => wrapSection('verse', 'Vers')}>
           Vers
         </button>
@@ -199,23 +196,32 @@ export function EditorPage() {
         autoComplete="off"
         wrap="off"
       />
-      {quickChords.length > 0 && (
-        <div className="chord-bar" aria-label="Ackord i låten">
-          {quickChords.map((c) => (
-            <button
-              key={c}
-              className="btn small chordbtn"
-              title={`Infoga ${c}`}
-              // Behåll fokus i texten så att tangentbordet inte stängs
-              onPointerDown={(e) => e.preventDefault()}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => insertChord(c)}
-            >
-              {c}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="chord-bar" aria-label="Ackord i låten">
+        <button
+          className="btn small chordbtn"
+          title="Infoga ett tomt ackord"
+          aria-label="Infoga ett tomt ackord"
+          // Behåll fokus i texten så att tangentbordet inte stängs
+          onPointerDown={(e) => e.preventDefault()}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => insertChord()}
+        >
+          [ ]
+        </button>
+        {quickChords.map((c) => (
+          <button
+            key={c}
+            className="btn small chordbtn"
+            title={`Infoga ${c}`}
+            // Behåll fokus i texten så att tangentbordet inte stängs
+            onPointerDown={(e) => e.preventDefault()}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => insertChord(c)}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
     </>
   );
 
