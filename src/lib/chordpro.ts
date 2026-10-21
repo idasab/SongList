@@ -9,6 +9,7 @@ import {
   parseKey,
   type ChordContext,
 } from './chords';
+import { parseHeader, type Header } from './layout';
 
 export interface Segment {
   chord?: string;
@@ -29,6 +30,36 @@ export interface Section {
   lines: Line[];
   /** Sant om sektionen är en upprepning av en tidigare refräng ({chorus}) */
   isRepeat?: boolean;
+  /** Startad av en rubrikrad som "Vers 1:" i stället för ett direktiv; slutar vid tomrad */
+  implicit?: boolean;
+}
+
+const HEADER_SECTION: Record<Exclude<Header['kind'], 'comment'>, SectionType> = {
+  verse: 'verse',
+  chorus: 'chorus',
+  bridge: 'bridge',
+};
+
+/**
+ * Rubrikrader som kortform för direktiv: "Vers 1:" = {start_of_verse: Vers 1},
+ * "Refräng:" = {start_of_chorus}, "Intro: G C" = {comment: Intro} + ackordrad.
+ * Vers/refräng/stick godtas med eller utan kolon; övriga rubriker (Intro, Solo …) kräver kolon
+ * så att en vanlig textrad inte misstolkas.
+ */
+export function chordProHeader(line: string): Header | null {
+  const h = parseHeader(line);
+  if (!h) return null;
+  if (h.kind !== 'comment') return h;
+  return /^\s*[\[(]?\s*[A-Za-zÅÄÖåäö-]+\.?\s*\d*\s*[\])]?\s*:/.test(line) ? h : null;
+}
+
+/** Ackorden efter en rubrik ("G C D" eller "[G] [C]") som en ChordPro-rad. */
+function trailingChordLine(trailing: string): string {
+  return trailing
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((t) => (t.startsWith('[') ? t : `[${t}]`))
+    .join(' ');
 }
 
 export interface SongMeta {
@@ -165,8 +196,8 @@ export function parseChordPro(source: string): ParsedSong {
   };
 
   const lines = source.replace(/\r\n?/g, '\n').split('\n');
-  for (const rawLine of lines) {
-    const line = rawLine.replace(/\s+$/, '');
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li].replace(/\s+$/, '');
     const inPre = current.type === 'tab' || current.type === 'grid';
 
     if (/^\s*#/.test(line) && !inPre) continue; // kommentar i källfilen
@@ -225,7 +256,10 @@ export function parseChordPro(source: string): ParsedSong {
     }
 
     if (line.trim() === '') {
-      if (current.type === 'none') {
+      if (current.implicit) {
+        // Sektion som startats med en rubrikrad slutar vid tomrad
+        closeSection();
+      } else if (current.type === 'none') {
         // Tomrad utanför en sektion: avsluta stycket
         if (current.lines.length) closeSection();
       } else {
@@ -234,7 +268,26 @@ export function parseChordPro(source: string): ParsedSong {
       continue;
     }
 
-    const segments = parseLyricsLine(line);
+    const header = chordProHeader(line);
+    if (header) {
+      if (header.kind === 'comment') {
+        current.lines.push({ type: 'comment', text: header.label, style: 'normal' });
+      } else {
+        const next = lines[li + 1]?.trim();
+        if (header.kind === 'chorus' && !header.trailing && (next === undefined || next === '' || next.startsWith('{'))) {
+          // "Refräng" ensamt på en rad = upprepa refrängen, som {chorus}
+          closeSection();
+          const ref = lastChorus as Section | null;
+          sections.push({ type: 'chorus', label: header.label, lines: ref ? ref.lines : [], isRepeat: true });
+          continue;
+        }
+        closeSection();
+        current = { type: HEADER_SECTION[header.kind], label: header.label, lines: [], implicit: true };
+      }
+      if (!header.trailing) continue;
+    }
+
+    const segments = parseLyricsLine(header?.trailing ? trailingChordLine(header.trailing) : line);
     for (const s of segments) {
       if (s.chord && !s.chord.startsWith('*') && !seen.has(s.chord)) {
         seen.add(s.chord);
@@ -308,6 +361,13 @@ export function transposeSource(source: string, ctx: ChordContext): string {
           return `{key: ${formatChord(dir.value, c)}}`;
         }
         return line;
+      }
+      // "Intro: G C D" – ackord utan hakparenteser efter en rubrik
+      const header = chordProHeader(line);
+      if (header?.trailing && !header.trailing.includes('[')) {
+        const at = line.lastIndexOf(header.trailing);
+        const chordsPart = header.trailing.replace(/\S+/g, (t) => formatChord(t, c));
+        return line.slice(0, at) + chordsPart;
       }
       return line.replace(/\[([^\]]*)\]/g, (_, chord: string) => `[${formatChord(chord, c)}]`);
     })

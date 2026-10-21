@@ -309,3 +309,53 @@ describe('export av setlista', () => {
     expect(t).toContain('[E]Kvällen [B]kommer');
   });
 });
+
+describe('rubrikrader i ChordPro', () => {
+  const src = `{title: Kortform}
+
+Intro: G C D
+
+Vers 1:
+[G]Morgonen är [C]stilla
+[D]fåglarna har vaknat
+
+Refräng:
+[C]Sjung med [G]oss
+[D]hela dagen
+
+Vers 2
+[G]Kvällen kommer [C]sakta
+
+Refräng
+`;
+  const p = parseChordPro(src);
+
+  it('tolkar Vers 1: och Refräng: som sektioner', () => {
+    const secs = p.sections.filter((s) => s.type !== 'none');
+    expect(secs.map((s) => [s.type, s.label, s.isRepeat ?? false])).toEqual([
+      ['verse', 'Vers 1', false],
+      ['chorus', 'Refräng', false],
+      ['verse', 'Vers 2', false],
+      ['chorus', 'Refräng', true],
+    ]);
+    expect(secs[0].lines.length).toBe(2);
+    // Upprepningen visar refrängens rader
+    expect(secs[3].lines.length).toBe(2);
+  });
+
+  it('Intro: med ackord blir kommentar och ackordrad', () => {
+    const intro = p.sections.find((s) => s.lines.some((l) => l.type === 'comment'))!;
+    expect(intro.lines[0]).toEqual({ type: 'comment', text: 'Intro', style: 'normal' });
+    expect(p.chords.slice(0, 3)).toEqual(['G', 'C', 'D']);
+  });
+
+  it('transponerar ackord efter en rubrik', () => {
+    const out = transposeSource('Intro: G C D\n', { transpose: 2, notation: 'international' });
+    expect(out.trim()).toBe('Intro: A D E');
+  });
+
+  it('vanliga textrader påverkas inte', () => {
+    const q = parseChordPro('Slut på dagen\nSolo i natt\n');
+    expect(q.sections[0].lines.every((l) => l.type === 'lyrics')).toBe(true);
+  });
+});
