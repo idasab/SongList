@@ -482,6 +482,30 @@ a {
   border-right: none;
 }
 
+/* Rader med alternativknappar: på smala skärmar hamnar knapparna under rubriken,
+   lika breda över hela raden, så att inga alternativ kapas */
+.choice-row .segmented {
+  flex-shrink: 0;
+}
+
+@media (max-width: 520px) {
+  .choice-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .choice-row .segmented {
+    display: flex;
+    width: 100%;
+  }
+
+  .choice-row .segmented button {
+    flex: 1;
+    padding: 8px 6px;
+  }
+}
+
 .segmented button.on {
   background: var(--accent);
   color: var(--accent-text);

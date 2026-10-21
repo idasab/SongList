@@ -38,7 +38,7 @@ export function SettingsPage() {
         <div>
           <div className="section-title">Visning</div>
           <div className="card">
-            <div className="toggle-row">
+            <div className="toggle-row choice-row">
               <span>Ackorddiagram för</span>
               <Segmented<Instrument>
                 value={settings.instrument}
@@ -50,7 +50,7 @@ export function SettingsPage() {
                 ]}
               />
             </div>
-            <div className="toggle-row">
+            <div className="toggle-row choice-row">
               <div>
                 <div>Notation</div>
                 <div className="muted small-text">Svensk notation skriver H istället för B, och B istället för Bb</div>
@@ -64,7 +64,7 @@ export function SettingsPage() {
                 ]}
               />
             </div>
-            <div className="toggle-row">
+            <div className="toggle-row choice-row">
               <span>Utseende</span>
               <Segmented<Theme>
                 value={settings.theme}
