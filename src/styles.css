@@ -502,7 +502,8 @@ a {
 
   .choice-row .segmented button {
     flex: 1;
-    padding: 8px 6px;
+    padding: 5px 6px;
+    font-size: 14px;
   }
 }
 
