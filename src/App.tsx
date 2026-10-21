@@ -38,7 +38,28 @@ function TabLayout() {
   );
 }
 
+/** Låter appen fylla den synliga ytan, så att innehåll längst ner hamnar ovanför tangentbordet. */
+function useVisibleHeight() {
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      document.documentElement.style.setProperty('--app-height', `${vv.height}px`);
+      // iOS kan skjuta upp sidan när ett fält får fokus; håll den på plats
+      if (window.scrollY) window.scrollTo(0, 0);
+    };
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, []);
+}
+
 function Root() {
+  useVisibleHeight();
   return (
     <div className="app">
       <Outlet />

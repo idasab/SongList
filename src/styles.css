@@ -122,7 +122,8 @@ a {
 .app {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* Den synliga höjden: krymper när tangentbordet visas på mobilen (sätts i App) */
+  height: var(--app-height, 100%);
 }
 
 .screen {
@@ -1222,6 +1223,24 @@ textarea.note-text {
   background: var(--border);
   margin: 4px 2px;
   flex-shrink: 0;
+}
+
+.chord-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px calc(10px + var(--safe-right)) calc(8px + var(--safe-bottom)) calc(10px + var(--safe-left));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  max-height: 96px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.chord-bar .chordbtn {
+  min-width: 44px;
+  font-weight: 700;
+  color: var(--text);
 }
 
 .editor-tools .chordbtn {

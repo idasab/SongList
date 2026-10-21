@@ -141,7 +141,8 @@ export function EditorPage() {
   };
 
   const preferFlats = songPrefersFlats(parsed, 0);
-  const quickChords = parsed.chords.filter((c) => !c.startsWith('*')).slice(0, 24);
+  // Alla ackord i låten, i den ordning de först förekommer
+  const quickChords = parsed.chords.filter((c) => !c.startsWith('*'));
 
   const preview = (
     <div className="preview">
@@ -186,12 +187,6 @@ export function EditorPage() {
             <ImageIcon size={15} /> Original
           </button>
         )}
-        {quickChords.length > 0 && <div className="sep" />}
-        {quickChords.map((c) => (
-          <button key={c} className="btn small chordbtn" onClick={() => insertChord(c)}>
-            {c}
-          </button>
-        ))}
       </div>
       <textarea
         ref={textRef}
@@ -204,6 +199,23 @@ export function EditorPage() {
         autoComplete="off"
         wrap="off"
       />
+      {quickChords.length > 0 && (
+        <div className="chord-bar" aria-label="Ackord i låten">
+          {quickChords.map((c) => (
+            <button
+              key={c}
+              className="btn small chordbtn"
+              title={`Infoga ${c}`}
+              // Behåll fokus i texten så att tangentbordet inte stängs
+              onPointerDown={(e) => e.preventDefault()}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => insertChord(c)}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
     </>
   );
 
