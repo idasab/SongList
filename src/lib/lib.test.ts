@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatChord, isChord, parseChord, parseKey, formatKey } from './chords';
-import { parseChordPro, transposeSource, upsertDirective } from './chordpro';
+import { isChordRow, parseChordPro, parseLyricsLine, transposeSource, upsertDirective } from './chordpro';
 import { isChordLine, parseHeader } from './layout';
 import { looksLikeChordPro, textToChordPro, type Measure } from './textImport';
 import { ocrToChordPro, type OcrPage } from './ocrLayout';
@@ -398,5 +398,20 @@ describe('tonartsfilter', () => {
   it('filtrerar fram låtar i samma tonart', () => {
     expect(filterSongs(songs, { query: '', fullText: false, tags: [], keyId: '7' }).map((s) => s.id)).toEqual(['g', 'f-till-g']);
     expect(filterSongs(songs, { query: '', fullText: false, tags: [], keyId: '1' }).map((s) => s.id)).toEqual(['db', 'ciss']);
+  });
+});
+
+describe('ackordrader med taktsymboler', () => {
+  it('känner igen rader med bara ackord och symboler', () => {
+    const row = parseLyricsLine('[C] / / [G/B] / / | [Am] / / [G] [Am] [G/B]');
+    expect(isChordRow(row)).toBe(true);
+    expect(isChordRow(parseLyricsLine('[C] / / | x2'))).toBe(true);
+    expect(isChordRow(parseLyricsLine('[C]Solen går [G]upp'))).toBe(false);
+    expect(isChordRow(parseLyricsLine('Bara text'))).toBe(false);
+  });
+
+  it('textimporten gör om en ackordrad med snedstreck till ChordPro', () => {
+    const out = textToChordPro('C / / G/B / / | Am / / G Am G/B\n');
+    expect(out.trim()).toBe('[C] / / [G/B] / / | [Am] / / [G] [Am] [G/B]');
   });
 });

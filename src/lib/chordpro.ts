@@ -301,6 +301,18 @@ export function parseChordPro(source: string): ParsedSong {
   return { meta, sections, chords, hNotation: detectHNotation(chords) };
 }
 
+// Tecken som får stå mellan ackorden i en ackordrad: taktstreck, snedstreck för slag,
+// repetitioner (x2) m.m. – men inga ord.
+const CHORD_ROW_TEXT = /^[\s/|\\:.,;\-–—%*()\[\]0-9x×]*$/i;
+
+/**
+ * Sant om raden bara innehåller ackord och taktsymboler, t.ex. "[C] / / [G/B] / / | [Am]".
+ * En sådan rad visas på en enda rad i stället för ackord ovanför "text".
+ */
+export function isChordRow(segments: Segment[]): boolean {
+  return segments.some((s) => s.chord !== undefined) && segments.every((s) => CHORD_ROW_TEXT.test(s.text));
+}
+
 /** Text utan ackord och direktiv – för fritextsökning. */
 export function lyricsText(source: string): string {
   return source

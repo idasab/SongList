@@ -4,7 +4,15 @@
 // appens visning (data-ln), och avstånden räknas i em som i stilmallen. Därför hamnar
 // post-it-lappar och handritade streck på samma rad som i appen.
 
-import { parseChordPro, songPrefersFlats, transposeSource, type Line, type ParsedSong, type Section } from '../lib/chordpro';
+import {
+  isChordRow,
+  parseChordPro,
+  songPrefersFlats,
+  transposeSource,
+  type Line,
+  type ParsedSong,
+  type Section,
+} from '../lib/chordpro';
 import { formatChord, formatKey, parseKey, type ChordContext, type Notation } from '../lib/chords';
 import {
   NOTE_COLORS,
@@ -91,6 +99,8 @@ function songText(p: PreparedSong, number?: number): string {
     if (sec.label) out.push(sec.label.toUpperCase());
     for (const line of sec.lines) {
       if (line.type === 'lyrics') {
+        // Rader med bara ackord och taktsymboler är inte sångtext
+        if (isChordRow(line.segments)) continue;
         const text = line.segments.map((s) => s.text).join('').replace(/\s+$/, '');
         if (text.trim()) out.push(text);
       } else if (line.type === 'comment') {
@@ -265,6 +275,34 @@ function drawLine(c: PdfCtx, line: Line, x0: number, maxX: number, ctx: ChordCon
           doc.text(r, x0, c.y + 0.08 * EM, { baseline: 'top' });
           c.y += M.plain * EM;
         });
+        return;
+      }
+      if (isChordRow(line.segments)) {
+        // Ackord och taktsymboler på en rad
+        c.y += M.chordGap * EM;
+        ensureSpace(c, M.plain * EM);
+        tops[ln] = virtualY(c);
+        let x = x0;
+        for (const s of line.segments) {
+          if (s.chord !== undefined) {
+            const annot = s.chord.startsWith('*');
+            const chord = formatChord(s.chord, ctx);
+            setFont(doc, annot ? 'italic' : 'bold', 0.85 * EM, annot ? MUTED : TEXT);
+            if (x + doc.getTextWidth(chord) > maxX && x > x0) {
+              x = x0;
+              c.y += M.plain * EM;
+              ensureSpace(c, M.plain * EM);
+            }
+            doc.text(chord, x, c.y, { baseline: 'top' });
+            x += doc.getTextWidth(chord);
+          }
+          if (s.text) {
+            setFont(doc, 'normal', 0.85 * EM, MUTED);
+            doc.text(s.text, x, c.y, { baseline: 'top' });
+            x += doc.getTextWidth(s.text);
+          }
+        }
+        c.y += M.plain * EM;
         return;
       }
       const lyricsEmpty = line.segments.every((s) => !s.text.trim());

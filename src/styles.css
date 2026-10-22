@@ -984,6 +984,31 @@ textarea.note-text {
   line-height: 1.25;
 }
 
+.ln.chord-row {
+  display: block;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.ln.chord-row .ch {
+  font-weight: 700;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+.ln.chord-row .ch.annot {
+  font-style: italic;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.ln.chord-row .sym {
+  color: var(--text-muted);
+  font-size: 0.85em;
+  white-space: pre;
+}
+
 .no-chords .seg .ch {
   display: none;
 }

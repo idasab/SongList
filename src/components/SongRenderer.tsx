@@ -1,5 +1,5 @@
 import { memo, type CSSProperties, type ReactNode, type Ref } from 'react';
-import type { Line, ParsedSong, Section, Segment } from '../lib/chordpro';
+import { isChordRow, type Line, type ParsedSong, type Section, type Segment } from '../lib/chordpro';
 import { formatChord, formatKey, parseKey, type ChordContext } from '../lib/chords';
 
 export interface RenderOptions {
@@ -61,6 +61,30 @@ function LineView({ line, ctx, opts, ln }: { line: Line; ctx: ChordContext; opts
         return (
           <div className="ln plain" data-ln={ln}>
             {text.trim() ? text : ' '}
+          </div>
+        );
+      }
+      if (isChordRow(line.segments)) {
+        // Ackord och taktsymboler på samma rad, t.ex. "C / / G/B / / | Am"
+        return (
+          <div className="ln chord-row" data-ln={ln}>
+            {line.segments.map((s, i) => {
+              const annot = s.chord?.startsWith('*');
+              const chord = s.chord !== undefined ? formatChord(s.chord, ctx) : '';
+              return (
+                <span key={i}>
+                  {chord && (
+                    <span
+                      className={`ch${annot ? ' annot' : ''}`}
+                      onClick={!annot && opts.onChordClick ? () => opts.onChordClick!(chord) : undefined}
+                    >
+                      {chord}
+                    </span>
+                  )}
+                  {s.text && <span className="sym">{s.text}</span>}
+                </span>
+              );
+            })}
           </div>
         );
       }
