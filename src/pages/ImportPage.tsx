@@ -472,9 +472,6 @@ function ImportItemCard({
       {showTags && (
         <div className="opts" style={{ display: 'block' }}>
           <TagInput value={item.tags ?? []} onChange={(t) => onChange({ ...item, tags: t })} suggestions={tagSuggestions} />
-          <div className="muted small-text" style={{ marginTop: 4 }}>
-            Läggs till de taggar som gäller för alla låtar.
-          </div>
         </div>
       )}
       {bigPreview && item.previewDataUrl && (
