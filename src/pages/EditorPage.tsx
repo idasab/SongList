@@ -59,7 +59,13 @@ export function EditorPage() {
       tags.join() !== initial.current.tags.join() ||
       categoryId !== initial.current.categoryId);
 
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => dirty && currentLocation.pathname !== nextLocation.pathname);
+  // Sätts direkt vid sparning, så att navigeringen till låten inte stoppas innan React
+  // hunnit uppdatera "dirty" (annars frågar appen om man vill lämna utan att spara)
+  const leavingAfterSave = useRef(false);
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      !leavingAfterSave.current && dirty && currentLocation.pathname !== nextLocation.pathname,
+  );
   useEffect(() => {
     if (blocker.state === 'blocked') {
       if (confirm('Du har osparade ändringar. Lämna utan att spara?')) blocker.proceed();
@@ -77,8 +83,8 @@ export function EditorPage() {
     const song = await saveSong({ id: existing?.id, content, tags, categoryId });
     setSaved(true);
     toast('Sparat');
-    // Vänta en tick så att blockeraren ser att allt är sparat
-    setTimeout(() => navigate(`/song/${song.id}`, { replace: true }), 0);
+    leavingAfterSave.current = true;
+    navigate(`/song/${song.id}`, { replace: true });
   }, [saveSong, existing?.id, content, tags, categoryId, navigate]);
 
   useEffect(() => {
