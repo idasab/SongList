@@ -93,7 +93,7 @@ function LineView({ line, ctx, opts, ln }: { line: Line; ctx: ChordContext; opts
                 {!lyricsEmpty &&
                   (breaks[i] ? (
                     // Bindestreck i mellanrummet när ackordet är bredare än stavelsen
-                    <span className="ly">
+                    <span className="ly split">
                       {s.text}
                       <span className="hy" aria-hidden>
                         <span />

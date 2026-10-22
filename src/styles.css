@@ -1060,7 +1060,7 @@ textarea.note-text {
 
 /* Bindestreck i ett ord som delats av ett brett ackord. Får strecket inte plats
    bryts det till en andra rad, som är dold. */
-.seg .ly:has(.hy) {
+.seg .ly.split {
   display: flex;
 }
 
