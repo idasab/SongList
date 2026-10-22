@@ -914,7 +914,7 @@ textarea.note-text {
 }
 
 .sec {
-  margin: 0 0 1.1em;
+  margin: 0 0 1.7em;
 }
 
 .sec-label {
@@ -923,7 +923,7 @@ textarea.note-text {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
-  margin-bottom: 0.25em;
+  margin-bottom: 0.1em;
 }
 
 .sec.chorus {
@@ -948,6 +948,11 @@ textarea.note-text {
 /* Luft ovanför ackordraden så att ackorden hör ihop med texten under */
 .ln:not(.plain) {
   margin-top: 0.45em;
+}
+
+/* Första raden direkt under en rubrik: ingen extra luft, så att rubriken hör ihop med sin del */
+.sec-label + .ln:not(.plain) {
+  margin-top: 0.1em;
 }
 
 .ln.plain {

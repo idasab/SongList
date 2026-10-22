@@ -174,12 +174,14 @@ const M = {
   chordRow: 0.9,
   lyricRow: 1.25,
   plain: 1.4,
-  label: 1.3,
+  label: 1.05,
   commentGap: 0.3,
   comment: 1.2,
   empty: 0.7,
   pre: 1.04,
-  sectionGap: 1.1,
+  sectionGap: 1.7,
+  /** Luft ovanför en ackordrad direkt under en rubrik */
+  chordGapAfterLabel: 0.1,
   chorusIndent: 0.95,
 };
 
@@ -235,7 +237,17 @@ function splitWords(segments: { chord?: string; text: string }[]) {
   return out;
 }
 
-function drawLine(c: PdfCtx, line: Line, x0: number, maxX: number, ctx: ChordContext, tops: number[], ln: number) {
+function drawLine(
+  c: PdfCtx,
+  line: Line,
+  x0: number,
+  maxX: number,
+  ctx: ChordContext,
+  tops: number[],
+  ln: number,
+  afterLabel = false,
+) {
+  const chordGap = (afterLabel ? M.chordGapAfterLabel : M.chordGap) * EM;
   const doc = c.doc;
   switch (line.type) {
     case 'empty':
@@ -279,7 +291,7 @@ function drawLine(c: PdfCtx, line: Line, x0: number, maxX: number, ctx: ChordCon
       }
       if (isChordRow(line.segments)) {
         // Ackord och taktsymboler på en rad
-        c.y += M.chordGap * EM;
+        c.y += chordGap;
         ensureSpace(c, M.plain * EM);
         tops[ln] = virtualY(c);
         let x = x0;
@@ -315,7 +327,7 @@ function drawLine(c: PdfCtx, line: Line, x0: number, maxX: number, ctx: ChordCon
         const lw = lyricsEmpty ? 0 : doc.getTextWidth(s.text);
         return { chord, text: s.text, annot: !!s.chord?.startsWith('*'), w: Math.max(cw, lw) };
       });
-      c.y += M.chordGap * EM;
+      c.y += chordGap;
       let first = true;
       let i = 0;
       while (i < segs.length) {
@@ -363,9 +375,11 @@ function drawSection(c: PdfCtx, sec: Section, start: number, ctx: ChordContext, 
       barTop.y = c.y - M.label * EM;
     }
   }
+  let first = true;
   for (const line of sec.lines) {
     const pageBefore = c.page;
-    drawLine(c, line, x0, maxX, ctx, tops, ln++);
+    drawLine(c, line, x0, maxX, ctx, tops, ln++, first && !!sec.label);
+    first = false;
     // Refrängens linje: rita fram till sidbytet och börja om på nästa sida
     if (indent && c.page !== pageBefore) {
       drawBar(doc, pageBefore, barTop.y, CONTENT_BOTTOM);
