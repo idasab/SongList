@@ -35,7 +35,7 @@ import {
 import { filterSongs, sortSongs } from '../lib/search';
 import { formatKey, parseKey } from '../lib/chords';
 import { newId, type SetlistItem, type Song } from '../lib/model';
-import { liveSongs, useStore } from '../store/useStore';
+import { allTags, liveSongs, useStore } from '../store/useStore';
 import { FolderSelect, formatDate } from './SetlistsPage';
 
 export function SetlistPage() {
@@ -247,12 +247,24 @@ function AddSongsSheet({
 }) {
   const songsRec = useStore((s) => s.songs);
   const [query, setQuery] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
+  const tagList = useMemo(() => allTags(songsRec), [songsRec]);
+  // Valda taggar först, så att de syns utan att man behöver svepa
+  const tagRow = useMemo(() => [...tags, ...tagList.filter((t) => !tags.includes(t))], [tags, tagList]);
   const list = useMemo(
-    () => sortSongs(filterSongs(liveSongs(songsRec), { query, fullText: false, tags: [] }), 'title'),
-    [songsRec, query],
+    () => sortSongs(filterSongs(liveSongs(songsRec), { query, fullText: false, tags }), 'title'),
+    [songsRec, query, tags],
   );
   const toggle = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  const toggleTag = (t: string) => setTags((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
+  const allVisibleSelected = list.length > 0 && list.every((s) => selected.includes(s.id));
+  const selectAllVisible = () =>
+    setSelected((cur) =>
+      allVisibleSelected
+        ? cur.filter((id) => !list.some((s) => s.id === id))
+        : [...cur, ...list.map((s) => s.id).filter((id) => !cur.includes(id))],
+    );
 
   return (
     <Sheet
@@ -273,6 +285,36 @@ function AddSongsSheet({
         <Search size={18} />
         <input className="input" type="search" placeholder="Sök" value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
+      {tagList.length > 0 && (
+        <div className="chips scroll" style={{ marginBottom: 8 }} aria-label="Filtrera på taggar">
+          {tags.length > 0 && (
+            <button className="chip" onClick={() => setTags([])} aria-label="Rensa taggar">
+              <X size={14} /> Rensa
+            </button>
+          )}
+          {tagRow.map((t) => (
+            <button
+              key={t}
+              className={`chip${tags.includes(t) ? ' on' : ''}`}
+              style={{ flexShrink: 0 }}
+              aria-pressed={tags.includes(t)}
+              onClick={() => toggleTag(t)}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
+      {list.length > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0 2px 4px' }}>
+          <span className="muted small-text">
+            {list.length} låtar{tags.length || query ? ' matchar' : ''}
+          </span>
+          <button className="btn small ghost" onClick={selectAllVisible}>
+            {allVisibleSelected ? 'Avmarkera alla' : 'Välj alla'}
+          </button>
+        </div>
+      )}
       {list.map((s) => (
         <label key={s.id} className="check-item">
           <input type="checkbox" checked={selected.includes(s.id)} onChange={() => toggle(s.id)} />
