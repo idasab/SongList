@@ -268,6 +268,13 @@ export function parseChordPro(source: string): ParsedSong {
       continue;
     }
 
+    // En hel rad inom parentes, t.ex. "(Upprepa refrängen)", är en kommentar
+    const paren = /^\s*\((.*)\)\s*$/.exec(line);
+    if (paren && !line.includes('[')) {
+      current.lines.push({ type: 'comment', text: paren[1].trim(), style: 'normal' });
+      continue;
+    }
+
     const header = chordProHeader(line);
     if (header) {
       if (header.kind === 'comment') {

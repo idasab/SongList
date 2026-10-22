@@ -489,3 +489,17 @@ describe('teckenkodning', () => {
     expect(decodeText(latin1)).toBe('GÅsa');
   });
 });
+
+describe('rader inom parentes', () => {
+  it('en hel rad inom parentes blir en kommentar', () => {
+    const p = parseChordPro('Vers 1:\n[G]Ett [C]test\n(Upprepa refrängen)\n  (x2)  \n');
+    const lines = p.sections[0].lines;
+    expect(lines[1]).toEqual({ type: 'comment', text: 'Upprepa refrängen', style: 'normal' });
+    expect(lines[2]).toEqual({ type: 'comment', text: 'x2', style: 'normal' });
+  });
+
+  it('parenteser inne i en rad eller med ackord påverkas inte', () => {
+    const p = parseChordPro('Det här (inom parentes) är text\n([G]la la)\n');
+    expect(p.sections[0].lines.every((l) => l.type === 'lyrics')).toBe(true);
+  });
+});
