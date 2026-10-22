@@ -6,6 +6,7 @@ import { filterSongs, keyIdLabel, keysInLibrary, songKey, sortSongs } from '../l
 import { formatKey } from '../lib/chords';
 import { allTags, liveCategories, liveSongs, useStore } from '../store/useStore';
 import type { Song } from '../lib/model';
+import { useRememberScroll } from '../hooks/useRememberScroll';
 
 // Filtret sparas mellan sidbyten under sessionen
 const session = {
@@ -19,6 +20,7 @@ const session = {
 
 export function LibraryPage() {
   const navigate = useNavigate();
+  const scrollRef = useRememberScroll<HTMLDivElement>('library');
   const songsRec = useStore((s) => s.songs);
   const categoriesRec = useStore((s) => s.categories);
   const settings = useStore((s) => s.settings);
@@ -71,7 +73,7 @@ export function LibraryPage() {
           <Plus size={18} /> <span className="hide-mobile">Ny låt</span>
         </button>
       </Header>
-      <div className="content narrow">
+      <div className="content narrow" ref={scrollRef}>
         <div>
           <div className="search-bar">
             <div className="search-input">

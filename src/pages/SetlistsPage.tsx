@@ -17,6 +17,7 @@ import {
 import { Header, Sheet, toast } from '../components/ui';
 import type { Setlist, Song } from '../lib/model';
 import { liveFolders, liveSetlists, useStore } from '../store/useStore';
+import { useRememberScroll } from '../hooks/useRememberScroll';
 
 // Ihopfällda mappar sparas mellan sidbyten under sessionen
 const collapsed = new Set<string>();
@@ -36,6 +37,7 @@ function blockTouchScroll(e: TouchEvent) {
 
 export function SetlistsPage() {
   const navigate = useNavigate();
+  const scrollRef = useRememberScroll<HTMLDivElement>('setlists');
   const setlistsRec = useStore((s) => s.setlists);
   const foldersRec = useStore((s) => s.folders);
   const songs = useStore((s) => s.songs);
@@ -115,7 +117,7 @@ export function SetlistsPage() {
           <Plus size={18} /> <span className="hide-mobile">Ny setlista</span>
         </button>
       </Header>
-      <div className="content narrow">
+      <div className="content narrow" ref={scrollRef}>
         <div>
           {empty ? (
             <div className="empty">
