@@ -8,7 +8,6 @@ import { parseChordPro, songPrefersFlats } from '../lib/chordpro';
 import {
   SOURCE_FONTS,
   canvasMeasure,
-  decodeText,
   isChordProFileName,
   looksLikeChordPro,
   suggestSourceFont,
@@ -18,6 +17,7 @@ import {
 import { newId } from '../lib/model';
 import { canUseDocumentScanner, recognizeImageFile, scanDocument } from '../services/ocr';
 import { pickFiles } from '../services/files';
+import { expandFiles } from '../services/fileImport';
 import { allTags, liveCategories, useStore } from '../store/useStore';
 
 interface ImportItem {
@@ -26,6 +26,9 @@ interface ImportItem {
   raw: string;
   kind: 'chordpro' | 'text';
   font: SourceFont;
+  /** Tolkat från PDF eller bild – bör granskas */
+  origin?: 'pdf' | 'image';
+  imageDataUrl?: string;
 }
 
 function convert(item: ImportItem): string {
@@ -33,7 +36,8 @@ function convert(item: ImportItem): string {
   return textToChordPro(item.raw, { measure: canvasMeasure(item.font), fileName: item.fileName });
 }
 
-const ACCEPT = '.cho,.chopro,.chordpro,.crd,.pro,.txt,.text,text/plain';
+const ACCEPT =
+  '.cho,.chopro,.chordpro,.crd,.pro,.txt,.text,text/plain,.pdf,application/pdf,.zip,application/zip,image/*';
 
 export function ImportPage() {
   const navigate = useNavigate();
@@ -51,22 +55,33 @@ export function ImportPage() {
   const tagSuggestions = useMemo(() => allTags(songsRec), [songsRec]);
   const categories = useMemo(() => liveCategories(categoriesRec), [categoriesRec]);
 
-  const addRaw = (fileName: string, raw: string) => {
+  const addRaw = (fileName: string, raw: string, extra: Partial<ImportItem> = {}) => {
     // Filändelsen avgör först (.cho, .chopro …), annars innehållet
-    const kind = isChordProFileName(fileName) || looksLikeChordPro(raw) ? 'chordpro' : 'text';
+    const kind =
+      extra.kind ?? (isChordProFileName(fileName) || looksLikeChordPro(raw) ? 'chordpro' : 'text');
     const font = kind === 'text' ? suggestSourceFont(raw, canvasMeasure) : 'monospace';
-    setItems((cur) => [...cur, { id: newId(), fileName, raw, kind, font }]);
+    setItems((cur) => [...cur, { id: newId(), fileName, raw, font, ...extra, kind }]);
   };
 
   const chooseFiles = async () => {
     const files = await pickFiles({ accept: ACCEPT, multiple: true });
-    for (const f of files) {
-      try {
-        if (f.size > 2_000_000) throw new Error('Filen är för stor');
-        addRaw(f.name, decodeText(await f.arrayBuffer()));
-      } catch (e) {
-        toastError(e, `Kunde inte läsa ${f.name}`);
+    if (!files.length) return;
+    setBusy({ message: 'Läser filer…' });
+    try {
+      const { items: found, skipped } = await expandFiles(files, (message, progress) => setBusy({ message, progress }));
+      for (const c of found) addRaw(c.fileName, c.raw, { kind: c.kind, origin: c.origin, imageDataUrl: c.imageDataUrl });
+      if (skipped.length) {
+        const list = skipped.slice(0, 3).map((x) => `${x.name} (${x.reason})`).join(', ');
+        toast(`${skipped.length} ${skipped.length === 1 ? 'fil' : 'filer'} hoppades över: ${list}${skipped.length > 3 ? ' …' : ''}`, {
+          error: true,
+        });
+      } else if (found.length > 1) {
+        toast(`${found.length} låtar lades till i listan`);
       }
+    } catch (e) {
+      toastError(e, 'Kunde inte läsa filerna');
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -115,7 +130,7 @@ export function ImportPage() {
   };
 
   const openInEditor = (it: ImportItem) => {
-    setDraft({ content: convert(it), tags });
+    setDraft({ content: convert(it), tags, imageDataUrl: it.imageDataUrl });
     setItems((cur) => cur.filter((x) => x.id !== it.id));
     navigate('/new');
   };
@@ -131,7 +146,7 @@ export function ImportPage() {
             <button className="big-action" onClick={chooseFiles}>
               <FileUp size={22} />
               <b>Välj filer</b>
-              <span>ChordPro (.cho, .chopro, .pro) eller textfiler med ackord ovanför texten</span>
+              <span>ChordPro, textfiler, PDF, bilder eller en zip-fil med flera</span>
             </button>
             <button className="big-action" onClick={() => setPasting(true)}>
               <ClipboardPaste size={22} />
@@ -290,6 +305,11 @@ function ImportItemCard({
             {item.fileName}
           </div>
         </div>
+        {item.origin && (
+          <span className="badge review" title="Tolkat automatiskt – granska innan du importerar">
+            {item.origin === 'pdf' ? 'PDF' : 'Bild'}
+          </span>
+        )}
         <span className="badge">{item.kind === 'chordpro' ? 'ChordPro' : 'Text'}</span>
         <button className="btn ghost icon" aria-label="Ta bort" onClick={onRemove}>
           <X size={18} />

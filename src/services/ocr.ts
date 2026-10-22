@@ -13,9 +13,12 @@ export interface ScanResult {
 
 export type ProgressFn = (message: string, progress?: number) => void;
 
-function toChordPro(pages: OcrPage[]): string {
+/** Gör om sidor med positionerad text (från OCR eller PDF) till ChordPro. */
+export function pagesToChordPro(pages: OcrPage[]): string {
   return ocrToChordPro(pages, canvasMeasure('Arial'));
 }
+
+const toChordPro = pagesToChordPro;
 
 export function canUseDocumentScanner(): boolean {
   return hasNativePlugin();
@@ -39,14 +42,22 @@ export async function recognizeImageFile(file: File, onProgress?: ProgressFn): P
   const canvas = await loadImageToCanvas(file, 2600);
   const imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
 
+  const page = await recognizeCanvas(canvas, onProgress, imageDataUrl);
+  return { content: toChordPro([page]), imageDataUrl };
+}
+
+/** Läser text från en uppritad bild (t.ex. en PDF-sida): Vision på iOS, Tesseract på webben. */
+export async function recognizeCanvas(
+  canvas: HTMLCanvasElement,
+  onProgress?: ProgressFn,
+  dataUrl?: string,
+): Promise<OcrPage> {
   if (hasNativePlugin()) {
     onProgress?.('Läser text…');
-    const { page } = await SongListNative.recognizeImage({ image: imageDataUrl });
-    return { content: toChordPro([page]), imageDataUrl };
+    const { page } = await SongListNative.recognizeImage({ image: dataUrl ?? canvas.toDataURL('image/jpeg', 0.85) });
+    return page;
   }
-
-  const page = await recognizeWithTesseract(canvas, onProgress);
-  return { content: toChordPro([page]), imageDataUrl };
+  return recognizeWithTesseract(canvas, onProgress);
 }
 
 async function loadImageToCanvas(file: File, maxSize: number): Promise<HTMLCanvasElement> {

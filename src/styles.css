@@ -1481,6 +1481,11 @@ textarea.note-text {
   letter-spacing: 0.04em;
 }
 
+.badge.review {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .progress {
   height: 6px;
   border-radius: 3px;
