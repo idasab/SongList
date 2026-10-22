@@ -249,11 +249,11 @@ export function EditorPage() {
             <div className="grid-4">
               <label className="field">
                 <span>Titel</span>
-                <input className="input" value={meta.title ?? ''} onChange={(e) => setMeta('title', e.target.value)} />
+                <DirectiveInput value={meta.title ?? ''} onChange={(v) => setMeta('title', v)} />
               </label>
               <label className="field">
                 <span>Artist</span>
-                <input className="input" value={meta.artist ?? ''} onChange={(e) => setMeta('artist', e.target.value)} />
+                <DirectiveInput value={meta.artist ?? ''} onChange={(v) => setMeta('artist', v)} />
               </label>
               <label className="field">
                 <span>Tonart</span>
@@ -292,12 +292,7 @@ export function EditorPage() {
               </label>
               <label className="field">
                 <span>Tempo</span>
-                <input
-                  className="input"
-                  inputMode="numeric"
-                  value={meta.tempo ?? ''}
-                  onChange={(e) => setMeta('tempo', e.target.value)}
-                />
+                <DirectiveInput inputMode="numeric" value={meta.tempo ?? ''} onChange={(v) => setMeta('tempo', v)} />
               </label>
             </div>
             <div className="field">
@@ -325,5 +320,45 @@ export function EditorPage() {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Fält som är kopplat till ett direktiv i ChordPro-texten (t.ex. {title: …}). Medan man skriver
+ * behåller fältet sitt eget värde, eftersom direktivets värde trimmas och ett mellanslag i
+ * slutet annars försvinner innan nästa ord hunnit skrivas.
+ */
+function DirectiveInput({
+  value,
+  onChange,
+  inputMode,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  inputMode?: 'numeric' | 'text';
+}) {
+  const [text, setText] = useState(value);
+  const focused = useRef(false);
+  useEffect(() => {
+    // Hämta värdet från texten (t.ex. om direktivet ändras i redigeringsfältet) när fältet inte används
+    if (!focused.current) setText(value);
+  }, [value]);
+  return (
+    <input
+      className="input"
+      inputMode={inputMode}
+      value={text}
+      onFocus={() => {
+        focused.current = true;
+      }}
+      onBlur={() => {
+        focused.current = false;
+        setText(value);
+      }}
+      onChange={(e) => {
+        setText(e.target.value);
+        onChange(e.target.value);
+      }}
+    />
   );
 }
