@@ -157,11 +157,43 @@ export function suggestSourceFont(text: string, measureFor: (f: SourceFont) => M
   return 'monospace';
 }
 
-/** Avkodar en fil: UTF-8 i första hand, annars Windows-1252 (vanligt i äldre svenska filer). */
-export function decodeText(buf: ArrayBuffer): string {
-  try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(buf).replace(/^﻿/, '');
-  } catch {
-    return new TextDecoder('windows-1252').decode(buf);
+/** Gissar om text utan BOM är UTF-16 genom att räkna nollbyte på jämna och udda platser. */
+function guessUtf16(b: Uint8Array): 'utf-16le' | 'utf-16be' | null {
+  const n = Math.min(b.length - (b.length % 2), 4000);
+  if (n < 4) return null;
+  let evenZeros = 0;
+  let oddZeros = 0;
+  for (let i = 0; i < n; i += 2) {
+    if (b[i] === 0) evenZeros++;
+    if (b[i + 1] === 0) oddZeros++;
   }
+  const pairs = n / 2;
+  // Latinsk text i UTF-16 har en nollbyte i nästan varje teckenpar
+  if (oddZeros > pairs * 0.3 && evenZeros < pairs * 0.05) return 'utf-16le';
+  if (evenZeros > pairs * 0.3 && oddZeros < pairs * 0.05) return 'utf-16be';
+  return null;
+}
+
+/**
+ * Avkodar en textfil. Känner igen UTF-16 (vanligt från t.ex. Anteckningar och Word på Windows),
+ * UTF-8 och Windows-1252 (vanligt i äldre svenska filer).
+ */
+export function decodeText(buf: ArrayBuffer): string {
+  const b = new Uint8Array(buf);
+  let text: string;
+  if (b[0] === 0xff && b[1] === 0xfe) text = new TextDecoder('utf-16le').decode(b.subarray(2));
+  else if (b[0] === 0xfe && b[1] === 0xff) text = new TextDecoder('utf-16be').decode(b.subarray(2));
+  else {
+    const utf16 = guessUtf16(b);
+    if (utf16) text = new TextDecoder(utf16).decode(b);
+    else {
+      try {
+        text = new TextDecoder('utf-8', { fatal: true }).decode(b);
+      } catch {
+        text = new TextDecoder('windows-1252').decode(b);
+      }
+    }
+  }
+  // Ta bort BOM och eventuella nolltecken som annars syns som mellanrum
+  return text.replace(/^\uFEFF/, '').replace(/\u0000/g, '');
 }

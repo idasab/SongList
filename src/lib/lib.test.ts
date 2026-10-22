@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { formatChord, isChord, parseChord, parseKey, formatKey } from './chords';
 import { isChordRow, parseChordPro, parseLyricsLine, splitWords, transposeSource, upsertDirective } from './chordpro';
 import { isChordLine, parseHeader } from './layout';
-import { isChordProFileName, looksLikeChordPro, textToChordPro, type Measure } from './textImport';
+import { decodeText, isChordProFileName, looksLikeChordPro, textToChordPro, type Measure } from './textImport';
 import { ocrToChordPro, type OcrPage } from './ocrLayout';
 import { getPianoChord, normalizeSuffix } from './chordShapes';
 import { mergeRecords, restoreMerge } from './merge';
@@ -461,5 +461,31 @@ describe('ackord mellan ord', () => {
       ['A', 'Och '],
       ['', 'var'],
     ]);
+  });
+});
+
+describe('teckenkodning', () => {
+  const sample = '{title: Kodtest}\r\n[G]Åsa går [C]över ån\r\n';
+  const utf16le = (s: string, bom: boolean) => {
+    const out: number[] = bom ? [0xff, 0xfe] : [];
+    for (const ch of s) {
+      const c = ch.charCodeAt(0);
+      out.push(c & 0xff, c >> 8);
+    }
+    return new Uint8Array(out).buffer;
+  };
+
+  it('läser UTF-16 med och utan BOM', () => {
+    for (const bom of [true, false]) {
+      const text = decodeText(utf16le(sample, bom));
+      expect(text).toBe(sample);
+      expect(text.includes('\u0000')).toBe(false);
+    }
+  });
+
+  it('läser UTF-8 och Windows-1252', () => {
+    expect(decodeText(new TextEncoder().encode(sample).buffer)).toBe(sample);
+    const latin1 = new Uint8Array([...'G'].map((c) => c.charCodeAt(0)).concat([0xc5, 0x73, 0x61])).buffer; // "GÅsa"
+    expect(decodeText(latin1)).toBe('GÅsa');
   });
 });
