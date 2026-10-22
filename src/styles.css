@@ -1558,6 +1558,14 @@ textarea.note-text {
   font-size: 14px;
 }
 
+/* Valet fil / text och ackord lika högt som listrutorna bredvid */
+.import-item .opts .segmented button {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 14px;
+  line-height: 1;
+}
+
 .import-preview {
   border-top: 1px solid var(--border);
   padding: 12px 14px;
