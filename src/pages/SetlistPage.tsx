@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { GripVertical, MoreHorizontal, Play, Plus, Search, Share, X } from 'lucide-react';
+import { GripVertical, MessageSquareText, MoreHorizontal, Pencil, Play, Plus, Search, Share, X } from 'lucide-react';
 import {
   DndContext,
   KeyboardSensor,
@@ -13,7 +13,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Header, Segmented, Sheet, toast, toastError } from '../components/ui';
+import { Header, Segmented, Sheet, askText, toast, toastError } from '../components/ui';
 import { EmailInput, rememberEmails } from '../components/EmailInput';
 import {
   EXPORT_FORMATS,
@@ -37,6 +37,7 @@ import { formatKey, parseKey } from '../lib/chords';
 import { newId, type SetlistItem, type Song } from '../lib/model';
 import { allTags, liveSongs, useStore } from '../store/useStore';
 import { FolderSelect, formatDate } from './SetlistsPage';
+import { isCue, itemPath, liveItems, songCount } from '../lib/setlist';
 
 export function SetlistPage() {
   const { id = '' } = useParams();
@@ -65,7 +66,34 @@ export function SetlistPage() {
     );
   }
 
-  const items = setlist.items.filter((i) => songs[i.songId] && !songs[i.songId].deletedAt);
+  const items = liveItems(setlist.items, songs);
+  const nSongs = songCount(items);
+  // Låtarna numreras; mellanpunkter får ingen siffra
+  const numbers: number[] = [];
+  items.reduce((n, it) => {
+    numbers.push(isCue(it) ? 0 : n + 1);
+    return isCue(it) ? n : n + 1;
+  }, 0);
+
+  const askCue = (initial: string, isNew: boolean) =>
+    askText({
+      title: isNew ? 'Text mellan låtarna' : 'Ändra text',
+      label: 'Visas på skärmen när du bläddrar dit, t.ex. Tal eller Paus',
+      initial,
+      confirmLabel: isNew ? 'Lägg till' : 'Spara',
+    });
+
+  const addCue = async () => {
+    const text = (await askCue('Tal', true))?.trim();
+    if (!text) return;
+    setItems([...items, { id: newId(), songId: '', cue: text }]);
+  };
+
+  const editCue = async (it: SetlistItem) => {
+    const text = (await askCue(it.cue ?? '', false))?.trim();
+    if (!text) return;
+    setItems(items.map((x) => (x.id === it.id ? { ...x, cue: text } : x)));
+  };
 
   const setItems = (next: SetlistItem[]) => void saveSetlist({ ...setlist, items: next });
 
@@ -78,7 +106,7 @@ export function SetlistPage() {
 
   const play = (index: number) => {
     const it = items[index];
-    if (it) navigate(`/song/${it.songId}?setlist=${setlist.id}&i=${index}`);
+    if (it) navigate(itemPath(setlist.id, it, index));
   };
 
   return (
@@ -105,7 +133,7 @@ export function SetlistPage() {
           <div className="muted small-text" style={{ margin: '0 4px 8px', display: 'flex', justifyContent: 'space-between' }}>
             <span>
               {setlist.date ? formatDate(setlist.date) + ' · ' : ''}
-              {items.length} {items.length === 1 ? 'låt' : 'låtar'}
+              {nSongs} {nSongs === 1 ? 'låt' : 'låtar'}
             </span>
             {items.length > 1 && <span>Dra i handtaget för att ändra ordning</span>}
           </div>
@@ -119,14 +147,16 @@ export function SetlistPage() {
                     <SortableRow
                       key={it.id}
                       item={it}
-                      index={idx}
-                      song={songs[it.songId]}
+                      number={numbers[idx]}
+                      song={isCue(it) ? undefined : songs[it.songId]}
                       keyLabel={(() => {
                         const s = songs[it.songId];
+                        if (isCue(it) || !s) return '';
                         const k = parseKey(s.key);
                         return k ? formatKey(k, s.transpose, notation) : '';
                       })()}
                       onOpen={() => play(idx)}
+                      onEdit={isCue(it) ? () => void editCue(it) : undefined}
                       onRemove={() => setItems(items.filter((x) => x.id !== it.id))}
                     />
                   ))}
@@ -135,9 +165,12 @@ export function SetlistPage() {
             </DndContext>
           )}
 
-          <div style={{ marginTop: 14 }}>
+          <div className="btn-row" style={{ marginTop: 14 }}>
             <button className="btn" onClick={() => setAdding(true)}>
               <Plus size={18} /> Lägg till låtar
+            </button>
+            <button className="btn" onClick={() => void addCue()}>
+              <MessageSquareText size={18} /> Lägg till text
             </button>
           </div>
         </div>
@@ -145,7 +178,7 @@ export function SetlistPage() {
 
       {adding && (
         <AddSongsSheet
-          existing={new Set(items.map((i) => i.songId))}
+          existing={new Set(items.filter((i) => !isCue(i)).map((i) => i.songId))}
           onClose={() => setAdding(false)}
           onAdd={(ids) => {
             setItems([...items, ...ids.map((songId) => ({ id: newId(), songId }))]);
@@ -180,7 +213,7 @@ export function SetlistPage() {
               folderId: setlist.folderId,
               date: setlist.date,
               notes: setlist.notes,
-              items: items.map((i) => ({ id: newId(), songId: i.songId })),
+              items: items.map((i) => ({ ...i, id: newId() })),
             });
             setEditing(false);
             navigate(`/setlists/${copy.id}`, { replace: true });
@@ -198,17 +231,20 @@ export function SetlistPage() {
 
 function SortableRow({
   item,
-  index,
+  number,
   song,
   keyLabel,
   onOpen,
+  onEdit,
   onRemove,
 }: {
   item: SetlistItem;
-  index: number;
-  song: Song;
+  /** 0 för mellanpunkter */
+  number: number;
+  song?: Song;
   keyLabel: string;
   onOpen: () => void;
+  onEdit?: () => void;
   onRemove: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
@@ -221,14 +257,22 @@ function SortableRow({
       <span className="handle" {...attributes} {...listeners} aria-label="Flytta">
         <GripVertical size={20} />
       </span>
-      <span className="num">{index + 1}</span>
+      <span className="num">{number || <MessageSquareText size={16} aria-label="Text" />}</span>
       <div className="main" style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={onOpen}>
-        <div className="title" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {song.title}
+        <div
+          className={`title${song ? '' : ' cue-title'}`}
+          style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        >
+          {song ? song.title : item.cue}
         </div>
-        {song.artist && <div className="muted small-text">{song.artist}</div>}
+        {song?.artist && <div className="muted small-text">{song.artist}</div>}
       </div>
       {keyLabel && <span className="key-badge">{keyLabel}</span>}
+      {onEdit && (
+        <button className="btn ghost icon" aria-label="Ändra texten" onClick={onEdit}>
+          <Pencil size={16} />
+        </button>
+      )}
       <button className="btn ghost icon" aria-label="Ta bort ur setlistan" onClick={onRemove}>
         <X size={18} />
       </button>

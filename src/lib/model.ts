@@ -45,7 +45,10 @@ export interface SongAttachment {
 export interface SetlistItem {
   /** Unikt inom setlistan, så att samma låt kan förekomma flera gånger */
   id: string;
+  /** Tom för mellanpunkter */
   songId: string;
+  /** Mellanpunkt i stället för en låt, t.ex. "Tal": texten som visas på skärmen */
+  cue?: string;
 }
 
 export interface Setlist extends SyncRecord {

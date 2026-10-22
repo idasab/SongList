@@ -27,6 +27,7 @@ import {
 import type { Setlist, Song, SongAttachment } from '../lib/model';
 import { safeFileName, saveBinaryFile, saveTextFile } from './files';
 import { loadPdfJs } from './fileImport';
+import { isCue, itemTitle, liveItems } from '../lib/setlist';
 
 export type SetlistExportFormat = 'text' | 'pdf-annotated' | 'pdf-clean' | 'chordpro';
 
@@ -45,6 +46,7 @@ interface PreparedSong {
 
 function prepare(setlist: Setlist, songs: Record<string, Song>, notation: Notation): PreparedSong[] {
   return setlist.items
+    .filter((it) => !isCue(it))
     .map((it) => songs[it.songId])
     .filter((s): s is Song => !!s && !s.deletedAt)
     .map((song) => {
@@ -127,19 +129,38 @@ function tidy(text: string): string {
   return text.replace(/\n{3,}/g, '\n\n').trim() + '\n';
 }
 
+type OverviewRow = { kind: 'song'; p: PreparedSong; number: number } | { kind: 'cue'; text: string };
+
+/** Setlistans ordning: numrerade låtar och mellanpunkter (t.ex. "Tal") där de står. */
+function overviewRows(setlist: Setlist, songs: Record<string, Song>, list: PreparedSong[]): OverviewRow[] {
+  const rows: OverviewRow[] = [];
+  let n = 0;
+  for (const it of liveItems(setlist.items, songs)) {
+    if (isCue(it)) rows.push({ kind: 'cue', text: itemTitle(it, songs) });
+    else if (list[n]) {
+      rows.push({ kind: 'song', p: list[n], number: n + 1 });
+      n++;
+    }
+  }
+  return rows;
+}
+
 /** Setlistans namn, datum, anteckningar och numrerade låtar med artist. */
-function setlistOverview(setlist: Setlist, list: PreparedSong[]): string[] {
+function setlistOverview(setlist: Setlist, songs: Record<string, Song>, list: PreparedSong[]): string[] {
   const out: string[] = [setlist.name];
   if (setlist.date) out.push(formatDateSv(setlist.date));
   if (setlist.notes) out.push('', setlist.notes);
   out.push('');
-  list.forEach((p, i) => out.push(`${i + 1}. ${p.song.title}${p.song.artist ? ' – ' + p.song.artist : ''}`));
+  for (const r of overviewRows(setlist, songs, list)) {
+    if (r.kind === 'cue') out.push(`   – ${r.text} –`);
+    else out.push(`${r.number}. ${r.p.song.title}${r.p.song.artist ? ' – ' + r.p.song.artist : ''}`);
+  }
   return out;
 }
 
 export function buildTextExport(setlist: Setlist, songs: Record<string, Song>, notation: Notation): string {
   const list = prepare(setlist, songs, notation);
-  const out = setlistOverview(setlist, list);
+  const out = setlistOverview(setlist, songs, list);
   list.forEach((p, i) => out.push('', '', '='.repeat(40), '', songText(p, i + 1)));
   return tidy(out.join('\n'));
 }
@@ -500,7 +521,7 @@ function drawAnnotations(doc: JsPdf, ann: Annotations, tops: number[]) {
   doc.setPage(current);
 }
 
-function drawCover(c: PdfCtx, setlist: Setlist, list: PreparedSong[]) {
+function drawCover(c: PdfCtx, setlist: Setlist, rows: OverviewRow[]) {
   const doc = c.doc;
   setFont(doc, 'bold', 24);
   doc.text(setlist.name, MARGIN_X, c.y, { baseline: 'top' });
@@ -519,10 +540,17 @@ function drawCover(c: PdfCtx, setlist: Setlist, list: PreparedSong[]) {
     });
   }
   c.y += 18;
-  list.forEach((p, i) => {
+  rows.forEach((r) => {
     ensureSpace(c, 22);
+    if (r.kind === 'cue') {
+      setFont(doc, 'italic', 12, MUTED);
+      doc.text(r.text, MARGIN_X + 26, c.y, { baseline: 'top' });
+      c.y += 22;
+      return;
+    }
+    const p = r.p;
     setFont(doc, 'bold', 12);
-    doc.text(`${i + 1}.`, MARGIN_X, c.y, { baseline: 'top' });
+    doc.text(`${r.number}.`, MARGIN_X, c.y, { baseline: 'top' });
     doc.text(p.song.title, MARGIN_X + 26, c.y, { baseline: 'top' });
     const key = keyLabel(p);
     if (key) doc.text(key, PAGE_W - MARGIN_X, c.y, { baseline: 'top', align: 'right' });
@@ -615,14 +643,14 @@ async function toJpeg(dataUrl: string, size: { w: number; h: number }): Promise<
 
 async function renderPdf(
   entries: { p: PreparedSong; number: number }[],
-  opts: { title: string; footer: string; cover?: { setlist: Setlist; list: PreparedSong[] }; withAnnotations: boolean },
+  opts: { title: string; footer: string; cover?: { setlist: Setlist; rows: OverviewRow[] }; withAnnotations: boolean },
 ): Promise<Blob> {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   doc.setProperties({ title: opts.title, creator: 'SongList' });
   const c: PdfCtx = { doc, page: 1, y: MARGIN_TOP };
 
-  if (opts.cover) drawCover(c, opts.cover.setlist, opts.cover.list);
+  if (opts.cover) drawCover(c, opts.cover.setlist, opts.cover.rows);
 
   for (let idx = 0; idx < entries.length; idx++) {
     const { p, number } = entries[idx];
@@ -659,7 +687,7 @@ export async function buildPdfExport(
   const list = prepare(setlist, songs, notation);
   return renderPdf(
     list.map((p, i) => ({ p, number: i + 1 })),
-    { title: setlist.name, footer: setlist.name, cover: { setlist, list }, withAnnotations },
+    { title: setlist.name, footer: setlist.name, cover: { setlist, rows: overviewRows(setlist, songs, list) }, withAnnotations },
   );
 }
 
@@ -718,7 +746,7 @@ export function mailSubject(setlist: Setlist): string {
 /** Mejlets text: hela setlistan med titel och artist. */
 export function mailBody(setlist: Setlist, songs: Record<string, Song>, notation: Notation): string {
   const list = prepare(setlist, songs, notation);
-  const out = setlistOverview(setlist, list);
+  const out = setlistOverview(setlist, songs, list);
   out.push('', 'Varje låt finns bifogad som en egen fil.', '', 'Skickat från SongList');
   return out.join('\n');
 }

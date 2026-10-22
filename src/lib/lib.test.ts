@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { CUE_ROUTE_ID, itemPath, itemTitle, liveItems, songCount } from './setlist';
+import type { Setlist, Song } from './model';
 import { unzipSync, zipSync } from 'fflate';
 import { decodeZipName, zipNameMap } from './zipNames';
 import { formatChord, isChord, parseChord, parseKey, formatKey } from './chords';
@@ -580,5 +582,29 @@ describe('filnamn i zip-filer', () => {
   });
   it('gör om "a" + ring till "å" i titlar från filnamn', () => {
     expect(titleFromFileName('Sång.pdf')).toBe('Sång');
+  });
+});
+
+describe('mellanpunkter i setlistor', () => {
+  const song = (id: string, title: string): Song => ({ id, title, artist: '', content: '', tags: [], transpose: 0, createdAt: 1, updatedAt: 1 });
+  const songs = { a: song('a', 'Första'), b: song('b', 'Andra') };
+  const setlist: Setlist = {
+    id: 's',
+    name: 'Kväll',
+    createdAt: 1,
+    updatedAt: 1,
+    items: [
+      { id: '1', songId: 'a' },
+      { id: '2', songId: '', cue: 'Tal' },
+      { id: '3', songId: 'b' },
+    ],
+  };
+  it('visas i bläddringen och i översikten men räknas inte som låtar', () => {
+    const items = liveItems(setlist.items, songs);
+    expect(items.map((it) => itemTitle(it, songs))).toEqual(['Första', 'Tal', 'Andra']);
+    expect(songCount(items)).toBe(2);
+    expect(itemPath('s', items[1], 1)).toBe(`/song/${CUE_ROUTE_ID}?setlist=s&i=1`);
+    const text = buildTextExport(setlist, songs, 'international');
+    expect(text).toContain('1. Första\n   – Tal –\n2. Andra');
   });
 });

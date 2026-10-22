@@ -1198,6 +1198,42 @@ textarea.note-text {
   white-space: nowrap;
 }
 
+.sortable-item .cue-title {
+  font-style: italic;
+  color: var(--accent);
+}
+
+/* Mellanpunkt i en setlista, t.ex. "Tal" */
+.song-scroll.cue-scroll {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 18px;
+}
+
+.cue-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px;
+  text-align: center;
+}
+
+.cue-text {
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+
+.cue-next {
+  color: var(--text-muted);
+  font-size: 16px;
+}
+
 .stage-exit {
   position: fixed;
   right: calc(12px + var(--safe-right));

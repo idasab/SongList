@@ -33,6 +33,7 @@ import { newId } from '../lib/model';
 import { useWakeLock } from '../hooks/useWakeLock';
 import { useSwipeNavigation } from '../hooks/useSwipeNavigation';
 import { AttachmentView } from '../components/AttachmentView';
+import { isCue, itemPath, itemTitle, liveItems, songCount } from '../lib/setlist';
 import { useAnnotationGestures, type AnnotTool } from '../hooks/useAnnotationGestures';
 import { EMPTY_ANNOTATIONS, INK_WIDTHS, type Annotations, type InkColor, type StickyNote } from '../lib/annotations';
 
@@ -132,7 +133,7 @@ export function SongPage() {
   // Position i setlistan
   const setlistIndex = setlist ? Number(params.get('i') ?? 0) : -1;
   const setlistItems = useMemo(
-    () => (setlist ? setlist.items.filter((it) => songs[it.songId] && !songs[it.songId].deletedAt) : []),
+    () => (setlist ? liveItems(setlist.items, songs) : []),
     [setlist, songs],
   );
 
@@ -142,7 +143,7 @@ export function SongPage() {
       const next = setlistIndex + delta;
       if (next < 0 || next >= setlistItems.length) return;
       setScrolling(false);
-      navigate(`/song/${setlistItems[next].songId}?setlist=${setlist.id}&i=${next}`, { replace: true });
+      navigate(itemPath(setlist.id, setlistItems[next], next), { replace: true });
     },
     [setlist, setlistIndex, setlistItems, navigate],
   );
@@ -209,6 +210,62 @@ export function SongPage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [goSetlist, setlist]);
+
+  const setlistNav = setlist && (
+    <div className="setlist-nav">
+      <button className="btn" disabled={setlistIndex <= 0} onClick={() => goSetlist(-1)}>
+        <ChevronLeft size={18} />
+        <span className="hide-mobile">{setlistIndex > 0 ? itemTitle(setlistItems[setlistIndex - 1], songs) : 'Föregående'}</span>
+      </button>
+      <div className="pos">
+        {setlist.name} · {setlistIndex + 1}/{setlistItems.length}
+      </div>
+      <button className="btn" disabled={setlistIndex >= setlistItems.length - 1} onClick={() => goSetlist(1)}>
+        <span className="hide-mobile">
+          {setlistIndex < setlistItems.length - 1 ? itemTitle(setlistItems[setlistIndex + 1], songs) : 'Nästa'}
+        </span>
+        <ChevronRight size={18} />
+      </button>
+    </div>
+  );
+
+  // Mellanpunkt i setlistan, t.ex. "Tal": visa texten stort
+  const cueItem = setlist ? setlistItems[setlistIndex] : undefined;
+  if (setlist && cueItem && isCue(cueItem)) {
+    const next = setlistItems[setlistIndex + 1];
+    return (
+      <div className={`screen${stage ? ' stage' : ''}`}>
+        {!stage && !controlsHidden && <Header title={setlist.name} back={`/setlists/${setlist.id}`} />}
+        {stage && (
+          <div className="stage-exit" style={{ top: 'calc(10px + var(--safe-top))' }}>
+            <button className="btn icon" aria-label="Lämna scenläge" onClick={() => setStage(false)}>
+              <X size={20} />
+            </button>
+          </div>
+        )}
+        <div className="song-area">
+          <div
+            className="song-scroll cue-scroll"
+            ref={scrollRef}
+            {...swipe.handlers}
+            style={{ touchAction: 'pan-y' }}
+            onClick={() => {
+              if (swipe.justSwiped()) return;
+              setControlsHidden((v) => !v);
+            }}
+          >
+            <div className="cue-view" style={swipe.style}>
+              <div className="cue-text" style={{ fontSize: Math.round(settings.fontSize * 2.6) }}>
+                {itemTitle(cueItem, songs)}
+              </div>
+              {next && <div className="cue-next">Sedan: {itemTitle(next, songs)}</div>}
+            </div>
+          </div>
+        </div>
+        {setlistNav}
+      </div>
+    );
+  }
 
   if (!song || song.deletedAt) {
     return (
@@ -513,25 +570,7 @@ export function SongPage() {
         </button>
       </div>
 
-      {setlist && (
-        <div className="setlist-nav">
-          <button className="btn" disabled={setlistIndex <= 0} onClick={() => goSetlist(-1)}>
-            <ChevronLeft size={18} />
-            <span className="hide-mobile">
-              {setlistIndex > 0 ? songs[setlistItems[setlistIndex - 1].songId]?.title : 'Föregående'}
-            </span>
-          </button>
-          <div className="pos">
-            {setlist.name} · {setlistIndex + 1}/{setlistItems.length}
-          </div>
-          <button className="btn" disabled={setlistIndex >= setlistItems.length - 1} onClick={() => goSetlist(1)}>
-            <span className="hide-mobile">
-              {setlistIndex < setlistItems.length - 1 ? songs[setlistItems[setlistIndex + 1].songId]?.title : 'Nästa'}
-            </span>
-            <ChevronRight size={18} />
-          </button>
-        </div>
-      )}
+      {setlistNav}
 
       {chordSheet && <ChordSheet chord={chordSheet} instrument={settings.instrument} onClose={() => setChordSheet(null)} />}
 
@@ -596,7 +635,7 @@ function AddToSetlistSheet({ songId, onClose }: { songId: string; onClose: () =>
               <div className="main">
                 <div className="title">{sl.name}</div>
                 <div className="sub">
-                  {sl.items.length} låtar{sl.items.some((i) => i.songId === songId) ? ' · finns redan med' : ''}
+                  {songCount(sl.items)} låtar{sl.items.some((i) => i.songId === songId) ? ' · finns redan med' : ''}
                 </div>
               </div>
               <Plus size={18} />
