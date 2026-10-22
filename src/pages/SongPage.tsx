@@ -31,6 +31,7 @@ import { liveSetlists, useStore } from '../store/useStore';
 import { safeFileName, saveTextFile } from '../services/files';
 import { newId } from '../lib/model';
 import { useWakeLock } from '../hooks/useWakeLock';
+import { useSwipeNavigation } from '../hooks/useSwipeNavigation';
 import { useAnnotationGestures, type AnnotTool } from '../hooks/useAnnotationGestures';
 import { EMPTY_ANNOTATIONS, INK_WIDTHS, type Annotations, type InkColor, type StickyNote } from '../lib/annotations';
 
@@ -144,6 +145,15 @@ export function SongPage() {
     },
     [setlist, setlistIndex, setlistItems, navigate],
   );
+
+  // Stor swipe åt vänster/höger byter låt i setlistan
+  const swipe = useSwipeNavigation({
+    enabled: !!setlist && !annotating,
+    canPrev: setlistIndex > 0,
+    canNext: setlistIndex >= 0 && setlistIndex < setlistItems.length - 1,
+    onPrev: () => goSetlist(-1),
+    onNext: () => goSetlist(1),
+  });
 
   // Börja om från toppen när låten byts
   useEffect(() => {
@@ -423,16 +433,22 @@ export function SongPage() {
         <div
           className={`song-scroll${annotating ? ' annotating' : ''}`}
           ref={scrollRef}
-          onPointerDown={annotating ? gestures.onPointerDown : undefined}
-          onPointerMove={annotating ? gestures.onPointerMove : undefined}
-          onPointerUp={annotating ? gestures.onPointerUp : undefined}
-          onPointerCancel={annotating ? gestures.onPointerCancel : undefined}
-          style={controlsHidden && !stage ? { paddingTop: 'calc(18px + var(--safe-top))' } : undefined}
+          onPointerDown={annotating ? gestures.onPointerDown : swipe.handlers.onPointerDown}
+          onPointerMove={annotating ? gestures.onPointerMove : swipe.handlers.onPointerMove}
+          onPointerUp={annotating ? gestures.onPointerUp : swipe.handlers.onPointerUp}
+          onPointerCancel={annotating ? gestures.onPointerCancel : swipe.handlers.onPointerCancel}
+          style={{
+            ...(controlsHidden && !stage ? { paddingTop: 'calc(18px + var(--safe-top))' } : {}),
+            // Webbläsaren sköter vertikal scroll; swipe i sidled hanteras av appen
+            ...(setlist && !annotating ? { touchAction: 'pan-y' } : {}),
+          }}
           onClick={(e) => {
+            if (swipe.justSwiped()) return;
             // I setlistläge och scenläge: tryck på låten för att visa/dölja kontrollerna överst
             if (tapToHide && !(e.target as HTMLElement).closest('.ch')) setControlsHidden((v) => !v);
           }}
         >
+          <div style={swipe.style}>
           <SongRenderer
             song={parsed}
             opts={{
@@ -467,6 +483,7 @@ export function SongPage() {
               ) : null
             }
           />
+          </div>
         </div>
         <button
           className={`scroll-fab${scrolling ? ' on' : ''}`}
