@@ -9,6 +9,8 @@ export interface Token {
   x: number;
   /** Teckenindex i radens text */
   start: number;
+  /** Bredd (om känd, t.ex. från OCR) */
+  w?: number;
 }
 
 export interface Row {
@@ -25,7 +27,13 @@ export type SourceRow = Row | null;
 
 // --- Klassificering ---
 
-const NOISE_TOKEN = /^(\||\|\||\/|-+|–|—|\.+|:|%|x\d+|\(?x\d+\)?|\d+x|\(\d+x\)|n\.?c\.?|\*|\(|\))$/i;
+// "I" och "l" räknas som taktstreck – de används ofta så (eller läses så av textigenkänning)
+const NOISE_TOKEN = /^(\||\|\||I|l|\/|-+|–|—|\.+|:|%|x\d+|\(?x\d+\)?|\d+x|\(\d+x\)|n\.?c\.?|\*|\(|\))$/i;
+
+/** Taktstreck skrivna som I eller l visas som | */
+function barText(t: string): string {
+  return t === 'I' || t === 'l' ? '|' : t;
+}
 
 function stripParens(t: string): string {
   return t.replace(/^[(\[]+/, '').replace(/[)\],.]+$/, '');
@@ -147,7 +155,7 @@ export function chordOnlyLine(chords: Token[], spaceWidth: number): string {
   let out = '';
   for (let k = 0; k < sorted.length; k++) {
     const c = sorted[k];
-    out += isChordToken(c.text) ? `[${c.text}]` : c.text;
+    out += isChordToken(c.text) ? `[${c.text}]` : barText(c.text);
     if (k < sorted.length - 1) {
       const gap = (sorted[k + 1].x - c.x) / sw - c.text.length;
       out += ' '.repeat(Math.min(8, Math.max(1, Math.round(gap))));

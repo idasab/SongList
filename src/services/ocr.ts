@@ -96,7 +96,7 @@ const STATUS_SV: Record<string, string> = {
 
 async function recognizeWithTesseract(canvas: HTMLCanvasElement, onProgress?: ProgressFn): Promise<OcrPage> {
   const { createWorker } = await import('tesseract.js');
-  const worker = await createWorker(['swe', 'eng'], 1, {
+  const worker = await createWorker(['swe'], 1, {
     logger: (m: { status: string; progress: number }) => onProgress?.(STATUS_SV[m.status] ?? m.status, m.progress),
   });
   try {

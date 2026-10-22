@@ -184,6 +184,27 @@ describe('OCR-layout', () => {
     const out = ocrToChordPro([page]);
     expect(out.trim()).toBe('[G]Solen går upp [C]över ån');
   });
+
+  it('flyttar rubriker i marginalen, rättar felästa ackord och slår ihop stavelser', () => {
+    const W = 1000;
+    const H = 1000;
+    const word = (text: string, x: number, y: number, w: number, h = 20) => ({ text, x: x / W, y: y / H, w: w / W, h: h / H });
+    const line = (...words: ReturnType<typeof word>[]) => ({ text: words.map((w) => w.text).join(' '), x: 0, y: 0, w: 0, h: 0, words });
+    const page: OcrPage = {
+      width: W,
+      height: H,
+      lines: [
+        line(word('Gg', 260, 100, 15), word('Di', 300, 100, 15)),
+        line(word('Vers', 20, 125, 40), word('1', 65, 125, 10), word('Mor', 200, 125, 35), word('-', 245, 125, 8, 4), word('gon', 260, 125, 35), word('dagg', 300, 125, 45)),
+        line(word('G/F?', 200, 150, 40)),
+        line(word('Fåg', 200, 175, 35), word('lar', 240, 175, 30), word('sjunger', 280, 175, 70)),
+      ],
+    };
+    const out = ocrToChordPro([page]);
+    expect(out).toContain('{start_of_verse: Vers 1}');
+    expect(out).toContain('Mor[G]gon [D11]dagg');
+    expect(out).toContain('[G/F#]Fåg lar sjunger');
+  });
 });
 
 describe('ackordgrepp', () => {
