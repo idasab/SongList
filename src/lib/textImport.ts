@@ -88,6 +88,8 @@ export function textToChordPro(text: string, opts: TextImportOptions = {}): stri
 
 export function titleFromFileName(name: string): string {
   return name
+    // Filnamn från Mac och iPhone kan ha "å" som "a" + ring; gör om till ett tecken
+    .normalize('NFC')
     .replace(/\.[^.]+$/, '')
     .replace(/[_]+/g, ' ')
     .trim();

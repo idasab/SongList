@@ -9,6 +9,7 @@
 import type { SongAttachment } from '../lib/model';
 import type { OcrLine, OcrPage, OcrWord } from '../lib/ocrLayout';
 import { decodeText, isChordProFileName, titleFromFileName } from '../lib/textImport';
+import { zipNameMap } from '../lib/zipNames';
 import { readFileAsDataUrl } from './files';
 import { loadImageToCanvas, pagesToChordPro, recognizeCanvas, recognizeImageFile, type ProgressFn } from './ocr';
 
@@ -89,14 +90,16 @@ export async function expandFiles(
     try {
       onProgress?.(`Packar upp ${f.name}…`);
       const { unzipSync } = await import('fflate');
-      const entries = unzipSync(new Uint8Array(await f.arrayBuffer()));
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      const entries = unzipSync(bytes);
+      const realNames = zipNameMap(bytes);
       const names = Object.keys(entries).filter((n) => !isJunk(n)).sort((a, b) => a.localeCompare(b, 'sv', { numeric: true }));
       for (const n of names) {
         if (fileType(n) === 'zip') {
           result.skipped.push({ name: n, reason: 'zip-fil inuti zip-fil' });
           continue;
         }
-        queue.push(new File([entries[n]], baseName(n)));
+        queue.push(new File([entries[n]], baseName(realNames.get(n) ?? n)));
       }
       if (!names.length) result.skipped.push({ name: f.name, reason: 'zip-filen är tom' });
     } catch {

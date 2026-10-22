@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { unzipSync, zipSync } from 'fflate';
+import { decodeZipName, zipNameMap } from './zipNames';
 import { formatChord, isChord, parseChord, parseKey, formatKey } from './chords';
 import { isChordRow, midWordBreaks, parseChordPro, parseLyricsLine, splitWords, transposeSource, upsertDirective } from './chordpro';
 import { isChordLine, parseHeader } from './layout';
-import { decodeText, isChordProFileName, looksLikeChordPro, textToChordPro, type Measure } from './textImport';
+import { decodeText, isChordProFileName, looksLikeChordPro, textToChordPro, titleFromFileName, type Measure } from './textImport';
 import { ocrToChordPro, type OcrPage } from './ocrLayout';
 import { getPianoChord, normalizeSuffix } from './chordShapes';
 import { mergeRecords, restoreMerge } from './merge';
@@ -553,5 +555,30 @@ describe('ord som delas av ackord', () => {
   it('markerar bitar där ordet fortsätter i nästa bit', () => {
     const segs = splitWords([{ text: 'Sol' }, { chord: 'C', text: 'ros i ' }, { chord: 'G', text: 'Mor-' }, { chord: 'D', text: 'gon' }]);
     expect(midWordBreaks(segs)).toEqual([true, false, false, false, false]);
+  });
+});
+
+describe('filnamn i zip-filer', () => {
+  it('tolkar namn utan UTF-8-markering', () => {
+    expect(decodeZipName(new TextEncoder().encode('Sång om älven.pdf'), false)).toBe('Sång om älven.pdf');
+    // Teckentabell 437: å = 0x86, ä = 0x84, ö = 0x94
+    expect(decodeZipName(new Uint8Array([0x86, 0x84, 0x94, 0x2e, 0x70, 0x6e, 0x67]), false)).toBe('åäö.png');
+    expect(decodeZipName(new Uint8Array([0xff]), false)).toBe(' ');
+  });
+  it('ger rätt namn även när zip-filen saknar UTF-8-markering', () => {
+    const zip = zipSync({ 'Höstvisa.pdf': new Uint8Array([1, 2, 3]) });
+    // Ta bort UTF-8-markeringen (bit 11) i alla filhuvuden, som t.ex. Arkivverktyget på Mac gör
+    const view = new DataView(zip.buffer);
+    for (let i = 0; i + 4 <= zip.length; i++) {
+      const sig = view.getUint32(i, true);
+      if (sig === 0x04034b50) view.setUint16(i + 6, view.getUint16(i + 6, true) & ~0x800, true);
+      if (sig === 0x02014b50) view.setUint16(i + 8, view.getUint16(i + 8, true) & ~0x800, true);
+    }
+    const key = Object.keys(unzipSync(zip))[0];
+    expect(key).not.toBe('Höstvisa.pdf');
+    expect(zipNameMap(zip).get(key)).toBe('Höstvisa.pdf');
+  });
+  it('gör om "a" + ring till "å" i titlar från filnamn', () => {
+    expect(titleFromFileName('Sång.pdf')).toBe('Sång');
   });
 });
