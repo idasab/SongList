@@ -45,7 +45,7 @@ export function isChordLine(tokens: string[], tolerance = 0): boolean {
   return nonChords <= Math.floor(meaningful.length * tolerance);
 }
 
-export type HeaderKind = 'verse' | 'chorus' | 'bridge' | 'comment';
+export type HeaderKind = 'verse' | 'chorus' | 'bridge' | 'part' | 'comment';
 
 export interface Header {
   kind: HeaderKind;
@@ -66,8 +66,16 @@ const HEADER_WORDS: [RegExp, HeaderKind][] = [
 
 const HEADER_RE = /^\s*[\[(]?\s*([A-Za-zÅÄÖåäö-]+)\.?\s*(\d+)?\s*[\])]?\s*:?\s*(.*)$/;
 
+/** Delar som "A:", "B2:" eller "Del A:" – en versal följd av kolon (annars vore det ett ackord). */
+const PART_RE = /^(del\s+)?([A-ZÅÄÖ]\d*)\s*:$/i;
+
 export function parseHeader(line: string): Header | null {
   const trimmed = line.trim();
+  const part = PART_RE.exec(trimmed);
+  if (part && /^[A-ZÅÄÖ]/.test(part[2])) {
+    const label = part[1] ? `Del ${part[2]}` : part[2];
+    return { kind: 'part', label };
+  }
   const m = HEADER_RE.exec(trimmed);
   if (m) {
     const word = m[1];
@@ -163,6 +171,7 @@ const ENV_NAMES: Record<Exclude<HeaderKind, 'comment'>, string> = {
   verse: 'verse',
   chorus: 'chorus',
   bridge: 'bridge',
+  part: 'part',
 };
 
 export function assembleChordPro(rows: SourceRow[], opts: AssembleOptions = {}): string {

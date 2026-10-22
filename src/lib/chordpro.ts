@@ -38,6 +38,7 @@ const HEADER_SECTION: Record<Exclude<Header['kind'], 'comment'>, SectionType> = 
   verse: 'verse',
   chorus: 'chorus',
   bridge: 'bridge',
+  part: 'other',
 };
 
 /**

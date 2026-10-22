@@ -503,3 +503,27 @@ describe('rader inom parentes', () => {
     expect(p.sections[0].lines.every((l) => l.type === 'lyrics')).toBe(true);
   });
 });
+
+describe('delrubriker A:, B:', () => {
+  it('tolkar A:, B2: och Del C: som delar', () => {
+    const p = parseChordPro('A:\n[G]Ett [C]test\n\nB2:\n[D]Ett till\n\nDel C:\n[E]Sista\n');
+    const secs = p.sections.filter((s) => s.type !== 'none');
+    expect(secs.map((s) => [s.type, s.label, s.lines.length])).toEqual([
+      ['other', 'A', 1],
+      ['other', 'B2', 1],
+      ['other', 'Del C', 1],
+    ]);
+  });
+
+  it('ett ensamt A utan kolon är fortfarande ett ackord', () => {
+    const p = parseChordPro('[A]\n');
+    expect(p.chords).toEqual(['A']);
+    expect(parseHeader('A')).toBeNull();
+  });
+
+  it('textimporten gör om A: till en del', () => {
+    const out = textToChordPro('A:\nG        C\nHär är en rad\n');
+    expect(out).toContain('{start_of_part: A}');
+    expect(out).toContain('{end_of_part}');
+  });
+});
