@@ -7,6 +7,7 @@ import { formatKey } from '../lib/chords';
 import { allTags, liveCategories, liveSongs, useStore } from '../store/useStore';
 import type { Song } from '../lib/model';
 import { useRememberScroll } from '../hooks/useRememberScroll';
+import { ALPHABET, AlphabetIndex } from '../components/AlphabetIndex';
 
 // Filtret sparas mellan sidbyten under sessionen
 const session = {
@@ -66,6 +67,25 @@ export function LibraryPage() {
     return out;
   }, [visible, sort]);
 
+  // Alfabetsregister när listan är grupperad på bokstav
+  const showIndex = groups.length >= 3 && groups[0].letter !== '';
+  const available = useMemo(() => new Set(groups.map((g) => g.letter)), [groups]);
+  const jumpTo = (letter: string) => {
+    const container = scrollRef.current;
+    if (!container) return;
+    // Närmaste bokstav med låtar, från den valda och framåt (annars den sista)
+    const want = ALPHABET.indexOf(letter);
+    let best: string | undefined;
+    for (const g of groups) {
+      const idx = ALPHABET.indexOf(g.letter);
+      if (idx >= want && (best === undefined || idx < ALPHABET.indexOf(best))) best = g.letter;
+    }
+    best ??= groups[groups.length - 1].letter;
+    const target = container.querySelector<HTMLElement>(`[data-letter="${CSS.escape(best)}"]`);
+    if (!target) return;
+    container.scrollTop += target.getBoundingClientRect().top - container.getBoundingClientRect().top;
+  };
+
   return (
     <div className="screen">
       <Header title="Låtar">
@@ -73,7 +93,8 @@ export function LibraryPage() {
           <Plus size={18} /> <span className="hide-mobile">Ny låt</span>
         </button>
       </Header>
-      <div className="content narrow" ref={scrollRef}>
+      <div className="indexed-body">
+      <div className={`content narrow${showIndex ? ' has-index' : ''}`} ref={scrollRef}>
         <div>
           <div className="search-bar">
             <div className="search-input">
@@ -214,7 +235,7 @@ export function LibraryPage() {
                 {visible.length} {visible.length === 1 ? 'låt' : 'låtar'}
               </div>
               {groups.map((g) => (
-                <div key={g.letter || 'all'}>
+                <div key={g.letter || 'all'} data-letter={g.letter || undefined}>
                   {g.letter && <div className="letter-head">{g.letter}</div>}
                   <div className="list">
                     {g.songs.map((s) => (
@@ -226,6 +247,8 @@ export function LibraryPage() {
             </>
           )}
         </div>
+      </div>
+      {showIndex && <AlphabetIndex available={available} onPick={jumpTo} />}
       </div>
     </div>
   );

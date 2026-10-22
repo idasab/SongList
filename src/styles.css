@@ -621,6 +621,72 @@ a {
   font-weight: 600;
 }
 
+/* Alfabetsregister i låtlistan */
+.indexed-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.content.has-index {
+  padding-right: calc(30px + var(--safe-right));
+}
+
+.alpha-index {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  right: calc(2px + var(--safe-right));
+  width: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.alpha-index span {
+  flex: 0 1 15px;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.alpha-index span.off {
+  color: var(--text-muted);
+  opacity: 0.45;
+}
+
+.alpha-bubble {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  font-weight: 700;
+  background: var(--accent);
+  color: var(--accent-text);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  z-index: 3;
+}
+
 .letter-head {
   position: sticky;
   top: -16px;
