@@ -39,6 +39,7 @@ export function EditorPage() {
   });
   const [refImage] = useState(id ? undefined : draft?.imageDataUrl);
   const [importItemId] = useState(id ? undefined : draft?.importItemId);
+  const [draftAttachment] = useState(id ? undefined : draft?.attachment);
   const updateImportQueue = useStore((s) => s.updateImportQueue);
   const [content, setContent] = useState(initial.current.content);
   const [tags, setTags] = useState<string[]>(initial.current.tags);
@@ -82,7 +83,7 @@ export function EditorPage() {
   const categories = useMemo(() => liveCategories(categoriesRec), [categoriesRec]);
 
   const save = useCallback(async () => {
-    const song = await saveSong({ id: existing?.id, content, tags, categoryId });
+    const song = await saveSong({ id: existing?.id, content, tags, categoryId, attachment: draftAttachment });
     setSaved(true);
     toast('Sparat');
     if (importItemId) updateImportQueue((q) => ({ ...q, items: q.items.filter((x) => x.id !== importItemId) }));

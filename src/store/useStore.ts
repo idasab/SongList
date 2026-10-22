@@ -9,6 +9,7 @@ import {
   type SetlistFolder,
   type Settings,
   type Song,
+  type SongAttachment,
 } from '../lib/model';
 import type { SourceFont } from '../lib/textImport';
 import { db, requestPersistentStorage } from './db';
@@ -22,6 +23,8 @@ export interface Draft {
   categoryId?: string;
   /** Låten kommer från importlistan och tas bort därifrån när den sparas */
   importItemId?: string;
+  /** Originalfil som ska sparas med låten */
+  attachment?: SongAttachment;
 }
 
 /** En låt som väntar i importlistan. */
@@ -38,6 +41,14 @@ export interface ImportQueueItem {
   categoryId?: string;
   /** Egna taggar som läggs till de gemensamma */
   tags?: string[];
+  /** Originalfilen (PDF eller bild) */
+  original?: SongAttachment;
+  /** Liten bild av filen (första sidan) för förhandsvisning */
+  previewDataUrl?: string;
+  /** Visa som text och ackord, eller som originalfil */
+  display?: 'chordpro' | 'file';
+  /** Sant om innehållet har tolkats (OCR/PDF-text); annars bara en titel */
+  interpreted?: boolean;
 }
 
 /** Importlistan finns kvar när man byter sida (men sparas inte mellan omstarter). */
@@ -63,8 +74,17 @@ interface State {
   revision: number;
 
   init(): Promise<void>;
-  saveSong(input: { id?: string; content: string; tags?: string[]; categoryId?: string }): Promise<Song>;
-  importSongs(contents: { content: string; tags?: string[]; categoryId?: string }[]): Promise<Song[]>;
+  saveSong(input: {
+    id?: string;
+    content: string;
+    tags?: string[];
+    categoryId?: string;
+    /** null tar bort en bifogad fil */
+    attachment?: SongAttachment | null;
+  }): Promise<Song>;
+  importSongs(
+    contents: { content: string; tags?: string[]; categoryId?: string; attachment?: SongAttachment }[],
+  ): Promise<Song[]>;
   updateSongPrefs(id: string, prefs: Partial<Pick<Song, 'transpose' | 'scrollSpeed' | 'annotations'>>): Promise<void>;
   deleteSong(id: string): Promise<void>;
   saveSetlist(input: Partial<Setlist> & { name: string }): Promise<Setlist>;
@@ -141,7 +161,7 @@ export const useStore = create<State>((set, get) => ({
     return initPromise;
   },
 
-  async saveSong({ id, content, tags, categoryId }) {
+  async saveSong({ id, content, tags, categoryId, attachment }) {
     const now = Date.now();
     const existing = id ? get().songs[id] : undefined;
     const song: Song = {
@@ -151,6 +171,7 @@ export const useStore = create<State>((set, get) => ({
       transpose: existing?.transpose ?? 0,
       scrollSpeed: existing?.scrollSpeed,
       annotations: existing?.annotations,
+      attachment: attachment === null ? undefined : (attachment ?? existing?.attachment),
       ...deriveSongMeta(content),
       content,
       tags: normalizeTags(tags ?? existing?.tags ?? []),
@@ -172,6 +193,7 @@ export const useStore = create<State>((set, get) => ({
       content: it.content,
       tags: normalizeTags(it.tags ?? []),
       categoryId: it.categoryId || undefined,
+      attachment: it.attachment,
     }));
     set((s) => ({ songs: { ...s.songs, ...toRecord(songs) }, revision: s.revision + 1 }));
     await db.songs.putMany(songs);
@@ -191,7 +213,15 @@ export const useStore = create<State>((set, get) => ({
     if (!song) return;
     const now = Date.now();
     // Behåll en gravsten utan innehåll så att raderingen synkas till andra enheter
-    const tomb: Song = { ...song, content: '', tags: [], annotations: undefined, deletedAt: now, updatedAt: now };
+    const tomb: Song = {
+      ...song,
+      content: '',
+      tags: [],
+      annotations: undefined,
+      attachment: undefined,
+      deletedAt: now,
+      updatedAt: now,
+    };
     set((s) => ({ songs: { ...s.songs, [id]: tomb }, revision: s.revision + 1 }));
     await db.songs.put(tomb);
   },

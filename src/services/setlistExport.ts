@@ -23,8 +23,9 @@ import {
   type InkColor,
   type LineMetrics,
 } from '../lib/annotations';
-import type { Setlist, Song } from '../lib/model';
+import type { Setlist, Song, SongAttachment } from '../lib/model';
 import { safeFileName, saveBinaryFile, saveTextFile } from './files';
+import { loadPdfJs } from './fileImport';
 
 export type SetlistExportFormat = 'text' | 'pdf-annotated' | 'pdf-clean' | 'chordpro';
 
@@ -96,6 +97,10 @@ function songText(p: PreparedSong, number?: number): string {
   const out: string[] = [number ? `${number}. ${p.song.title}` : p.song.title];
   if (p.song.artist) out.push(p.song.artist);
   out.push('');
+  if (p.song.attachment) {
+    out.push(`(Bifogad fil: ${p.song.attachment.name})`);
+    return tidy(out.join('\n'));
+  }
   for (const sec of p.parsed.sections) {
     if (sec.label) out.push(sec.label.toUpperCase());
     for (const line of sec.lines) {
@@ -142,6 +147,7 @@ export function buildTextExport(setlist: Setlist, songs: Record<string, Song>, n
 
 /** En låts ChordPro-källa med transponeringen inskriven. */
 function songChordPro(p: PreparedSong): string {
+  if (p.song.attachment) return `${p.song.content.trim()}\n{comment: Bifogad fil: ${p.song.attachment.name}}\n`;
   const src = p.song.transpose
     ? transposeSource(p.song.content, {
         transpose: p.song.transpose,
@@ -530,6 +536,74 @@ function drawFooters(doc: JsPdf, footer: string) {
   }
 }
 
+/** Ritar in en bifogad bild eller PDF (som bilder av sidorna) i exporten. */
+async function drawAttachment(c: PdfCtx, a: SongAttachment) {
+  const images: { data: string; w: number; h: number }[] = [];
+  if (a.kind === 'image') {
+    const size = await imageSize(a.dataUrl);
+    images.push({ data: await toJpeg(a.dataUrl, size), w: size.w, h: size.h });
+  } else {
+    const pdfjs = await loadPdfJs();
+    const task = pdfjs.getDocument({ data: new Uint8Array(await (await fetch(a.dataUrl)).arrayBuffer()) });
+    try {
+      const pdf = await task.promise;
+      for (let n = 1; n <= pdf.numPages; n++) {
+        const page = await pdf.getPage(n);
+        const base = page.getViewport({ scale: 1 });
+        const viewport = page.getViewport({ scale: 1600 / base.width });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(viewport.width);
+        canvas.height = Math.round(viewport.height);
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+        images.push({ data: canvas.toDataURL('image/jpeg', 0.85), w: canvas.width, h: canvas.height });
+      }
+    } finally {
+      void task.destroy();
+    }
+  }
+  const maxW = PAGE_W - 2 * MARGIN_X;
+  images.forEach((img, i) => {
+    if (i > 0) {
+      c.doc.addPage();
+      c.page = c.doc.getNumberOfPages();
+      c.y = MARGIN_TOP;
+    }
+    // Skala så att bilden ryms på resten av sidan
+    const available = CONTENT_BOTTOM - c.y;
+    const scale = Math.min(maxW / img.w, available / img.h);
+    c.doc.addImage(img.data, 'JPEG', MARGIN_X, c.y, img.w * scale, img.h * scale);
+    c.y += img.h * scale;
+  });
+}
+
+function imageSize(dataUrl: string): Promise<{ w: number; h: number }> {
+  return new Promise((resolve, reject) => {
+    const im = new Image();
+    im.onload = () => resolve({ w: im.naturalWidth, h: im.naturalHeight });
+    im.onerror = reject;
+    im.src = dataUrl;
+  });
+}
+
+/** jsPDF klarar JPEG och PNG; andra bildformat ritas om till JPEG. */
+async function toJpeg(dataUrl: string, size: { w: number; h: number }): Promise<string> {
+  if (dataUrl.startsWith('data:image/jpeg')) return dataUrl;
+  const im = new Image();
+  im.src = dataUrl;
+  await im.decode();
+  const canvas = document.createElement('canvas');
+  canvas.width = size.w;
+  canvas.height = size.h;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, size.w, size.h);
+  ctx.drawImage(im, 0, 0);
+  return canvas.toDataURL('image/jpeg', 0.9);
+}
+
 async function renderPdf(
   entries: { p: PreparedSong; number: number }[],
   opts: { title: string; footer: string; cover?: { setlist: Setlist; list: PreparedSong[] }; withAnnotations: boolean },
@@ -541,7 +615,8 @@ async function renderPdf(
 
   if (opts.cover) drawCover(c, opts.cover.setlist, opts.cover.list);
 
-  entries.forEach(({ p, number }, idx) => {
+  for (let idx = 0; idx < entries.length; idx++) {
+    const { p, number } = entries[idx];
     if (opts.cover || idx > 0) {
       doc.addPage();
       c.page = doc.getNumberOfPages();
@@ -549,6 +624,10 @@ async function renderPdf(
     }
     const tops: number[] = [];
     drawSongHeader(c, p, number, tops);
+    if (p.song.attachment) {
+      await drawAttachment(c, p.song.attachment);
+      continue;
+    }
     let n = 1;
     for (const sec of p.parsed.sections) {
       drawSection(c, sec, n, p.ctx, tops);
@@ -556,7 +635,7 @@ async function renderPdf(
     }
     for (let i = 0; i < tops.length; i++) if (tops[i] === undefined) tops[i] = i ? tops[i - 1] : 0;
     if (opts.withAnnotations && p.song.annotations) drawAnnotations(doc, p.song.annotations, tops);
-  });
+  }
 
   drawFooters(doc, opts.footer);
   return doc.output('blob');
@@ -595,6 +674,13 @@ export async function buildSongFiles(
   for (let i = 0; i < list.length; i++) {
     const p = list[i];
     const base = `${String(i + 1).padStart(width, '0')} ${safeFileName(p.song.title)}`;
+    if (p.song.attachment) {
+      // Låtar som sparats som fil (t.ex. noter) bifogas som originalfilen
+      const a = p.song.attachment;
+      const ext = /\.[^.]+$/.exec(a.name)?.[0] ?? (a.kind === 'pdf' ? '.pdf' : '.jpg');
+      files.push({ name: `${base}${ext}`, mime: a.mime, blob: await (await fetch(a.dataUrl)).blob() });
+      continue;
+    }
     if (format === 'text') {
       files.push({ name: `${base}.txt`, mime: 'text/plain', blob: textBlob(songText(p)) });
     } else if (format === 'chordpro') {

@@ -60,7 +60,7 @@ export async function recognizeCanvas(
   return recognizeWithTesseract(canvas, onProgress);
 }
 
-async function loadImageToCanvas(file: File, maxSize: number): Promise<HTMLCanvasElement> {
+export async function loadImageToCanvas(file: File, maxSize: number): Promise<HTMLCanvasElement> {
   const bitmap = await createImageBitmap(file).catch(async () => {
     // Äldre Safari: gå via <img>
     const url = URL.createObjectURL(file);

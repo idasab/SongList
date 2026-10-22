@@ -255,7 +255,11 @@ function SongRow({ song, categoryName }: { song: Song; categoryName?: string }) 
           </div>
         )}
       </div>
-      {key && (
+      {song.attachment ? (
+        <span className="badge" title={song.attachment.name}>
+          {song.attachment.kind === 'pdf' ? 'PDF' : 'Bild'}
+        </span>
+      ) : key && (
         <div
           className={`key-badge${key.guessed ? ' guessed' : ''}`}
           title={key.guessed ? 'Tonarten är gissad från första ackordet' : undefined}

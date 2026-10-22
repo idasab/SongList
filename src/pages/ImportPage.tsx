@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Camera, ChevronDown, ChevronUp, ClipboardPaste, FileUp, Image as ImageIcon, Lightbulb, Pencil, X } from 'lucide-react';
 import { SongRenderer } from '../components/SongRenderer';
 import { TagInput } from '../components/TagInput';
-import { askText, Header, Sheet, toast, toastError } from '../components/ui';
+import { askText, Header, Segmented, Sheet, toast, toastError } from '../components/ui';
 import { parseChordPro, songPrefersFlats } from '../lib/chordpro';
 import {
   SOURCE_FONTS,
@@ -12,12 +12,13 @@ import {
   looksLikeChordPro,
   suggestSourceFont,
   textToChordPro,
+  titleFromFileName,
   type SourceFont,
 } from '../lib/textImport';
 import { newId } from '../lib/model';
 import { canUseDocumentScanner, recognizeImageFile, scanDocument } from '../services/ocr';
 import { pickFiles } from '../services/files';
-import { expandFiles } from '../services/fileImport';
+import { attachmentToFile, expandFiles, interpretFile } from '../services/fileImport';
 import { allTags, liveCategories, normalizeTags, useStore, type ImportQueueItem } from '../store/useStore';
 
 type ImportItem = ImportQueueItem;
@@ -34,6 +35,16 @@ function convert(item: ImportItem): string {
   if (item.kind === 'chordpro') return item.raw;
   return textToChordPro(item.raw, { measure: canvasMeasure(item.font), fileName: item.fileName });
 }
+
+/** Låtens text vid import: bara titeln när filen ska visas som original. */
+function contentFor(item: ImportItem): string {
+  if (item.display !== 'file') return convert(item);
+  const title = parseChordPro(convert(item)).meta.title || titleFromFileName(item.fileName);
+  return `{title: ${title}}\n`;
+}
+
+// Valet för PDF och bilder sparas under sessionen
+const importPrefs = { keepOriginals: false };
 
 const ACCEPT =
   '.cho,.chopro,.chordpro,.crd,.pro,.txt,.text,text/plain,.pdf,application/pdf,.zip,application/zip,image/*';
@@ -56,6 +67,7 @@ export function ImportPage() {
   const [pasting, setPasting] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [busy, setBusy] = useState<{ message: string; progress?: number } | null>(null);
+  const [keepOriginals, setKeepOriginals] = useState(importPrefs.keepOriginals);
 
   // Förslag: taggar från sparade låtar och taggar som lagts till i importlistan
   const tagSuggestions = useMemo(
@@ -79,8 +91,19 @@ export function ImportPage() {
     if (!files.length) return;
     setBusy({ message: 'Läser filer…' });
     try {
-      const { items: found, skipped } = await expandFiles(files, (message, progress) => setBusy({ message, progress }));
-      for (const c of found) addRaw(c.fileName, c.raw, { kind: c.kind, origin: c.origin, imageDataUrl: c.imageDataUrl });
+      const { items: found, skipped } = await expandFiles(files, (message, progress) => setBusy({ message, progress }), {
+        keepOriginals,
+      });
+      for (const c of found)
+        addRaw(c.fileName, c.raw, {
+          kind: c.kind,
+          origin: c.origin,
+          imageDataUrl: c.imageDataUrl,
+          original: c.original,
+          previewDataUrl: c.previewDataUrl,
+          display: c.display,
+          interpreted: c.interpreted,
+        });
       if (skipped.length) {
         const list = skipped.slice(0, 3).map((x) => `${x.name} (${x.reason})`).join(', ');
         toast(`${skipped.length} ${skipped.length === 1 ? 'fil' : 'filer'} hoppades över: ${list}${skipped.length > 3 ? ' …' : ''}`, {
@@ -132,7 +155,11 @@ export function ImportPage() {
   };
 
   const importAll = async () => {
-    const list = items.map((it) => ({ content: convert(it), ...resolveMeta(it, { tags, categoryId }) }));
+    const list = items.map((it) => ({
+      content: contentFor(it),
+      attachment: it.display === 'file' ? it.original : undefined,
+      ...resolveMeta(it, { tags, categoryId }),
+    }));
     const songs = await importSongs(list);
     toast(`${songs.length} ${songs.length === 1 ? 'låt' : 'låtar'} importerade`);
     resetQueue();
@@ -143,8 +170,9 @@ export function ImportPage() {
   const openInEditor = (it: ImportItem) => {
     // Låten ligger kvar i listan tills den sparas i editorn
     setDraft({
-      content: convert(it),
-      imageDataUrl: it.imageDataUrl,
+      content: contentFor(it),
+      imageDataUrl: it.display === 'file' ? undefined : it.imageDataUrl,
+      attachment: it.display === 'file' ? it.original : undefined,
       importItemId: it.id,
       ...resolveMeta(it, { tags, categoryId }),
     });
@@ -158,6 +186,24 @@ export function ImportPage() {
       <Header title="Importera" />
       <div className="content narrow">
         <div>
+          <div className="toggle-row choice-row import-mode">
+            <div>
+              <div>PDF och bilder</div>
+              <div className="muted small-text">Behåll som fil passar t.ex. noter. Du kan ändra per fil i listan.</div>
+            </div>
+            <Segmented
+              value={keepOriginals ? 'file' : 'chordpro'}
+              onChange={(v) => {
+                importPrefs.keepOriginals = v === 'file';
+                setKeepOriginals(v === 'file');
+              }}
+              options={[
+                { value: 'chordpro', label: 'Tolka text och ackord' },
+                { value: 'file', label: 'Behåll som fil' },
+              ]}
+            />
+          </div>
+
           <div className="import-actions">
             <button className="big-action" onClick={chooseFiles}>
               <FileUp size={22} />
@@ -315,15 +361,41 @@ function ImportItemCard({
 }) {
   const [open, setOpen] = useState(false);
   const [showTags, setShowTags] = useState(false);
+  const [bigPreview, setBigPreview] = useState(false);
+  const [interpreting, setInterpreting] = useState('');
   const notation = useStore((s) => s.settings.notation);
   const content = useMemo(() => convert(item), [item]);
   const parsed = useMemo(() => parseChordPro(content), [content]);
+  const asFile = item.display === 'file';
+
+  const setDisplay = async (display: 'chordpro' | 'file') => {
+    if (display === 'file' || item.interpreted || !item.original) {
+      onChange({ ...item, display });
+      return;
+    }
+    // Filen har inte tolkats än: gör det nu
+    try {
+      setInterpreting('Tolkar…');
+      const file = await attachmentToFile(item.original);
+      const res = await interpretFile(file, item.original.kind, (m) => setInterpreting(m));
+      onChange({ ...item, raw: res.raw, imageDataUrl: res.imageDataUrl, interpreted: true, display: 'chordpro' });
+    } catch {
+      toast('Hittade ingen text och inga ackord att tolka i filen', { error: true });
+    } finally {
+      setInterpreting('');
+    }
+  };
 
   return (
     <div className="import-item">
       <div className="head">
+        {item.previewDataUrl && (
+          <button className="import-thumb" onClick={() => setBigPreview(true)} aria-label="Visa filen större">
+            <img src={item.previewDataUrl} alt="" />
+          </button>
+        )}
         <div className="main">
-          <div style={{ fontWeight: 600 }}>{parsed.meta.title || item.fileName}</div>
+          <div style={{ fontWeight: 600 }}>{(asFile ? null : parsed.meta.title) || titleFromFileName(item.fileName)}</div>
           <div className="muted small-text">
             {parsed.meta.artist ? parsed.meta.artist + ' · ' : ''}
             {item.fileName}
@@ -334,13 +406,26 @@ function ImportItemCard({
             {item.origin === 'pdf' ? 'PDF' : 'Bild'}
           </span>
         )}
-        <span className="badge">{item.kind === 'chordpro' ? 'ChordPro' : 'Text'}</span>
+        <span className="badge">{asFile ? 'Fil' : item.kind === 'chordpro' ? 'ChordPro' : 'Text'}</span>
         <button className="btn ghost icon" aria-label="Ta bort" onClick={onRemove}>
           <X size={18} />
         </button>
       </div>
+      {item.original && (
+        <div className="opts">
+          <Segmented
+            value={item.display ?? 'chordpro'}
+            onChange={(v) => void setDisplay(v)}
+            options={[
+              { value: 'chordpro', label: 'Text och ackord' },
+              { value: 'file', label: item.original.kind === 'pdf' ? 'Originalfil (PDF)' : 'Originalfil (bild)' },
+            ]}
+          />
+          {interpreting && <span className="muted small-text">{interpreting}</span>}
+        </div>
+      )}
       <div className="opts">
-        {item.kind === 'text' && (
+        {item.kind === 'text' && !asFile && (
           <label className="small-text" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             Originalets typsnitt
             <select className="select" value={item.font} onChange={(e) => onChange({ ...item, font: e.target.value as SourceFont })}>
@@ -352,6 +437,7 @@ function ImportItemCard({
             </select>
           </label>
         )}
+        {!asFile && (
         <label className="small-text" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           Format
           <select
@@ -363,6 +449,7 @@ function ImportItemCard({
             <option value="chordpro">ChordPro</option>
           </select>
         </label>
+        )}
         <label className="small-text" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           Kategori
           <CategorySelect
@@ -390,7 +477,18 @@ function ImportItemCard({
           </div>
         </div>
       )}
-      {open && (
+      {bigPreview && item.previewDataUrl && (
+        <Sheet title={item.fileName} onClose={() => setBigPreview(false)}>
+          <img className="import-big-preview" src={item.previewDataUrl} alt={item.fileName} />
+          {item.original?.kind === 'pdf' && <p className="muted small-text">Första sidan av PDF:en.</p>}
+        </Sheet>
+      )}
+      {open && asFile && item.previewDataUrl && (
+        <div className="import-preview">
+          <img className="import-big-preview" src={item.previewDataUrl} alt={item.fileName} />
+        </div>
+      )}
+      {open && !asFile && (
         <div className="import-preview">
           <SongRenderer
             song={parsed}

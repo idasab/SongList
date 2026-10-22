@@ -29,6 +29,17 @@ export interface Song extends SyncRecord {
   scrollSpeed?: number;
   /** Post-it-lappar och handritade anteckningar */
   annotations?: Annotations;
+  /** Låten visas som en bifogad fil (t.ex. noter) i stället för text och ackord */
+  attachment?: SongAttachment;
+}
+
+/** En PDF eller bild som sparas med låten. */
+export interface SongAttachment {
+  name: string;
+  mime: string;
+  /** Filens innehåll som data-URL (base64) */
+  dataUrl: string;
+  kind: 'pdf' | 'image';
 }
 
 export interface SetlistItem {

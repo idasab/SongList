@@ -6,9 +6,11 @@
 // - PDF utan text (inskannade papper) och bilder: textigenkänning på enheten.
 // - Zip: packas upp och varje fil hanteras enligt ovan. Mappar och systemfiler hoppas över.
 
+import type { SongAttachment } from '../lib/model';
 import type { OcrLine, OcrPage, OcrWord } from '../lib/ocrLayout';
-import { decodeText, isChordProFileName } from '../lib/textImport';
-import { pagesToChordPro, recognizeCanvas, recognizeImageFile, type ProgressFn } from './ocr';
+import { decodeText, isChordProFileName, titleFromFileName } from '../lib/textImport';
+import { readFileAsDataUrl } from './files';
+import { loadImageToCanvas, pagesToChordPro, recognizeCanvas, recognizeImageFile, type ProgressFn } from './ocr';
 
 export interface ImportCandidate {
   fileName: string;
@@ -20,7 +22,23 @@ export interface ImportCandidate {
   origin?: 'pdf' | 'image';
   /** Bild av originalet att visa som referens i editorn */
   imageDataUrl?: string;
+  /** Originalfilen (PDF eller bild) */
+  original?: SongAttachment;
+  /** Liten bild av filen för förhandsvisning i importlistan */
+  previewDataUrl?: string;
+  /** Visa som text och ackord, eller som originalfil */
+  display?: 'chordpro' | 'file';
+  /** Sant om innehållet tolkats; annars bara en titel */
+  interpreted?: boolean;
 }
+
+export interface ExpandOptions {
+  /** Behåll PDF:er och bilder som filer i stället för att tolka dem (t.ex. noter) */
+  keepOriginals?: boolean;
+}
+
+/** Största fil som sparas som original med låten */
+const MAX_ORIGINAL_BYTES = 25_000_000;
 
 export interface ExpandResult {
   items: ImportCandidate[];
@@ -54,7 +72,11 @@ function isJunk(path: string): boolean {
 }
 
 /** Gör om valda filer (även zip) till kandidater för import. */
-export async function expandFiles(files: File[], onProgress?: ProgressFn): Promise<ExpandResult> {
+export async function expandFiles(
+  files: File[],
+  onProgress?: ProgressFn,
+  options: ExpandOptions = {},
+): Promise<ExpandResult> {
   const result: ExpandResult = { items: [], skipped: [] };
 
   // Packa upp zip-filer först, så att förloppet kan visa rätt antal
@@ -92,14 +114,37 @@ export async function expandFiles(files: File[], onProgress?: ProgressFn): Promi
         onProgress?.(`Läser ${f.name}${step}…`);
         if (f.size > 2_000_000) throw new Error('filen är för stor');
         result.items.push({ fileName: f.name, raw: decodeText(await f.arrayBuffer()), kind: type === 'chordpro' ? 'chordpro' : undefined });
-      } else if (type === 'pdf') {
-        progress('Läser PDF…');
-        result.items.push(await readPdf(f, progress));
-      } else if (type === 'image') {
-        progress('Läser bild…');
-        const res = await recognizeImageFile(f, progress);
-        if (!res.content.trim()) throw new Error('hittade ingen text i bilden');
-        result.items.push({ fileName: f.name, raw: res.content, kind: 'chordpro', origin: 'image', imageDataUrl: res.imageDataUrl });
+      } else if (type === 'pdf' || type === 'image') {
+        if (f.size > MAX_ORIGINAL_BYTES) throw new Error('filen är för stor (högst 25 MB)');
+        const original: SongAttachment = {
+          name: f.name,
+          mime: f.type || (type === 'pdf' ? 'application/pdf' : 'image/jpeg'),
+          dataUrl: await readFileAsDataUrl(f),
+          kind: type,
+        };
+        progress('Skapar förhandsbild…');
+        const previewDataUrl = await makePreview(f, type).catch(() => undefined);
+        const asFile: ImportCandidate = {
+          fileName: f.name,
+          raw: `{title: ${titleFromFileName(f.name)}}\n`,
+          kind: 'chordpro',
+          origin: type,
+          original,
+          previewDataUrl,
+          display: 'file',
+          interpreted: false,
+        };
+        if (options.keepOriginals) {
+          result.items.push(asFile);
+        } else {
+          try {
+            const interp = await interpretFile(f, type, progress);
+            result.items.push({ ...asFile, ...interp, display: 'chordpro', interpreted: true });
+          } catch {
+            // Ingen text att tolka (t.ex. noter): behåll som fil
+            result.items.push(asFile);
+          }
+        }
       } else {
         result.skipped.push({ name: f.name, reason: 'okänd filtyp' });
       }
@@ -110,12 +155,58 @@ export async function expandFiles(files: File[], onProgress?: ProgressFn): Promi
   return result;
 }
 
+/** Tolkar en PDF eller bild till text och ackord (PDF-text eller textigenkänning). */
+export async function interpretFile(
+  f: File,
+  type: 'pdf' | 'image',
+  onProgress: ProgressFn,
+): Promise<{ raw: string; imageDataUrl?: string }> {
+  if (type === 'pdf') {
+    onProgress('Läser PDF…');
+    const res = await readPdf(f, onProgress);
+    return { raw: res.raw, imageDataUrl: res.imageDataUrl };
+  }
+  onProgress('Läser bild…');
+  const res = await recognizeImageFile(f, onProgress);
+  if (!res.content.trim()) throw new Error('hittade ingen text i bilden');
+  return { raw: res.content, imageDataUrl: res.imageDataUrl };
+}
+
+/** Gör om en sparad originalfil till en File igen (t.ex. för att tolka den i efterhand). */
+export async function attachmentToFile(a: SongAttachment): Promise<File> {
+  const blob = await (await fetch(a.dataUrl)).blob();
+  return new File([blob], a.name, { type: a.mime });
+}
+
+/** Liten bild av filen (bilden eller PDF:ens första sida). */
+async function makePreview(f: File, type: 'pdf' | 'image'): Promise<string> {
+  if (type === 'image') return (await loadImageToCanvas(f, 700)).toDataURL('image/jpeg', 0.75);
+  const pdfjs = await loadPdfJs();
+  const task = pdfjs.getDocument({ data: new Uint8Array(await f.arrayBuffer()) });
+  try {
+    const doc = await task.promise;
+    const page = await doc.getPage(1);
+    const base = page.getViewport({ scale: 1 });
+    const viewport = page.getViewport({ scale: 700 / Math.max(base.width, base.height) });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(viewport.width);
+    canvas.height = Math.round(viewport.height);
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+    return canvas.toDataURL('image/jpeg', 0.75);
+  } finally {
+    void task.destroy();
+  }
+}
+
 // --- PDF ---
 
 type PdfJs = typeof import('pdfjs-dist');
 let pdfjsPromise: Promise<PdfJs> | null = null;
 
-function loadPdfJs(): Promise<PdfJs> {
+export function loadPdfJs(): Promise<PdfJs> {
   pdfjsPromise ??= Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.min.mjs?url')]).then(
     ([pdfjs, worker]) => {
       pdfjs.GlobalWorkerOptions.workerSrc = worker.default;

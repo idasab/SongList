@@ -1488,6 +1488,67 @@ textarea.note-text {
   letter-spacing: 0.04em;
 }
 
+/* Låt som visas som fil (noter) */
+.attachment-view {
+  overflow-x: auto;
+}
+
+.attachment-view img,
+.attachment-pages {
+  display: block;
+  max-width: none;
+}
+
+.attachment-view img,
+.attachment-page {
+  width: 100%;
+  height: auto;
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  margin-bottom: 14px;
+}
+
+.attachment-page {
+  display: block;
+}
+
+.import-thumb {
+  flex-shrink: 0;
+  width: 48px;
+  height: 60px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+  cursor: zoom-in;
+}
+
+.import-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+  display: block;
+}
+
+.import-big-preview {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.import-mode {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+
 .badge.review {
   background: var(--accent-soft);
   color: var(--accent);

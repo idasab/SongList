@@ -32,6 +32,7 @@ import { safeFileName, saveTextFile } from '../services/files';
 import { newId } from '../lib/model';
 import { useWakeLock } from '../hooks/useWakeLock';
 import { useSwipeNavigation } from '../hooks/useSwipeNavigation';
+import { AttachmentView } from '../components/AttachmentView';
 import { useAnnotationGestures, type AnnotTool } from '../hooks/useAnnotationGestures';
 import { EMPTY_ANNOTATIONS, INK_WIDTHS, type Annotations, type InkColor, type StickyNote } from '../lib/annotations';
 
@@ -218,6 +219,8 @@ export function SongPage() {
     );
   }
 
+  // Låten visas som en bifogad fil (t.ex. noter) i stället för text och ackord
+  const isFile = !!song.attachment;
   const ctx = { transpose, preferFlats, notation: settings.notation, hNotation: parsed.hNotation };
   const displayChords = parsed.chords.filter((c) => !c.startsWith('*')).map((c) => formatChord(c, ctx));
   const uniqueChords = [...new Set(displayChords)];
@@ -351,6 +354,7 @@ export function SongPage() {
 
       {!controlsHidden && !annotating && (
         <div className="song-toolbar" style={stage ? { paddingTop: 'calc(6px + var(--safe-top))', paddingRight: 64 } : undefined}>
+          {!isFile && (
           <div className="tool-group" title="Transponera">
             <button className="btn icon" aria-label="Transponera ner" onClick={() => setTranspose(transpose - 1)}>
               <Minus size={18} />
@@ -362,8 +366,9 @@ export function SongPage() {
               <Plus size={18} />
             </button>
           </div>
+          )}
 
-          <div className="tool-group" title="Textstorlek">
+          <div className="tool-group" title={isFile ? 'Zooma' : 'Textstorlek'}>
             <button className="btn icon" aria-label="Mindre text" onClick={() => setFont(settings.fontSize - 2)}>
               <span style={{ fontSize: 13, fontWeight: 700 }}>A</span>
             </button>
@@ -390,6 +395,8 @@ export function SongPage() {
           </div>
 
           <div className="tool-group">
+            {!isFile && (
+            <>
             <button
               className={`btn icon${showChords ? '' : ' active'}`}
               aria-label={showChords ? 'Dölj ackord' : 'Visa ackord'}
@@ -409,6 +416,8 @@ export function SongPage() {
             <button className="btn icon" aria-label="Anteckna" title="Anteckna och rita" onClick={startAnnotating}>
               <PenLine size={18} />
             </button>
+            </>
+            )}
             <button
               className={`btn icon${stage ? ' active' : ''}`}
               aria-label="Scenläge"
@@ -421,7 +430,7 @@ export function SongPage() {
         </div>
       )}
 
-      {settings.showDiagrams && showChords && uniqueChords.length > 0 && !controlsHidden && (
+      {!isFile && settings.showDiagrams && showChords && uniqueChords.length > 0 && !controlsHidden && (
         <div className="diagram-strip">
           {uniqueChords.map((c) => (
             <ChordDiagram key={c} chord={c} instrument={settings.instrument} scale={0.9} onClick={() => setChordSheet(c)} />
@@ -449,6 +458,15 @@ export function SongPage() {
           }}
         >
           <div style={swipe.style}>
+          {isFile ? (
+            <div className="song file-song" style={{ fontSize: settings.fontSize }}>
+              <div className="song-head">
+                <h2>{song.title}</h2>
+                {song.artist && <div className="artist">{song.artist}</div>}
+              </div>
+              <AttachmentView attachment={song.attachment!} zoom={settings.fontSize / 20} />
+            </div>
+          ) : (
           <SongRenderer
             song={parsed}
             opts={{
@@ -483,6 +501,7 @@ export function SongPage() {
               ) : null
             }
           />
+          )}
           </div>
         </div>
         <button
