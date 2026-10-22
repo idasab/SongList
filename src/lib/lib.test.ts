@@ -9,6 +9,7 @@ import { mergeRecords, restoreMerge } from './merge';
 import { anchorAt, anchorToPx, hitStroke, strokeFromPx, strokeToPx } from './annotations';
 import { buildChordProExport, buildSongFiles, buildTextExport, mailBody, mailSubject } from '../services/setlistExport';
 import { isValidEmail } from '../services/mail';
+import { filterSongs, keyId, keyIdLabel, keysInLibrary, songKey } from './search';
 
 describe('ackord', () => {
   it('känner igen ackord men inte vanliga ord', () => {
@@ -357,5 +358,45 @@ Refräng
   it('vanliga textrader påverkas inte', () => {
     const q = parseChordPro('Slut på dagen\nSolo i natt\n');
     expect(q.sections[0].lines.every((l) => l.type === 'lyrics')).toBe(true);
+  });
+});
+
+describe('tonartsfilter', () => {
+  const mk = (id: string, content: string, transpose = 0) => ({
+    id,
+    createdAt: 1,
+    updatedAt: 1,
+    title: id,
+    artist: '',
+    content,
+    tags: [],
+    transpose,
+  });
+  const songs = [
+    mk('g', '{key: G}\n[G]Ett [C]två\n'),
+    mk('f-till-g', '{key: F}\n[F]Tre [Bb]fyra\n', 2),
+    mk('am', '[Am]Fem [Dm]sex\n'),
+    mk('db', '{key: Db}\n[Db]Sju\n'),
+    mk('ciss', '{key: C#}\n[C#]Åtta\n'),
+    mk('ingen', 'Bara text utan ackord\n'),
+  ];
+
+  it('räknar in transponering och gissar från första ackordet', () => {
+    expect(keyId(songKey(songs[1])!.key)).toBe('7');
+    const am = songKey(songs[2])!;
+    expect(keyId(am.key)).toBe('9m');
+    expect(am.guessed).toBe(true);
+    expect(songKey(songs[5])).toBeNull();
+  });
+
+  it('listar tonarter i tonskalans ordning, C# och Db som samma', () => {
+    expect(keysInLibrary(songs)).toEqual(['1', '7', '9m']);
+    expect(keyIdLabel('1', 'international')).toBe('Db');
+    expect(keyIdLabel('9m', 'international')).toBe('Am');
+  });
+
+  it('filtrerar fram låtar i samma tonart', () => {
+    expect(filterSongs(songs, { query: '', fullText: false, tags: [], keyId: '7' }).map((s) => s.id)).toEqual(['g', 'f-till-g']);
+    expect(filterSongs(songs, { query: '', fullText: false, tags: [], keyId: '1' }).map((s) => s.id)).toEqual(['db', 'ciss']);
   });
 });

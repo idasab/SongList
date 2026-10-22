@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Music, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Header } from '../components/ui';
-import { filterSongs, sortSongs } from '../lib/search';
-import { formatKey, parseKey } from '../lib/chords';
+import { filterSongs, keyIdLabel, keysInLibrary, songKey, sortSongs } from '../lib/search';
+import { formatKey } from '../lib/chords';
 import { allTags, liveCategories, liveSongs, useStore } from '../store/useStore';
 import type { Song } from '../lib/model';
 
@@ -13,6 +13,7 @@ const session = {
   fullText: false,
   tags: [] as string[],
   categoryId: undefined as string | undefined,
+  keyId: undefined as string | undefined,
   showFilters: false,
 };
 
@@ -27,20 +28,22 @@ export function LibraryPage() {
   const [fullText, setFullText] = useState(session.fullText);
   const [tags, setTags] = useState<string[]>(session.tags);
   const [categoryId, setCategoryId] = useState(session.categoryId);
-  const [showFilters, setShowFilters] = useState(session.showFilters || tags.length > 0 || !!categoryId);
-  Object.assign(session, { query, fullText, tags, categoryId, showFilters });
+  const [key, setKey] = useState(session.keyId);
+  const [showFilters, setShowFilters] = useState(session.showFilters || tags.length > 0 || !!categoryId || !!key);
+  Object.assign(session, { query, fullText, tags, categoryId, keyId: key, showFilters });
 
   const songs = useMemo(() => liveSongs(songsRec), [songsRec]);
   const tagList = useMemo(() => allTags(songsRec), [songsRec]);
   const categories = useMemo(() => liveCategories(categoriesRec), [categoriesRec]);
+  const keys = useMemo(() => keysInLibrary(songs), [songs]);
   const sort = settings.librarySort;
 
   const visible = useMemo(
-    () => sortSongs(filterSongs(songs, { query, fullText, tags, categoryId }), sort),
-    [songs, query, fullText, tags, categoryId, sort],
+    () => sortSongs(filterSongs(songs, { query, fullText, tags, categoryId, keyId: key }), sort),
+    [songs, query, fullText, tags, categoryId, key, sort],
   );
 
-  const activeFilters = tags.length + (categoryId ? 1 : 0);
+  const activeFilters = tags.length + (categoryId ? 1 : 0) + (key ? 1 : 0);
 
   const toggleTag = (t: string) => setTags((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
 
@@ -131,6 +134,22 @@ export function LibraryPage() {
                 </>
               )}
 
+              {keys.length > 0 && (
+                <>
+                  <div className="label">Tonart</div>
+                  <div className="chips">
+                    <button className={`chip${!key ? ' on' : ''}`} onClick={() => setKey(undefined)}>
+                      Alla
+                    </button>
+                    {keys.map((k) => (
+                      <button key={k} className={`chip${key === k ? ' on' : ''}`} onClick={() => setKey(key === k ? undefined : k)}>
+                        {keyIdLabel(k, settings.notation)}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
               {tagList.length > 0 && (
                 <>
                   <div className="label">Taggar {tags.length > 1 && <span className="muted">(alla valda måste finnas)</span>}</div>
@@ -151,6 +170,7 @@ export function LibraryPage() {
                     onClick={() => {
                       setTags([]);
                       setCategoryId(undefined);
+                      setKey(undefined);
                     }}
                   >
                     <X size={16} /> Rensa filter
@@ -202,7 +222,7 @@ export function LibraryPage() {
 
 function SongRow({ song, categoryName }: { song: Song; categoryName?: string }) {
   const notation = useStore((s) => s.settings.notation);
-  const key = parseKey(song.key);
+  const key = songKey(song);
   return (
     <Link className="list-item" to={`/song/${song.id}`}>
       <div className="main">
@@ -224,7 +244,14 @@ function SongRow({ song, categoryName }: { song: Song; categoryName?: string }) 
           </div>
         )}
       </div>
-      {key && <div className="key-badge">{formatKey(key, song.transpose, notation)}</div>}
+      {key && (
+        <div
+          className={`key-badge${key.guessed ? ' guessed' : ''}`}
+          title={key.guessed ? 'Tonarten är gissad från första ackordet' : undefined}
+        >
+          {formatKey(key.key, 0, notation)}
+        </div>
+      )}
     </Link>
   );
 }
