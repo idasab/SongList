@@ -44,7 +44,7 @@ function contentFor(item: ImportItem): string {
 }
 
 // Valet för PDF och bilder sparas under sessionen
-const importPrefs = { keepOriginals: false };
+const importPrefs = { keepOriginals: true };
 
 const ACCEPT =
   '.cho,.chopro,.chordpro,.crd,.pro,.txt,.text,text/plain,.pdf,application/pdf,.zip,application/zip,image/*';
@@ -198,8 +198,8 @@ export function ImportPage() {
                 setKeepOriginals(v === 'file');
               }}
               options={[
-                { value: 'chordpro', label: 'Tolka text och ackord' },
                 { value: 'file', label: 'Behåll som fil' },
+                { value: 'chordpro', label: 'Tolka text och ackord' },
               ]}
             />
           </div>
@@ -417,8 +417,8 @@ function ImportItemCard({
             value={item.display ?? 'chordpro'}
             onChange={(v) => void setDisplay(v)}
             options={[
-              { value: 'chordpro', label: 'Text och ackord' },
               { value: 'file', label: item.original.kind === 'pdf' ? 'Originalfil (PDF)' : 'Originalfil (bild)' },
+              { value: 'chordpro', label: 'Text och ackord' },
             ]}
           />
           {interpreting && <span className="muted small-text">{interpreting}</span>}
