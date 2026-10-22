@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { formatChord, isChord, parseChord, parseKey, formatKey } from './chords';
 import { isChordRow, parseChordPro, parseLyricsLine, transposeSource, upsertDirective } from './chordpro';
 import { isChordLine, parseHeader } from './layout';
-import { looksLikeChordPro, textToChordPro, type Measure } from './textImport';
+import { isChordProFileName, looksLikeChordPro, textToChordPro, type Measure } from './textImport';
 import { ocrToChordPro, type OcrPage } from './ocrLayout';
 import { getPianoChord, normalizeSuffix } from './chordShapes';
 import { mergeRecords, restoreMerge } from './merge';
@@ -413,5 +413,21 @@ describe('ackordrader med taktsymboler', () => {
   it('textimporten gör om en ackordrad med snedstreck till ChordPro', () => {
     const out = textToChordPro('C / / G/B / / | Am / / G Am G/B\n');
     expect(out.trim()).toBe('[C] / / [G/B] / / | [Am] / / [G] [Am] [G/B]');
+  });
+});
+
+describe('igenkänning av ChordPro', () => {
+  it('filändelsen avgör', () => {
+    for (const n of ['Låt.cho', 'låt.CHOPRO', 'a.chordpro', 'b.crd', 'c.pro']) expect(isChordProFileName(n), n).toBe(true);
+    for (const n of ['låt.txt', 'låt.text', 'professor.txt']) expect(isChordProFileName(n), n).toBe(false);
+  });
+
+  it('känner igen innehåll med valfritt direktiv eller ett ackord i texten', () => {
+    expect(looksLikeChordPro('{t: Kort titel}\nEn rad text\n')).toBe(true);
+    expect(looksLikeChordPro('{key: G}\nEn rad text\n')).toBe(true);
+    expect(looksLikeChordPro('En rad med [G]ackord i\n')).toBe(true);
+    expect(looksLikeChordPro('[C] / / [G] / /\n')).toBe(true);
+    expect(looksLikeChordPro('G        C\nVanlig text under ackord\n')).toBe(false);
+    expect(looksLikeChordPro('[Verse 1]\nVanlig text\n')).toBe(false);
   });
 });

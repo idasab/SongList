@@ -93,20 +93,26 @@ export function titleFromFileName(name: string): string {
     .trim();
 }
 
-/** Avgör om en text redan är ChordPro. */
+/** Filändelser som alltid betyder ChordPro. */
+const CHORDPRO_EXTENSIONS = /\.(cho|chopro|chordpro|crd|pro)$/i;
+
+export function isChordProFileName(name: string): boolean {
+  return CHORDPRO_EXTENSIONS.test(name.trim());
+}
+
+/** Avgör om en text redan är ChordPro (används när filändelsen inte avgör, t.ex. .txt). */
 export function looksLikeChordPro(text: string): boolean {
-  if (/^\s*\{\s*(title|t|subtitle|st|artist|key|soc|start_of_\w+|c|comment|chorus)\s*[:}\s]/im.test(text)) return true;
-  let inline = 0;
+  // Ett direktiv på egen rad, t.ex. {title: …}, {t: …}, {key: G}, {soc}
+  if (/^\s*\{\s*[a-z_][\w-]*\s*(:[^}]*)?\}\s*$/im.test(text)) return true;
   for (const line of text.split(/\r?\n/)) {
     const re = /\[([^\]]+)\]/g;
     let m: RegExpExecArray | null;
-    let any = false;
+    let chords = 0;
     while ((m = re.exec(line))) {
-      if (isChord(m[1])) any = true;
+      if (isChord(m[1])) chords++;
     }
-    // Ackord inbäddat bland text på samma rad
-    if (any && line.replace(/\[[^\]]*\]/g, '').trim().length > 0) inline++;
-    if (inline >= 2) return true;
+    // Ackord inbäddat i texten, eller flera ackord i hakparentes på samma rad
+    if (chords > 0 && (line.replace(/\[[^\]]*\]/g, '').trim().length > 0 || chords >= 2)) return true;
   }
   return false;
 }

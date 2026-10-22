@@ -9,6 +9,7 @@ import {
   SOURCE_FONTS,
   canvasMeasure,
   decodeText,
+  isChordProFileName,
   looksLikeChordPro,
   suggestSourceFont,
   textToChordPro,
@@ -51,7 +52,8 @@ export function ImportPage() {
   const categories = useMemo(() => liveCategories(categoriesRec), [categoriesRec]);
 
   const addRaw = (fileName: string, raw: string) => {
-    const kind = looksLikeChordPro(raw) ? 'chordpro' : 'text';
+    // Filändelsen avgör först (.cho, .chopro …), annars innehållet
+    const kind = isChordProFileName(fileName) || looksLikeChordPro(raw) ? 'chordpro' : 'text';
     const font = kind === 'text' ? suggestSourceFont(raw, canvasMeasure) : 'monospace';
     setItems((cur) => [...cur, { id: newId(), fileName, raw, kind, font }]);
   };
