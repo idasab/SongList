@@ -1,14 +1,15 @@
 :root {
   --bg: #ecf0ec;
   --surface: #ffffff;
-  --surface-2: #efeee9;
-  --surface-3: #e4e2db;
+  --surface-2: #e2e9e2;
+  --surface-3: #d4ddd4;
   --text: #1b1d22;
   --text-muted: #6b6f78;
-  --border: #dcdad3;
+  --border: #d2dbd2;
   --accent: #458268;
   --accent-text: #ffffff;
   --accent-soft: #e1f1e9;
+  --tip-bg: #d6eadd;
   --chord: #a45f66;
   --chorus-bar: #68af90;
   --danger: #c62828;
@@ -38,6 +39,7 @@
     --accent: #458268;
     --accent-text: #ffffff;
     --accent-soft: #1d3a2e;
+    --tip-bg: #1d3a2e;
     --chord: #c98a90;
     --chorus-bar: #8cc8ad;
     --danger: #ff6b6b;
@@ -58,6 +60,7 @@
   --accent: #458268;
   --accent-text: #ffffff;
   --accent-soft: #1d3a2e;
+  --tip-bg: #1d3a2e;
   --chord: #c98a90;
   --chorus-bar: #8cc8ad;
   --danger: #ff6b6b;
@@ -1413,7 +1416,7 @@ textarea.note-text {
 }
 
 .tip {
-  background: var(--accent-soft);
+  background: var(--tip-bg, var(--accent-soft));
   border-radius: var(--radius);
   padding: 14px;
   margin-bottom: 14px;
@@ -1425,6 +1428,10 @@ textarea.note-text {
   align-items: center;
   gap: 6px;
   color: var(--text);
+}
+
+.tip b svg {
+  color: var(--accent);
 }
 
 .import-item {
