@@ -10,6 +10,7 @@ import {
   type Settings,
   type Song,
 } from '../lib/model';
+import type { SourceFont } from '../lib/textImport';
 import { db, requestPersistentStorage } from './db';
 import { SAMPLE_SONG } from './sample';
 
@@ -19,7 +20,34 @@ export interface Draft {
   imageDataUrl?: string;
   tags?: string[];
   categoryId?: string;
+  /** Låten kommer från importlistan och tas bort därifrån när den sparas */
+  importItemId?: string;
 }
+
+/** En låt som väntar i importlistan. */
+export interface ImportQueueItem {
+  id: string;
+  fileName: string;
+  raw: string;
+  kind: 'chordpro' | 'text';
+  font: SourceFont;
+  /** Tolkat från PDF eller bild – bör granskas */
+  origin?: 'pdf' | 'image';
+  imageDataUrl?: string;
+  /** Egen kategori för låten; undefined = samma som för alla, '' = ingen */
+  categoryId?: string;
+  /** Egna taggar som läggs till de gemensamma */
+  tags?: string[];
+}
+
+/** Importlistan finns kvar när man byter sida (men sparas inte mellan omstarter). */
+export interface ImportQueue {
+  items: ImportQueueItem[];
+  tags: string[];
+  categoryId: string;
+}
+
+const EMPTY_IMPORT_QUEUE: ImportQueue = { items: [], tags: [], categoryId: '' };
 
 interface State {
   ready: boolean;
@@ -30,6 +58,7 @@ interface State {
   folders: Record<string, SetlistFolder>;
   settings: Settings;
   draft: Draft | null;
+  importQueue: ImportQueue;
   /** Ökar vid varje lokal ändring (används för att trigga synk) */
   revision: number;
 
@@ -49,6 +78,8 @@ interface State {
   applyIncoming(data: LibraryData, opts?: { local?: boolean }): Promise<void>;
   exportLibrary(includeDeleted: boolean): LibraryData;
   setDraft(d: Draft | null): void;
+  updateImportQueue(fn: (q: ImportQueue) => ImportQueue): void;
+  resetImportQueue(): void;
 }
 
 export function deriveSongMeta(content: string) {
@@ -78,6 +109,7 @@ export const useStore = create<State>((set, get) => ({
   folders: {},
   settings: DEFAULT_SETTINGS,
   draft: null,
+  importQueue: EMPTY_IMPORT_QUEUE,
   revision: 0,
 
   init() {
@@ -281,6 +313,14 @@ export const useStore = create<State>((set, get) => ({
 
   setDraft(d) {
     set({ draft: d });
+  },
+
+  updateImportQueue(fn) {
+    set((s) => ({ importQueue: fn(s.importQueue) }));
+  },
+
+  resetImportQueue() {
+    set({ importQueue: EMPTY_IMPORT_QUEUE });
   },
 }));
 

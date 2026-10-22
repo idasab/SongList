@@ -38,6 +38,8 @@ export function EditorPage() {
     categoryId: existing?.categoryId ?? draft?.categoryId ?? '',
   });
   const [refImage] = useState(id ? undefined : draft?.imageDataUrl);
+  const [importItemId] = useState(id ? undefined : draft?.importItemId);
+  const updateImportQueue = useStore((s) => s.updateImportQueue);
   const [content, setContent] = useState(initial.current.content);
   const [tags, setTags] = useState<string[]>(initial.current.tags);
   const [categoryId, setCategoryId] = useState(initial.current.categoryId);
@@ -83,6 +85,7 @@ export function EditorPage() {
     const song = await saveSong({ id: existing?.id, content, tags, categoryId });
     setSaved(true);
     toast('Sparat');
+    if (importItemId) updateImportQueue((q) => ({ ...q, items: q.items.filter((x) => x.id !== importItemId) }));
     leavingAfterSave.current = true;
     navigate(`/song/${song.id}`, { replace: true });
   }, [saveSong, existing?.id, content, tags, categoryId, navigate]);

@@ -18,22 +18,9 @@ import { newId } from '../lib/model';
 import { canUseDocumentScanner, recognizeImageFile, scanDocument } from '../services/ocr';
 import { pickFiles } from '../services/files';
 import { expandFiles } from '../services/fileImport';
-import { allTags, liveCategories, useStore } from '../store/useStore';
+import { allTags, liveCategories, normalizeTags, useStore, type ImportQueueItem } from '../store/useStore';
 
-interface ImportItem {
-  id: string;
-  fileName: string;
-  raw: string;
-  kind: 'chordpro' | 'text';
-  font: SourceFont;
-  /** Tolkat från PDF eller bild – bör granskas */
-  origin?: 'pdf' | 'image';
-  imageDataUrl?: string;
-  /** Egen kategori för låten; undefined = samma som för alla, '' = ingen */
-  categoryId?: string;
-  /** Egna taggar som läggs till de gemensamma */
-  tags?: string[];
-}
+type ImportItem = ImportQueueItem;
 
 /** Kategori och taggar som en låt får vid import. */
 function resolveMeta(it: ImportItem, common: { tags: string[]; categoryId: string }) {
@@ -57,14 +44,27 @@ export function ImportPage() {
   const setDraft = useStore((s) => s.setDraft);
   const songsRec = useStore((s) => s.songs);
   const categoriesRec = useStore((s) => s.categories);
-  const [items, setItems] = useState<ImportItem[]>([]);
+  // Importlistan ligger i appens minne, så att den finns kvar när man byter sida
+  const queue = useStore((s) => s.importQueue);
+  const updateQueue = useStore((s) => s.updateImportQueue);
+  const resetQueue = useStore((s) => s.resetImportQueue);
+  const { items, tags, categoryId } = queue;
+  const setItems = (next: ImportItem[] | ((cur: ImportItem[]) => ImportItem[])) =>
+    updateQueue((q) => ({ ...q, items: typeof next === 'function' ? next(q.items) : next }));
+  const setTags = (t: string[]) => updateQueue((q) => ({ ...q, tags: t }));
+  const setCategoryId = (id: string) => updateQueue((q) => ({ ...q, categoryId: id }));
   const [pasting, setPasting] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [busy, setBusy] = useState<{ message: string; progress?: number } | null>(null);
-  const [tags, setTags] = useState<string[]>([]);
-  const [categoryId, setCategoryId] = useState('');
 
-  const tagSuggestions = useMemo(() => allTags(songsRec), [songsRec]);
+  // Förslag: taggar från sparade låtar och taggar som lagts till i importlistan
+  const tagSuggestions = useMemo(
+    () =>
+      normalizeTags([...allTags(songsRec), ...tags, ...items.flatMap((it) => it.tags ?? [])]).sort((a, b) =>
+        a.localeCompare(b, 'sv'),
+      ),
+    [songsRec, tags, items],
+  );
 
   const addRaw = (fileName: string, raw: string, extra: Partial<ImportItem> = {}) => {
     // Filändelsen avgör först (.cho, .chopro …), annars innehållet
@@ -135,14 +135,19 @@ export function ImportPage() {
     const list = items.map((it) => ({ content: convert(it), ...resolveMeta(it, { tags, categoryId }) }));
     const songs = await importSongs(list);
     toast(`${songs.length} ${songs.length === 1 ? 'låt' : 'låtar'} importerade`);
-    setItems([]);
+    resetQueue();
     if (songs.length === 1) navigate(`/song/${songs[0].id}`);
     else navigate('/');
   };
 
   const openInEditor = (it: ImportItem) => {
-    setDraft({ content: convert(it), imageDataUrl: it.imageDataUrl, ...resolveMeta(it, { tags, categoryId }) });
-    setItems((cur) => cur.filter((x) => x.id !== it.id));
+    // Låten ligger kvar i listan tills den sparas i editorn
+    setDraft({
+      content: convert(it),
+      imageDataUrl: it.imageDataUrl,
+      importItemId: it.id,
+      ...resolveMeta(it, { tags, categoryId }),
+    });
     navigate('/new');
   };
 
