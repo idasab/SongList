@@ -339,6 +339,17 @@ export function splitWords(segments: Segment[]): Segment[] {
   return out;
 }
 
+/**
+ * Sant för varje bit där ett ord fortsätter i nästa bit (ett ackord står mitt i ordet).
+ * Där kan ett bindestreck visas om ackordet gör att det blir ett mellanrum i ordet.
+ */
+export function midWordBreaks(segments: Segment[]): boolean[] {
+  return segments.map((s, i) => {
+    const next = segments[i + 1];
+    return !!next && /\p{L}$/u.test(s.text) && /^\p{L}/u.test(next.text);
+  });
+}
+
 // Tecken som får stå mellan ackorden i en ackordrad: taktstreck, snedstreck för slag,
 // repetitioner (x2) m.m. – men inga ord.
 const CHORD_ROW_TEXT = /^[\s/|\\:.,;\-–—%*()\[\]0-9x×]*$/i;

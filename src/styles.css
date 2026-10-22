@@ -1058,6 +1058,29 @@ textarea.note-text {
   line-height: 1.25;
 }
 
+/* Bindestreck i ett ord som delats av ett brett ackord. Får strecket inte plats
+   bryts det till en andra rad, som är dold. */
+.seg .ly:has(.hy) {
+  display: flex;
+}
+
+.seg .hy {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  /* Strecket får inte göra biten bredare – det använder bara befintligt mellanrum */
+  contain: inline-size;
+  height: 1.25em;
+  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.seg .hy > span:last-child {
+  padding: 0 0.15em;
+}
+
 .ln.chord-row {
   display: block;
   white-space: pre-wrap;

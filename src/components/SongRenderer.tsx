@@ -1,5 +1,5 @@
 import { memo, type CSSProperties, type ReactNode, type Ref } from 'react';
-import { isChordRow, splitWords, type Line, type ParsedSong, type Section } from '../lib/chordpro';
+import { isChordRow, midWordBreaks, splitWords, type Line, type ParsedSong, type Section } from '../lib/chordpro';
 import { formatChord, formatKey, parseKey, type ChordContext } from '../lib/chords';
 
 export interface RenderOptions {
@@ -75,9 +75,11 @@ function LineView({ line, ctx, opts, ln }: { line: Line; ctx: ChordContext; opts
         );
       }
       const lyricsEmpty = line.segments.every((s) => !s.text.trim());
+      const segs = splitWords(line.segments);
+      const breaks = midWordBreaks(segs);
       return (
         <div className="ln" data-ln={ln}>
-          {splitWords(line.segments).map((s, i) => {
+          {segs.map((s, i) => {
             const annot = s.chord?.startsWith('*');
             const chord = s.chord !== undefined ? formatChord(s.chord, ctx) : '';
             return (
@@ -88,7 +90,19 @@ function LineView({ line, ctx, opts, ln }: { line: Line; ctx: ChordContext; opts
                 >
                   {chord || ' '}
                 </span>
-                {!lyricsEmpty && <span className="ly">{s.text || ' '}</span>}
+                {!lyricsEmpty &&
+                  (breaks[i] ? (
+                    // Bindestreck i mellanrummet när ackordet är bredare än stavelsen
+                    <span className="ly">
+                      {s.text}
+                      <span className="hy" aria-hidden>
+                        <span />
+                        <span>-</span>
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="ly">{s.text || ' '}</span>
+                  ))}
               </span>
             );
           })}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatChord, isChord, parseChord, parseKey, formatKey } from './chords';
-import { isChordRow, parseChordPro, parseLyricsLine, splitWords, transposeSource, upsertDirective } from './chordpro';
+import { isChordRow, midWordBreaks, parseChordPro, parseLyricsLine, splitWords, transposeSource, upsertDirective } from './chordpro';
 import { isChordLine, parseHeader } from './layout';
 import { decodeText, isChordProFileName, looksLikeChordPro, textToChordPro, type Measure } from './textImport';
 import { ocrToChordPro, type OcrPage } from './ocrLayout';
@@ -546,5 +546,12 @@ describe('delrubriker A:, B:', () => {
     const out = textToChordPro('A:\nG        C\nHär är en rad\n');
     expect(out).toContain('{start_of_part: A}');
     expect(out).toContain('{end_of_part}');
+  });
+});
+
+describe('ord som delas av ackord', () => {
+  it('markerar bitar där ordet fortsätter i nästa bit', () => {
+    const segs = splitWords([{ text: 'Sol' }, { chord: 'C', text: 'ros i ' }, { chord: 'G', text: 'Mor-' }, { chord: 'D', text: 'gon' }]);
+    expect(midWordBreaks(segs)).toEqual([true, false, false, false, false]);
   });
 });

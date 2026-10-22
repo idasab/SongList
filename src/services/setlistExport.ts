@@ -7,6 +7,7 @@
 import {
   isChordRow,
   parseChordPro,
+  midWordBreaks,
   splitWords,
   songPrefersFlats,
   transposeSource,
@@ -315,13 +316,15 @@ function drawLine(
       }
       const lyricsEmpty = line.segments.every((s) => !s.text.trim());
       const rowH = (M.chordRow + (lyricsEmpty ? 0 : M.lyricRow)) * EM;
-      const segs = splitWords(line.segments).map((s) => {
+      const split = splitWords(line.segments);
+      const breaks = midWordBreaks(split);
+      const segs = split.map((s) => {
         const chord = s.chord !== undefined ? formatChord(s.chord, ctx) : '';
         setFont(doc, 'bold', 0.85 * EM);
         const cw = chord ? doc.getTextWidth(chord) + 0.35 * 0.85 * EM : 0;
         setFont(doc, 'normal', EM);
         const lw = lyricsEmpty ? 0 : doc.getTextWidth(s.text);
-        return { chord, text: s.text, annot: !!s.chord?.startsWith('*'), w: Math.max(cw, lw) };
+        return { chord, text: s.text, annot: !!s.chord?.startsWith('*'), w: Math.max(cw, lw), lw };
       });
       c.y += chordGap;
       let first = true;
@@ -341,6 +344,12 @@ function drawLine(
           if (!lyricsEmpty && s.text) {
             setFont(doc, 'normal', EM);
             doc.text(s.text, x, c.y + M.chordRow * EM + 0.05 * EM, { baseline: 'top' });
+            // Bindestreck i mellanrummet när ackordet gör ordet bredare
+            const dash = doc.getTextWidth('-');
+            const gap = s.w - s.lw;
+            if (breaks[i] && gap >= dash + 0.3 * EM) {
+              doc.text('-', x + s.lw + (gap - dash) / 2, c.y + M.chordRow * EM + 0.05 * EM, { baseline: 'top' });
+            }
           }
           x += s.w;
           i++;
