@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { NavLink, Outlet, RouterProvider, createHashRouter } from 'react-router-dom';
 import { FileUp, ListMusic, Music, Settings } from 'lucide-react';
-import { Toaster, toast } from './components/ui';
+import { AskTextHost, Toaster, toast } from './components/ui';
 import { consumeUpdateNotice, prefetchLazyParts } from './appUpdate';
 import { preloadChordDb } from './lib/chordShapes';
 import { EditorPage } from './pages/EditorPage';
@@ -64,6 +64,7 @@ function Root() {
     <div className="app">
       <Outlet />
       <Toaster />
+      <AskTextHost />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Cloud, CloudUpload, Download, Pencil, Plus, RefreshCw, Trash, Upload } from 'lucide-react';
-import { Header, Segmented, Sheet, Switch, toast, toastError } from '../components/ui';
+import { askText, Header, Segmented, Sheet, Switch, toast, toastError } from '../components/ui';
 import type { Instrument } from '../lib/chordShapes';
 import type { BackupFile, Theme } from '../lib/model';
 import type { Notation } from '../lib/chords';
@@ -145,8 +145,8 @@ function CategoriesCard() {
               className="btn ghost icon"
               aria-label={`Byt namn på ${c.name}`}
               onClick={async () => {
-                const n = prompt('Nytt namn', c.name);
-                if (n && n.trim()) await saveCategory({ id: c.id, name: n });
+                const n = await askText({ title: 'Byt namn på kategorin', label: 'Namn', initial: c.name, confirmLabel: 'Spara' });
+                if (n) await saveCategory({ id: c.id, name: n });
               }}
             >
               <Pencil size={18} />

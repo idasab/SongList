@@ -149,6 +149,82 @@ export function toastError(e: unknown, prefix = '') {
   toast(prefix ? `${prefix}: ${text}` : text, { error: true });
 }
 
+// --- Textruta för ett namn (ersätter webbläsarens prompt(), som fungerar dåligt på iPhone) ---
+
+interface AskTextRequest {
+  title: string;
+  label?: string;
+  initial?: string;
+  placeholder?: string;
+  confirmLabel?: string;
+  resolve: (value: string | null) => void;
+}
+
+let askListener: ((r: AskTextRequest) => void) | null = null;
+
+/** Visar en ruta där användaren skriver en text. Ger null om rutan stängs. */
+export function askText(opts: Omit<AskTextRequest, 'resolve'>): Promise<string | null> {
+  return new Promise((resolve) => {
+    if (!askListener) {
+      resolve(null);
+      return;
+    }
+    askListener({ ...opts, resolve });
+  });
+}
+
+/** Monteras en gång i appen och visar rutorna från askText(). */
+export function AskTextHost() {
+  const [req, setReq] = useState<AskTextRequest | null>(null);
+  const [value, setValue] = useState('');
+  useEffect(() => {
+    askListener = (r) => {
+      setValue(r.initial ?? '');
+      setReq(r);
+    };
+    return () => {
+      askListener = null;
+    };
+  }, []);
+  if (!req) return null;
+  const close = (result: string | null) => {
+    req.resolve(result);
+    setReq(null);
+  };
+  const submit = () => {
+    const v = value.trim();
+    if (v) close(v);
+  };
+  return (
+    <Sheet
+      title={req.title}
+      onClose={() => close(null)}
+      footer={
+        <>
+          <button className="btn" onClick={() => close(null)}>
+            Avbryt
+          </button>
+          <button className="btn primary" disabled={!value.trim()} onClick={submit}>
+            {req.confirmLabel ?? 'OK'}
+          </button>
+        </>
+      }
+    >
+      <label className="field">
+        {req.label && <span>{req.label}</span>}
+        <input
+          className="input"
+          autoFocus
+          value={value}
+          placeholder={req.placeholder}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && submit()}
+        />
+      </label>
+    </Sheet>
+  );
+}
+
 export function Toaster() {
   const [msg, setMsg] = useState<ToastMsg | null>(null);
   useEffect(() => {

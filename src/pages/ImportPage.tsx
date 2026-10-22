@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Camera, ChevronDown, ChevronUp, ClipboardPaste, FileUp, Image as ImageIcon, Lightbulb, Pencil, X } from 'lucide-react';
 import { SongRenderer } from '../components/SongRenderer';
 import { TagInput } from '../components/TagInput';
-import { Header, Sheet, toast, toastError } from '../components/ui';
+import { askText, Header, Sheet, toast, toastError } from '../components/ui';
 import { parseChordPro, songPrefersFlats } from '../lib/chordpro';
 import {
   SOURCE_FONTS,
@@ -426,7 +426,7 @@ function CategorySelect({
       onChange(v);
       return;
     }
-    const name = prompt('Namn på den nya kategorin')?.trim();
+    const name = await askText({ title: 'Ny kategori', label: 'Namn', placeholder: 't.ex. Psalmer', confirmLabel: 'Skapa' });
     if (!name) return;
     const existing = categories.find((c) => c.name.toLowerCase() === name.toLowerCase());
     onChange(existing ? existing.id : (await saveCategory({ name })).id);
