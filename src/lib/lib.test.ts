@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatChord, isChord, parseChord, parseKey, formatKey } from './chords';
-import { isChordRow, parseChordPro, parseLyricsLine, transposeSource, upsertDirective } from './chordpro';
+import { isChordRow, parseChordPro, parseLyricsLine, splitWords, transposeSource, upsertDirective } from './chordpro';
 import { isChordLine, parseHeader } from './layout';
 import { isChordProFileName, looksLikeChordPro, textToChordPro, type Measure } from './textImport';
 import { ocrToChordPro, type OcrPage } from './ocrLayout';
@@ -429,5 +429,37 @@ describe('igenkänning av ChordPro', () => {
     expect(looksLikeChordPro('[C] / / [G] / /\n')).toBe(true);
     expect(looksLikeChordPro('G        C\nVanlig text under ackord\n')).toBe(false);
     expect(looksLikeChordPro('[Verse 1]\nVanlig text\n')).toBe(false);
+  });
+});
+
+describe('ackord mellan ord', () => {
+  it('flyttar ett ackord från mellanslaget till nästa ord', () => {
+    const segs = splitWords(parseLyricsLine('Ett [E]två, tre [E/G#]fem,[A/C#] sex sju'));
+    expect(segs.map((s) => [s.chord ?? '', s.text])).toEqual([
+      ['', 'Ett '],
+      ['E', 'två, '],
+      ['', 'tre '],
+      ['E/G#', 'fem, '],
+      ['A/C#', 'sex '],
+      ['', 'sju'],
+    ]);
+  });
+
+  it('behåller ackord i direkt följd som egna kolumner', () => {
+    const segs = splitWords(parseLyricsLine('elva[A] [A/C#]tolv'));
+    expect(segs.map((s) => [s.chord ?? '', s.text])).toEqual([
+      ['', 'elva'],
+      ['A', ' '],
+      ['A/C#', 'tolv'],
+    ]);
+  });
+
+  it('ackord först på raden före ett mellanslag', () => {
+    const segs = splitWords(parseLyricsLine('[A] Och var'));
+    expect(segs.map((s) => [s.chord ?? '', s.text])).toEqual([
+      ['', ' '],
+      ['A', 'Och '],
+      ['', 'var'],
+    ]);
   });
 });

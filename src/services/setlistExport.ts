@@ -7,6 +7,7 @@
 import {
   isChordRow,
   parseChordPro,
+  splitWords,
   songPrefersFlats,
   transposeSource,
   type Line,
@@ -224,17 +225,6 @@ function setFont(doc: JsPdf, style: 'normal' | 'bold' | 'italic', size: number, 
   doc.setFont('helvetica', style);
   doc.setFontSize(size);
   doc.setTextColor(color);
-}
-
-/** Delar upp segment ord för ord (som i appens visning) så att raderna kan brytas mellan ord. */
-function splitWords(segments: { chord?: string; text: string }[]) {
-  const out: { chord?: string; text: string }[] = [];
-  for (const s of segments) {
-    const parts = s.text.match(/\S*\s*/g)?.filter(Boolean) ?? [];
-    if (parts.length <= 1) out.push(s);
-    else parts.forEach((p, i) => out.push({ chord: i === 0 ? s.chord : undefined, text: p }));
-  }
-  return out;
 }
 
 function drawLine(

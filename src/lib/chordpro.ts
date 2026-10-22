@@ -301,6 +301,36 @@ export function parseChordPro(source: string): ParsedSong {
   return { meta, sections, chords, hNotation: detectHNotation(chords) };
 }
 
+/**
+ * Delar upp segment ord för ord så att raderna kan radbrytas mellan orden.
+ *
+ * Ett ackord som står på mellanslaget före ett ord, t.ex. "fem,[A/C#] sex", flyttas till
+ * ordet. Annars breddas mellanslaget till ackordets bredd och ger ett stort hål mitt i raden.
+ * Mellanslaget läggs på föregående ord så att ordavståndet blir som vanligt.
+ */
+export function splitWords(segments: Segment[]): Segment[] {
+  const out: Segment[] = [];
+  for (const s of segments) {
+    const parts = s.text.match(/\S*\s*/g)?.filter(Boolean) ?? [];
+    if (parts.length <= 1) {
+      out.push({ ...s });
+      continue;
+    }
+    let chord = s.chord;
+    parts.forEach((p, i) => {
+      if (i === 0 && chord !== undefined && !p.trim()) {
+        const prev = out[out.length - 1];
+        if (prev) prev.text += p;
+        else out.push({ text: p });
+        return; // ackordet följer med till nästa ord
+      }
+      out.push({ chord, text: p });
+      chord = undefined;
+    });
+  }
+  return out;
+}
+
 // Tecken som får stå mellan ackorden i en ackordrad: taktstreck, snedstreck för slag,
 // repetitioner (x2) m.m. – men inga ord.
 const CHORD_ROW_TEXT = /^[\s/|\\:.,;\-–—%*()\[\]0-9x×]*$/i;

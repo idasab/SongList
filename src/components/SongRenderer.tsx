@@ -1,5 +1,5 @@
 import { memo, type CSSProperties, type ReactNode, type Ref } from 'react';
-import { isChordRow, type Line, type ParsedSong, type Section, type Segment } from '../lib/chordpro';
+import { isChordRow, splitWords, type Line, type ParsedSong, type Section } from '../lib/chordpro';
 import { formatChord, formatKey, parseKey, type ChordContext } from '../lib/chords';
 
 export interface RenderOptions {
@@ -22,20 +22,6 @@ function sectionStarts(sections: Section[]): number[] {
     n += (s.label ? 1 : 0) + s.lines.length;
   }
   return starts;
-}
-
-/** Delar upp segment ord för ord så att raderna kan radbrytas mellan orden. */
-function splitWords(segments: Segment[]): Segment[] {
-  const out: Segment[] = [];
-  for (const s of segments) {
-    const parts = s.text.match(/\S*\s*/g)?.filter(Boolean) ?? [];
-    if (parts.length <= 1) {
-      out.push(s);
-      continue;
-    }
-    parts.forEach((p, i) => out.push({ chord: i === 0 ? s.chord : undefined, text: p }));
-  }
-  return out;
 }
 
 function LineView({ line, ctx, opts, ln }: { line: Line; ctx: ChordContext; opts: RenderOptions; ln: number }) {
