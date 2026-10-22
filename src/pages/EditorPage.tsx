@@ -35,7 +35,7 @@ export function EditorPage() {
   const initial = useRef({
     content: existing?.content ?? draft?.content ?? NEW_TEMPLATE,
     tags: existing?.tags ?? draft?.tags ?? [],
-    categoryId: existing?.categoryId ?? '',
+    categoryId: existing?.categoryId ?? draft?.categoryId ?? '',
   });
   const [refImage] = useState(id ? undefined : draft?.imageDataUrl);
   const [content, setContent] = useState(initial.current.content);

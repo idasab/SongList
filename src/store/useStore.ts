@@ -18,6 +18,7 @@ export interface Draft {
   /** Bild från skanning som visas som referens i editorn */
   imageDataUrl?: string;
   tags?: string[];
+  categoryId?: string;
 }
 
 interface State {

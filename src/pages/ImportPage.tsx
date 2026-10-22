@@ -29,6 +29,18 @@ interface ImportItem {
   /** Tolkat från PDF eller bild – bör granskas */
   origin?: 'pdf' | 'image';
   imageDataUrl?: string;
+  /** Egen kategori för låten; undefined = samma som för alla, '' = ingen */
+  categoryId?: string;
+  /** Egna taggar som läggs till de gemensamma */
+  tags?: string[];
+}
+
+/** Kategori och taggar som en låt får vid import. */
+function resolveMeta(it: ImportItem, common: { tags: string[]; categoryId: string }) {
+  return {
+    categoryId: it.categoryId === undefined ? common.categoryId : it.categoryId,
+    tags: [...common.tags, ...(it.tags ?? [])],
+  };
 }
 
 function convert(item: ImportItem): string {
@@ -53,7 +65,6 @@ export function ImportPage() {
   const [categoryId, setCategoryId] = useState('');
 
   const tagSuggestions = useMemo(() => allTags(songsRec), [songsRec]);
-  const categories = useMemo(() => liveCategories(categoriesRec), [categoriesRec]);
 
   const addRaw = (fileName: string, raw: string, extra: Partial<ImportItem> = {}) => {
     // Filändelsen avgör först (.cho, .chopro …), annars innehållet
@@ -121,7 +132,7 @@ export function ImportPage() {
   };
 
   const importAll = async () => {
-    const list = items.map((it) => ({ content: convert(it), tags, categoryId }));
+    const list = items.map((it) => ({ content: convert(it), ...resolveMeta(it, { tags, categoryId }) }));
     const songs = await importSongs(list);
     toast(`${songs.length} ${songs.length === 1 ? 'låt' : 'låtar'} importerade`);
     setItems([]);
@@ -130,7 +141,7 @@ export function ImportPage() {
   };
 
   const openInEditor = (it: ImportItem) => {
-    setDraft({ content: convert(it), tags, imageDataUrl: it.imageDataUrl });
+    setDraft({ content: convert(it), imageDataUrl: it.imageDataUrl, ...resolveMeta(it, { tags, categoryId }) });
     setItems((cur) => cur.filter((x) => x.id !== it.id));
     navigate('/new');
   };
@@ -184,6 +195,24 @@ export function ImportPage() {
           {items.length > 0 && (
             <>
               <div className="section-title">Att importera ({items.length})</div>
+
+              <div className="card">
+                <h2 style={{ marginBottom: 4 }}>För alla låtar</h2>
+                <p className="muted small-text" style={{ marginTop: 0 }}>
+                  Gäller alla låtar nedan. Du kan välja en annan kategori och lägga till fler taggar på varje låt.
+                </p>
+                <div className="grid-2">
+                  <label className="field">
+                    <span>Kategori</span>
+                    <CategorySelect value={categoryId} onChange={setCategoryId} />
+                  </label>
+                  <div className="field">
+                    <span>Taggar</span>
+                    <TagInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
+                  </div>
+                </div>
+              </div>
+
               {items.map((it) => (
                 <ImportItemCard
                   key={it.id}
@@ -191,27 +220,12 @@ export function ImportPage() {
                   onChange={(next) => setItems((cur) => cur.map((x) => (x.id === it.id ? next : x)))}
                   onRemove={() => setItems((cur) => cur.filter((x) => x.id !== it.id))}
                   onEdit={() => openInEditor(it)}
+                  commonCategoryName={categoryId ? categoriesRec[categoryId]?.name : undefined}
+                  tagSuggestions={tagSuggestions}
                 />
               ))}
 
               <div className="card">
-                <div className="grid-2">
-                  <label className="field">
-                    <span>Kategori för importerade låtar</span>
-                    <select className="select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-                      <option value="">Ingen</option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="field">
-                    <span>Taggar för importerade låtar</span>
-                    <TagInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
-                  </div>
-                </div>
                 <div className="btn-row" style={{ justifyContent: 'flex-end' }}>
                   <button className="btn" onClick={() => setItems([])}>
                     Rensa
@@ -284,13 +298,18 @@ function ImportItemCard({
   onChange,
   onRemove,
   onEdit,
+  commonCategoryName,
+  tagSuggestions,
 }: {
   item: ImportItem;
   onChange: (i: ImportItem) => void;
   onRemove: () => void;
   onEdit: () => void;
+  commonCategoryName?: string;
+  tagSuggestions: string[];
 }) {
   const [open, setOpen] = useState(false);
+  const [showTags, setShowTags] = useState(false);
   const notation = useStore((s) => s.settings.notation);
   const content = useMemo(() => convert(item), [item]);
   const parsed = useMemo(() => parseChordPro(content), [content]);
@@ -339,6 +358,17 @@ function ImportItemCard({
             <option value="chordpro">ChordPro</option>
           </select>
         </label>
+        <label className="small-text" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          Kategori
+          <CategorySelect
+            value={item.categoryId ?? SAME_AS_ALL}
+            onChange={(v) => onChange({ ...item, categoryId: v === SAME_AS_ALL ? undefined : v })}
+            sameAsAllLabel={`Som för alla${commonCategoryName ? ` (${commonCategoryName})` : ''}`}
+          />
+        </label>
+        <button className={`btn small${showTags || item.tags?.length ? ' active' : ''}`} onClick={() => setShowTags((v) => !v)}>
+          Taggar{item.tags?.length ? ` (${item.tags.length})` : ''}
+        </button>
         <span style={{ flex: 1 }} />
         <button className="btn small" onClick={onEdit}>
           <Pencil size={15} /> Öppna i editor
@@ -347,6 +377,14 @@ function ImportItemCard({
           {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />} Förhandsvisa
         </button>
       </div>
+      {showTags && (
+        <div className="opts" style={{ display: 'block' }}>
+          <TagInput value={item.tags ?? []} onChange={(t) => onChange({ ...item, tags: t })} suggestions={tagSuggestions} />
+          <div className="muted small-text" style={{ marginTop: 4 }}>
+            Läggs till de taggar som gäller för alla låtar.
+          </div>
+        </div>
+      )}
       {open && (
         <div className="import-preview">
           <SongRenderer
@@ -362,5 +400,48 @@ function ImportItemCard({
         </div>
       )}
     </div>
+  );
+}
+
+const SAME_AS_ALL = '__same__';
+const NEW_CATEGORY = '__new__';
+
+/** Väljare för kategori där man också kan skapa en ny kategori direkt. */
+function CategorySelect({
+  value,
+  onChange,
+  sameAsAllLabel,
+}: {
+  value: string;
+  onChange: (id: string) => void;
+  /** Visar valet "Som för alla" (värdet SAME_AS_ALL) */
+  sameAsAllLabel?: string;
+}) {
+  const categoriesRec = useStore((s) => s.categories);
+  const saveCategory = useStore((s) => s.saveCategory);
+  const categories = useMemo(() => liveCategories(categoriesRec), [categoriesRec]);
+
+  const choose = async (v: string) => {
+    if (v !== NEW_CATEGORY) {
+      onChange(v);
+      return;
+    }
+    const name = prompt('Namn på den nya kategorin')?.trim();
+    if (!name) return;
+    const existing = categories.find((c) => c.name.toLowerCase() === name.toLowerCase());
+    onChange(existing ? existing.id : (await saveCategory({ name })).id);
+  };
+
+  return (
+    <select className="select" value={value} onChange={(e) => void choose(e.target.value)}>
+      {sameAsAllLabel && <option value={SAME_AS_ALL}>{sameAsAllLabel}</option>}
+      <option value="">Ingen</option>
+      {categories.map((c) => (
+        <option key={c.id} value={c.id}>
+          {c.name}
+        </option>
+      ))}
+      <option value={NEW_CATEGORY}>+ Ny kategori…</option>
+    </select>
   );
 }
