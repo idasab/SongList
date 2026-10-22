@@ -29,7 +29,7 @@ export function LibraryPage() {
   const [tags, setTags] = useState<string[]>(session.tags);
   const [categoryId, setCategoryId] = useState(session.categoryId);
   const [key, setKey] = useState(session.keyId);
-  const [showFilters, setShowFilters] = useState(session.showFilters || tags.length > 0 || !!categoryId || !!key);
+  const [showFilters, setShowFilters] = useState(session.showFilters || !!categoryId || !!key);
   Object.assign(session, { query, fullText, tags, categoryId, keyId: key, showFilters });
 
   const songs = useMemo(() => liveSongs(songsRec), [songsRec]);
@@ -43,7 +43,10 @@ export function LibraryPage() {
     [songs, query, fullText, tags, categoryId, key, sort],
   );
 
-  const activeFilters = tags.length + (categoryId ? 1 : 0) + (key ? 1 : 0);
+  // Filter i filterpanelen (taggarna ligger i en egen rad under sökfältet)
+  const activeFilters = (categoryId ? 1 : 0) + (key ? 1 : 0);
+  // Valda taggar först, så att de syns utan att man behöver svepa
+  const tagRow = useMemo(() => [...tags.filter((t) => tagList.includes(t)), ...tagList.filter((t) => !tags.includes(t))], [tags, tagList]);
 
   const toggleTag = (t: string) => setTags((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
 
@@ -90,6 +93,26 @@ export function LibraryPage() {
               <SlidersHorizontal size={20} />
             </button>
           </div>
+
+          {tagList.length > 0 && (
+            <div className="chips scroll tag-row" aria-label="Filtrera på taggar">
+              {tags.length > 0 && (
+                <button className="chip" onClick={() => setTags([])} aria-label="Rensa taggar">
+                  <X size={14} /> Rensa
+                </button>
+              )}
+              {tagRow.map((t) => (
+                <button
+                  key={t}
+                  className={`chip${tags.includes(t) ? ' on' : ''}`}
+                  aria-pressed={tags.includes(t)}
+                  onClick={() => toggleTag(t)}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
 
           {showFilters && (
             <div className="filter-panel card">
@@ -150,25 +173,11 @@ export function LibraryPage() {
                 </>
               )}
 
-              {tagList.length > 0 && (
-                <>
-                  <div className="label">Taggar {tags.length > 1 && <span className="muted">(alla valda måste finnas)</span>}</div>
-                  <div className="chips">
-                    {tagList.map((t) => (
-                      <button key={t} className={`chip${tags.includes(t) ? ' on' : ''}`} onClick={() => toggleTag(t)}>
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-
               {activeFilters > 0 && (
                 <div style={{ marginTop: 10 }}>
                   <button
                     className="btn small"
                     onClick={() => {
-                      setTags([]);
                       setCategoryId(undefined);
                       setKey(undefined);
                     }}

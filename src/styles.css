@@ -392,6 +392,18 @@ a {
   scrollbar-width: none;
 }
 
+/* Taggraden under sökfältet: sveps i sidled, går ut till skärmkanten */
+.tag-row {
+  margin: 0 calc(-16px - var(--safe-right)) 10px calc(-16px - var(--safe-left));
+  padding: 0 calc(16px + var(--safe-right)) 2px calc(16px + var(--safe-left));
+  -webkit-overflow-scrolling: touch;
+  scroll-padding: 0 16px;
+}
+
+.tag-row .chip {
+  flex-shrink: 0;
+}
+
 .chips.scroll::-webkit-scrollbar {
   display: none;
 }
