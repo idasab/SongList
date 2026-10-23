@@ -748,3 +748,13 @@ describe('bokstavsgrupper i låtlistan', () => {
     });
   });
 });
+
+describe('exempellåten', () => {
+  it('ersätts av en radering från en annan enhet', () => {
+    const sample = { id: 'songlist-exempel', title: 'Välkommen', artist: '', content: 'x', tags: [], transpose: 0, createdAt: 1, updatedAt: 1 };
+    const tomb = { ...sample, content: '', deletedAt: 5000, updatedAt: 5000 };
+    const { incoming } = mergeRecords([sample], [tomb]);
+    expect(incoming).toHaveLength(1);
+    expect(incoming[0].deletedAt).toBe(5000);
+  });
+});

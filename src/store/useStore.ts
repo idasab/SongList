@@ -121,6 +121,8 @@ function toRecord<T extends { id: string }>(list: T[]): Record<string, T> {
 
 let initPromise: Promise<void> | null = null;
 
+const SAMPLE_SONG_ID = 'songlist-exempel';
+
 /**
  * Tidigare tolkades {subtitle} som artist när artist saknades. Nu är det en alternativ titel:
  * räkna om fälten för låtar som har en {subtitle} men saknar det nya fältet.
@@ -166,7 +168,19 @@ export const useStore = create<State>((set, get) => ({
         ready: true,
       });
       if (firstRun && songs.length === 0) {
-        await get().saveSong({ content: SAMPLE_SONG, tags: ['exempel'] });
+        // Fast id och gammal tidsstämpel: alla enheter får samma exempellåt i stället för en ny
+        // per enhet, och har den raderats på en annan enhet vinner raderingen vid synk
+        const sample: Song = {
+          id: SAMPLE_SONG_ID,
+          createdAt: 1,
+          updatedAt: 1,
+          transpose: 0,
+          ...deriveSongMeta(SAMPLE_SONG),
+          content: SAMPLE_SONG,
+          tags: ['exempel'],
+        };
+        set((s) => ({ songs: { ...s.songs, [sample.id]: sample } }));
+        await db.songs.put(sample);
       }
     })();
     return initPromise;
