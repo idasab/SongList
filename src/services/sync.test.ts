@@ -45,3 +45,20 @@ describe('synk', () => {
     expect(writes[0]).not.toContain('Ny under synken');
   });
 });
+
+describe('exempellåten', () => {
+  it('tas bort efter synk om det redan finns en orörd kopia från en annan enhet', async () => {
+    const { SAMPLE_SONG } = await import('../store/sample');
+    const base = { artist: '', tags: ['exempel'], transpose: 0, createdAt: 1 };
+    useStore.setState({
+      songs: {
+        'songlist-exempel': { ...base, id: 'songlist-exempel', title: 'Välkommen', content: SAMPLE_SONG, updatedAt: 1 },
+        gammal: { ...base, id: 'gammal', title: 'Välkommen', content: SAMPLE_SONG, updatedAt: 500 },
+      },
+    });
+    writes.push('tidigare'); // den låtsade iCloud håller bara kvar allra första skrivningen
+    await syncNow();
+    expect(useStore.getState().songs['songlist-exempel'].deletedAt).toBeDefined();
+    expect(useStore.getState().songs.gammal.deletedAt).toBeUndefined();
+  });
+});

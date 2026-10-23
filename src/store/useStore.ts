@@ -121,7 +121,7 @@ function toRecord<T extends { id: string }>(list: T[]): Record<string, T> {
 
 let initPromise: Promise<void> | null = null;
 
-const SAMPLE_SONG_ID = 'songlist-exempel';
+export const SAMPLE_SONG_ID = 'songlist-exempel';
 
 /**
  * Tidigare tolkades {subtitle} som artist när artist saknades. Nu är det en alternativ titel:

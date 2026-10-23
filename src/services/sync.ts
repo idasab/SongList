@@ -9,7 +9,8 @@ import { App } from '@capacitor/app';
 import { mergeLibrary } from '../lib/merge';
 import { isBackupFile, sanitizeLibrary, type BackupFile } from '../lib/model';
 import { hasNativePlugin, SongListNative } from '../native/songlistNative';
-import { useStore } from '../store/useStore';
+import { SAMPLE_SONG_ID, useStore } from '../store/useStore';
+import { SAMPLE_SONG } from '../store/sample';
 import { autoBackupIfDue } from './backup';
 
 const SYNC_DIR = 'Sync';
@@ -73,6 +74,7 @@ async function doSync(): Promise<SyncResult> {
       console.warn('Kunde inte läsa synkfil', f.name, e);
     }
   }
+  await removeDuplicateSample();
   const snapshot: BackupFile = {
     format: 'songlist-sync',
     version: 1,
@@ -87,6 +89,19 @@ async function doSync(): Promise<SyncResult> {
   });
   await useStore.getState().updateSettings({ lastSyncAt: Date.now() });
   return { received, devices };
+}
+
+/**
+ * Exempellåten fick tidigare ett nytt id på varje enhet. Finns en sådan orörd kopia från en
+ * annan enhet behövs inte den här enhetens (med fast id), så länge den inte har ändrats.
+ */
+async function removeDuplicateSample(): Promise<void> {
+  const { songs, deleteSong } = useStore.getState();
+  const sample = songs[SAMPLE_SONG_ID];
+  if (!sample || sample.deletedAt || sample.updatedAt !== 1) return;
+  const text = SAMPLE_SONG.normalize('NFC').trim();
+  const other = Object.values(songs).some((s) => s.id !== SAMPLE_SONG_ID && !s.deletedAt && s.content.normalize('NFC').trim() === text);
+  if (other) await deleteSong(SAMPLE_SONG_ID);
 }
 
 let started = false;
