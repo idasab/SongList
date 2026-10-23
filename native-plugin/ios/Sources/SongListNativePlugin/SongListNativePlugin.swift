@@ -26,6 +26,8 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
     ]
 
     private let queue = DispatchQueue(label: "se.otimo.songlist.native", qos: .userInitiated)
+    /// Läsningar kan behöva vänta på nedladdning från iCloud; de får inte blockera andra anrop
+    private let readQueue = DispatchQueue(label: "se.otimo.songlist.native.read", qos: .userInitiated, attributes: .concurrent)
     private var scanCall: CAPPluginCall?
     private var mailCall: CAPPluginCall?
 
@@ -109,7 +111,7 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
     }
 
     /// Ser till att en iCloud-fil finns lokalt (laddar ner den vid behov).
-    private func ensureDownloaded(_ url: URL, timeout: TimeInterval = 30) throws {
+    private func ensureDownloaded(_ url: URL, timeout: TimeInterval = 10) throws {
         let fm = FileManager.default
         let placeholder = url.deletingLastPathComponent()
             .appendingPathComponent("." + url.lastPathComponent + ".icloud")
@@ -120,6 +122,11 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
         if exists {
             let values = try? url.resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey])
             if values?.isUbiquitousItem != true || values?.ubiquitousItemDownloadingStatus == .current {
+                return
+            }
+            if values?.ubiquitousItemDownloadingStatus == .downloaded {
+                // En äldre kopia finns lokalt: använd den direkt och hämta den nya i bakgrunden
+                try? fm.startDownloadingUbiquitousItem(at: url)
                 return
             }
         }
@@ -147,7 +154,7 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
         }
         let scope = call.getString("scope") ?? "data"
         let asBase64 = call.getBool("base64") ?? false
-        queue.async {
+        readQueue.async {
             guard let url = self.resolveURL(scope: scope, path: path) else {
                 call.reject("iCloud är inte tillgängligt", "ICLOUD_UNAVAILABLE")
                 return
@@ -168,8 +175,11 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
                     }
                 }
                 if let e = coordinationError ?? readError { throw e }
-                call.resolve(["data": result ?? ""])
-            } catch let e as NSError where e.code == 404 {
+                guard let text = result else {
+                    throw self.error("Filen är inte giltig text (UTF-8)", code: 415)
+                }
+                call.resolve(["data": text])
+            } catch let e as NSError where e.domain == "SongListNative" && e.code == 404 {
                 call.reject("Filen finns inte", "NOT_FOUND")
             } catch {
                 call.reject("Kunde inte läsa från iCloud: \(error.localizedDescription)")
@@ -191,8 +201,10 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
                 return
             }
             do {
-                let items = try fm.contentsOfDirectory(
-                    at: dir, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey], options: [])
+                let keys: [URLResourceKey] = [
+                    .contentModificationDateKey, .fileSizeKey, .isDirectoryKey, .ubiquitousItemDownloadingStatusKey
+                ]
+                let items = try fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: keys, options: [])
                 var files: [[String: Any]] = []
                 for item in items {
                     var name = item.lastPathComponent
@@ -205,7 +217,14 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
                     } else if name.hasPrefix(".") {
                         continue
                     }
-                    let values = try? item.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+                    let values = try? item.resourceValues(forKeys: Set(keys))
+                    // Mappar listas inte (de ska inte tas för filer, och inte raderas som filer)
+                    if values?.isDirectory == true { continue }
+                    // Nyare iOS har inga platshållare: filen har sitt riktiga namn men är inte nedladdad
+                    if downloaded, values?.ubiquitousItemDownloadingStatus == .notDownloaded {
+                        downloaded = false
+                        try? fm.startDownloadingUbiquitousItem(at: item)
+                    }
                     let modified = (values?.contentModificationDate?.timeIntervalSince1970 ?? 0) * 1000
                     files.append([
                         "name": name,
@@ -228,9 +247,21 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
         }
         let scope = call.getString("scope") ?? "data"
         queue.async {
-            guard let url = self.resolveURL(scope: scope, path: path) else {
+            guard let found = self.resolveURL(scope: scope, path: path) else {
                 call.reject("iCloud är inte tillgängligt", "ICLOUD_UNAVAILABLE")
                 return
+            }
+            let fm = FileManager.default
+            var url = found
+            if !fm.fileExists(atPath: found.path) {
+                // Bara en platshållare (inte nedladdad): radera den. Finns ingenting är det redan klart.
+                let placeholder = found.deletingLastPathComponent()
+                    .appendingPathComponent("." + found.lastPathComponent + ".icloud")
+                guard fm.fileExists(atPath: placeholder.path) else {
+                    call.resolve()
+                    return
+                }
+                url = placeholder
             }
             var coordinationError: NSError?
             var deleteError: Error?
@@ -251,6 +282,15 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
         }
     }
 
+    /// Den vy som visas överst, så att nya fönster kan visas även när ett annat redan är öppet.
+    private func topViewController() -> UIViewController? {
+        var top = bridge?.viewController
+        while let presented = top?.presentedViewController, !presented.isBeingDismissed {
+            top = presented
+        }
+        return top
+    }
+
     // MARK: - Dokumentskanning
 
     @objc func scanDocument(_ call: CAPPluginCall) {
@@ -259,10 +299,15 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
             return
         }
         DispatchQueue.main.async {
+            guard let presenter = self.topViewController() else {
+                call.reject("Kunde inte öppna kameran")
+                return
+            }
+            self.scanCall?.reject("Avbruten", "CANCELLED")
             self.scanCall = call
             let controller = VNDocumentCameraViewController()
             controller.delegate = self
-            self.bridge?.viewController?.present(controller, animated: true)
+            presenter.present(controller, animated: true)
         }
     }
 
@@ -332,8 +377,13 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
                       let data = Data(base64Encoded: base64, options: .ignoreUnknownCharacters) else { continue }
                 controller.addAttachmentData(data, mimeType: mime, fileName: name)
             }
+            guard let presenter = self.topViewController() else {
+                call.reject("Kunde inte öppna mejlfönstret")
+                return
+            }
+            self.mailCall?.resolve(["result": "cancelled"])
             self.mailCall = call
-            self.bridge?.viewController?.present(controller, animated: true)
+            presenter.present(controller, animated: true)
         }
     }
 
