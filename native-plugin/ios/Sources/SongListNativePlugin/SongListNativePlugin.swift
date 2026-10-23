@@ -187,7 +187,7 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
             }
             let fm = FileManager.default
             guard fm.fileExists(atPath: dir.path) else {
-                call.resolve(["files": []])
+                call.resolve(["files": [[String: Any]]()])
                 return
             }
             do {
