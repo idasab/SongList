@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Camera, ChevronDown, ChevronUp, ClipboardPaste, FileUp, Image as ImageIcon, Lightbulb, Pencil, X } from 'lucide-react';
 import { SongRenderer } from '../components/SongRenderer';
@@ -154,13 +154,29 @@ export function ImportPage() {
     }
   };
 
+  const [importing, setImporting] = useState(false);
+  // Spärr som slår till direkt: ett dubbeltryck ska inte importera allt två gånger
+  const importingRef = useRef(false);
   const importAll = async () => {
+    if (importingRef.current) return;
+    importingRef.current = true;
+    setImporting(true);
     const list = items.map((it) => ({
       content: contentFor(it),
       attachment: it.display === 'file' ? it.original : undefined,
       ...resolveMeta(it, { tags, categoryId }),
     }));
-    const songs = await importSongs(list);
+    let songs: Awaited<ReturnType<typeof importSongs>>;
+    try {
+      songs = await importSongs(list);
+    } catch (e) {
+      importingRef.current = false;
+      setImporting(false);
+      toastError(e, 'Importen misslyckades');
+      return;
+    }
+    importingRef.current = false;
+    setImporting(false);
     toast(`${songs.length} ${songs.length === 1 ? 'låt' : 'låtar'} importerade`);
     resetQueue();
     if (songs.length === 1) navigate(`/song/${songs[0].id}`);
@@ -269,6 +285,7 @@ export function ImportPage() {
                   key={it.id}
                   item={it}
                   onChange={(next) => setItems((cur) => cur.map((x) => (x.id === it.id ? next : x)))}
+                  onPatch={(patch) => setItems((cur) => cur.map((x) => (x.id === it.id ? { ...x, ...patch } : x)))}
                   onRemove={() => setItems((cur) => cur.filter((x) => x.id !== it.id))}
                   onEdit={() => openInEditor(it)}
                   commonCategoryName={categoryId ? categoriesRec[categoryId]?.name : undefined}
@@ -281,7 +298,7 @@ export function ImportPage() {
                   <button className="btn" onClick={() => setItems([])}>
                     Rensa
                   </button>
-                  <button className="btn primary" onClick={importAll}>
+                  <button className="btn primary" disabled={importing} onClick={importAll}>
                     Importera {items.length} {items.length === 1 ? 'låt' : 'låtar'}
                   </button>
                 </div>
@@ -347,6 +364,7 @@ export function ImportPage() {
 function ImportItemCard({
   item,
   onChange,
+  onPatch,
   onRemove,
   onEdit,
   commonCategoryName,
@@ -354,6 +372,8 @@ function ImportItemCard({
 }: {
   item: ImportItem;
   onChange: (i: ImportItem) => void;
+  /** Ändrar bara de angivna fälten i den aktuella versionen (för resultat som kommer senare) */
+  onPatch: (patch: Partial<ImportItem>) => void;
   onRemove: () => void;
   onEdit: () => void;
   commonCategoryName?: string;
@@ -378,7 +398,8 @@ function ImportItemCard({
       setInterpreting('Tolkar…');
       const file = await attachmentToFile(item.original);
       const res = await interpretFile(file, item.original.kind, (m) => setInterpreting(m));
-      onChange({ ...item, raw: res.raw, imageDataUrl: res.imageDataUrl, interpreted: true, display: 'chordpro' });
+      // Bara tolkningens fält: annat som ändrats medan tolkningen pågick ska vara kvar
+      onPatch({ raw: res.raw, imageDataUrl: res.imageDataUrl, interpreted: true, display: 'chordpro' });
     } catch {
       toast('Hittade ingen text och inga ackord att tolka i filen', { error: true });
     } finally {
