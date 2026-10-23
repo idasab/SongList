@@ -4,7 +4,7 @@ import type { Setlist, Song } from './model';
 import { unzipSync, zipSync } from 'fflate';
 import { decodeZipName, zipNameMap } from './zipNames';
 import { formatChord, isChord, parseChord, parseKey, formatKey } from './chords';
-import { capoOf, displayChordContext, isChordRow, midWordBreaks, parseChordPro, parseLyricsLine, splitWords, transposeSource, upsertDirective } from './chordpro';
+import { capoOf, capoShapeShift, displayChordContext, isChordRow, shapesToSounding, midWordBreaks, parseChordPro, parseLyricsLine, splitWords, transposeSource, upsertDirective } from './chordpro';
 import { isChordLine, parseHeader } from './layout';
 import { decodeText, isChordProFileName, looksLikeChordPro, textToChordPro, titleFromFileName, type Measure } from './textImport';
 import { ocrToChordPro, type OcrPage } from './ocrLayout';
@@ -622,5 +622,23 @@ describe('kapo', () => {
   it('lämnar ackorden som de är utan kapo', () => {
     const song = parseChordPro('[Bb]Ett');
     expect(formatChord('Bb', displayChordContext(song, 0, 'international'))).toBe('Bb');
+  });
+});
+
+describe('ackord skrivna som grepp för kapo', () => {
+  const src = '{title: Test}\n{key: B}\n{capo: 4}\n[G]Ett [D]två [G]tre\nfyra [C]fem [D]sex [G]sju';
+  it('upptäcks när ackorden passar tonarten minus kapot', () => {
+    expect(capoShapeShift(parseChordPro(src))).toBe(4);
+    expect(capoShapeShift(parseChordPro('{key: G}\n{capo: 4}\n[G]Ett [D]två [C]tre'))).toBe(0);
+    expect(capoShapeShift(parseChordPro('{key: B}\n[G]Ett [D]två [C]tre'))).toBe(0);
+  });
+  it('skrivs om till tonarten och visar samma grepp som förut', () => {
+    const out = shapesToSounding(src);
+    expect(out).toContain('{key: B}');
+    expect(out).toContain('{capo: 4}');
+    expect(out).toContain('[B]Ett [F#]två [B]tre');
+    const parsed = parseChordPro(out);
+    const ctx = displayChordContext(parsed, 0, 'international');
+    expect(parsed.chords.map((c) => formatChord(c, ctx))).toEqual(['G', 'D', 'C']);
   });
 });

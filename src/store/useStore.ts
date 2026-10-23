@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { parseChordPro } from '../lib/chordpro';
+import { parseChordPro, shapesToSounding } from '../lib/chordpro';
 import {
   DEFAULT_SETTINGS,
   newId,
@@ -190,7 +190,8 @@ export const useStore = create<State>((set, get) => ({
       updatedAt: now + i,
       transpose: 0,
       ...deriveSongMeta(it.content),
-      content: it.content,
+      // Ackord skrivna som grepp för kapot skrivs om till tonarten
+      content: it.attachment ? it.content : shapesToSounding(it.content),
       tags: normalizeTags(it.tags ?? []),
       categoryId: it.categoryId || undefined,
       attachment: it.attachment,

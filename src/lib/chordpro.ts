@@ -456,6 +456,54 @@ export function displayChordContext(song: ParsedSong, transpose: number, notatio
   return { transpose: shift, preferFlats: songPrefersFlats(song, shift), notation, hNotation: song.hNotation };
 }
 
+const MAJOR_SCALE = [0, 2, 4, 5, 7, 9, 11];
+// Naturlig moll plus ledton (dominantackordet i moll är ofta dur)
+const MINOR_SCALE = [0, 2, 3, 5, 7, 8, 10, 11];
+
+/** Hur många av ackordens grundtoner som hör till tonarten. */
+function fitsKey(roots: number[], tonic: number, minor: boolean): number {
+  const scale = minor ? MINOR_SCALE : MAJOR_SCALE;
+  return roots.filter((r) => scale.includes((((r - tonic) % 12) + 12) % 12)).length;
+}
+
+/**
+ * Om ackorden är skrivna som grepp för kapot – tonarten säger B men ackorden går i G med
+ * kapo 4 – ges antalet halvtoner ackorden ska flyttas upp för att stämma med tonarten.
+ * Annars 0.
+ */
+export function capoShapeShift(song: ParsedSong): number {
+  const capo = capoOf(song);
+  if (!capo) return 0;
+  const key = parseKey(song.meta.key, { hNotation: song.hNotation });
+  if (!key) return 0;
+  const roots = song.chords
+    .filter((c) => !c.startsWith('*'))
+    .map((c) => parseChord(c, { hNotation: song.hNotation })?.root)
+    .filter((r): r is number => r !== undefined);
+  if (roots.length < 2) return 0;
+  const inKey = fitsKey(roots, key.pc, key.minor);
+  const asShapes = fitsKey(roots, key.pc - capo, key.minor);
+  return asShapes > inKey && asShapes >= roots.length * 0.7 ? capo : 0;
+}
+
+/**
+ * Skriver om ackord som är skrivna som grepp till de ackord som klingar, så att de stämmer
+ * med tonarten. Kapot behålls, så att greppen visas som förut.
+ */
+export function shapesToSounding(source: string): string {
+  const parsed = parseChordPro(source);
+  const shift = capoShapeShift(parsed);
+  if (!shift) return source;
+  const key = parseKey(parsed.meta.key, { hNotation: parsed.hNotation })!;
+  const moved = transposeSource(source, {
+    transpose: shift,
+    preferFlats: keyPrefersFlats(key.pc, key.minor),
+    notation: parsed.hNotation ? 'swedish' : 'international',
+  });
+  // transposeSource flyttar även {key}, men tonarten stämde redan
+  return upsertDirective(moved, 'key', parsed.meta.key!.trim());
+}
+
 export function songPrefersFlats(song: ParsedSong, transpose: number): boolean {
   let key = parseKey(song.meta.key, { hNotation: song.hNotation });
   if (!key && song.chords.length) {

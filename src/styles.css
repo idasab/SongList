@@ -1850,3 +1850,16 @@ textarea.note-text {
     padding: 0;
   }
 }
+
+/* Förslag att skriva om ackord som är skrivna som grepp för kapot */
+.capo-tip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  max-width: 1000px;
+}
+
+.capo-tip > div {
+  flex: 1 1 240px;
+}

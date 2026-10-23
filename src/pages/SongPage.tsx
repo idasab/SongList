@@ -26,7 +26,16 @@ import { ChordDiagram, ChordSheet } from '../components/ChordDiagram';
 import { SongRenderer } from '../components/SongRenderer';
 import { Header, Sheet, toast, toastError } from '../components/ui';
 import { formatChord, normalizeTranspose } from '../lib/chords';
-import { capoOf, displayChordContext, parseChordPro, songPrefersFlats, transposeSource, upsertDirective } from '../lib/chordpro';
+import {
+  capoOf,
+  capoShapeShift,
+  displayChordContext,
+  parseChordPro,
+  shapesToSounding,
+  songPrefersFlats,
+  transposeSource,
+  upsertDirective,
+} from '../lib/chordpro';
 import { liveSetlists, useStore } from '../store/useStore';
 import { safeFileName, saveTextFile } from '../services/files';
 import { newId } from '../lib/model';
@@ -537,6 +546,20 @@ export function SongPage() {
           }}
         >
           <div style={swipe.style}>
+          {!isFile && !stage && !controlsHidden && !annotating && capoShapeShift(parsed) > 0 && (
+            <div className="tip small-text capo-tip" onClick={(e) => e.stopPropagation()}>
+              <div>
+                Ackorden verkar vara skrivna som grepp för kapo {capo}, men tonarten är {parsed.meta.key}. Skriv om
+                ackorden till {parsed.meta.key}, så visas greppen rätt med kapot.
+              </div>
+              <button
+                className="btn small primary"
+                onClick={() => void saveSong({ id: song.id, content: shapesToSounding(song.content) }).then(() => toast('Ackorden är omskrivna'))}
+              >
+                Skriv om till {parsed.meta.key}
+              </button>
+            </div>
+          )}
           {isFile ? (
             <div className="song file-song" style={{ fontSize: settings.fontSize }}>
               <div className="song-head">
