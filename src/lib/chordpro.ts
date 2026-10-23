@@ -396,11 +396,23 @@ export function upsertDirective(source: string, name: string, value: string): st
     const sub = /^(\S+)/.exec(d.value.trim())?.[1].toLowerCase() ?? '';
     return variants.includes(sub) || (!!META_KEYS[sub] && META_KEYS[sub] === META_KEYS[name]);
   };
-  const found = lines.flatMap((l, i) => (matches(l) ? [i] : []));
+  // Bara direktiven överst i låten, före texten: ett {key: D} längre ner är ett tonartsbyte
+  // och ska stå kvar
+  let headerEnd = 0;
+  while (headerEnd < lines.length) {
+    const l = lines[headerEnd].trim();
+    const d = parseDirective(l);
+    if (!l || l.startsWith('#') || (d && (META_KEYS[d.name] || d.name === 'meta'))) headerEnd++;
+    else break;
+  }
+  const found = lines.slice(0, headerEnd).flatMap((l, i) => (matches(l) ? [i] : []));
   const trimmed = value.trim();
   if (found.length) {
-    // Det första direktivet gäller när låten läses; ta bort dubbletter så att det nya värdet syns
-    for (const i of found.slice(1).reverse()) lines.splice(i, 1);
+    // Det första direktivet gäller när låten läses. Ta bort andra {name: …} så att det nya
+    // värdet syns, men lämna {meta: …}, som kan ha flera värden (t.ex. flera artister)
+    const isMeta = (i: number) => parseDirective(lines[i])?.name === 'meta';
+    const extra = trimmed ? found.slice(1).filter((i) => !isMeta(i)) : found.slice(1);
+    for (const i of extra.reverse()) lines.splice(i, 1);
     if (trimmed) lines[found[0]] = `{${name}: ${trimmed}}`;
     else lines.splice(found[0], 1);
     return lines.join('\n');
@@ -469,14 +481,37 @@ export function displayChordContext(song: ParsedSong, transpose: number, notatio
   return { transpose: shift, preferFlats: songPrefersFlats(song, shift), notation, hNotation: song.hNotation };
 }
 
-const MAJOR_SCALE = [0, 2, 4, 5, 7, 9, 11];
-// Naturlig moll plus ledton (dominantackordet i moll är ofta dur)
-const MINOR_SCALE = [0, 2, 3, 5, 7, 8, 10, 11];
+type Quality = 'maj' | 'min' | 'dim' | 'any';
 
-/** Hur många av ackordens grundtoner som hör till tonarten. */
-function fitsKey(roots: number[], tonic: number, minor: boolean): number {
-  const scale = minor ? MINOR_SCALE : MAJOR_SCALE;
-  return roots.filter((r) => scale.includes((((r - tonic) % 12) + 12) % 12)).length;
+// Ackorden som hör till en tonart: steg i halvtoner från grundtonen och om de är dur eller moll
+const MAJOR_CHORDS: Record<number, Quality[]> = { 0: ['maj'], 2: ['min'], 4: ['min'], 5: ['maj'], 7: ['maj'], 9: ['min'], 11: ['dim'] };
+// Moll: naturlig moll, plus dur på femte steget (dominanten) och förminskat på sjunde
+const MINOR_CHORDS: Record<number, Quality[]> = {
+  0: ['min'],
+  2: ['dim'],
+  3: ['maj'],
+  5: ['min'],
+  7: ['min', 'maj'],
+  8: ['maj'],
+  10: ['maj'],
+  11: ['dim'],
+};
+
+function quality(suffix: string): Quality {
+  if (/^(dim|°|o(?!.)|m7b5|ø)/.test(suffix)) return 'dim';
+  if (isMinorSuffix(suffix)) return 'min';
+  // sus- och kvintackord kan vara både dur och moll
+  if (/^(sus|5$)/.test(suffix)) return 'any';
+  return 'maj';
+}
+
+/** Hur många av ackorden som hör till tonarten, med hänsyn till om de är dur eller moll. */
+function fitsKey(chords: { root: number; q: Quality }[], tonic: number, minor: boolean): number {
+  const table = minor ? MINOR_CHORDS : MAJOR_CHORDS;
+  return chords.filter((c) => {
+    const allowed = table[(((c.root - tonic) % 12) + 12) % 12];
+    return !!allowed && (c.q === 'any' || allowed.includes(c.q));
+  }).length;
 }
 
 /**
@@ -484,29 +519,32 @@ function fitsKey(roots: number[], tonic: number, minor: boolean): number {
  * kapo 4 – ges antalet halvtoner ackorden ska flyttas upp för att stämma med tonarten.
  * Annars 0.
  *
- * Det måste vara tydligt: minst tre olika grundtoner, alla passar i greppens tonart och dess
- * grundton finns med, men högst hälften passar i den angivna tonarten. Annars kan vanliga
- * låtar med t.ex. ett C i D-dur (bVII) misstas för grepp.
+ * Ackorden jämförs med dem som hör till tonarten (dur eller moll på varje steg): minst tre
+ * olika ackord, greppens grundton finns med, minst hälften hör till greppens tonart och fler
+ * än till den angivna. Att dur och moll räknas gör att t.ex. ett C i D-dur (bVII) inte misstas
+ * för grepp – C i C-dur passar, men D-dur är inte ett ackord i C-dur.
  */
 export function capoShapeShift(song: ParsedSong): number {
   const capo = capoOf(song);
   if (!capo) return 0;
   const key = parseKey(song.meta.key, { hNotation: song.hNotation });
   if (!key) return 0;
-  const roots = [
-    ...new Set(
-      song.chords
-        .filter((c) => !c.startsWith('*'))
-        .map((c) => parseChord(c, { hNotation: song.hNotation })?.root)
-        .filter((r): r is number => r !== undefined)
-        .map((r) => ((r % 12) + 12) % 12),
-    ),
-  ];
-  if (roots.length < 3) return 0;
+  const seen = new Map<string, { root: number; q: Quality }>();
+  for (const name of song.chords) {
+    if (name.startsWith('*')) continue;
+    const c = parseChord(name, { hNotation: song.hNotation });
+    if (!c) continue;
+    const chord = { root: ((c.root % 12) + 12) % 12, q: quality(c.suffix) };
+    seen.set(`${chord.root}${chord.q}`, chord);
+  }
+  const chords = [...seen.values()];
+  const n = chords.length;
+  if (n < 3) return 0;
   const gripTonic = (((key.pc - capo) % 12) + 12) % 12;
-  const inKey = fitsKey(roots, key.pc, key.minor);
-  const asShapes = fitsKey(roots, gripTonic, key.minor);
-  const clear = asShapes === roots.length && roots.includes(gripTonic) && inKey <= roots.length / 2;
+  const inKey = fitsKey(chords, key.pc, key.minor);
+  const asShapes = fitsKey(chords, gripTonic, key.minor);
+  const tonicPresent = chords.some((c) => c.root === gripTonic);
+  const clear = tonicPresent && asShapes > inKey && asShapes >= n / 2;
   return clear ? capo : 0;
 }
 
@@ -524,8 +562,16 @@ export function shapesToSounding(source: string): string {
     preferFlats: keyPrefersFlats(key.pc, key.minor),
     notation: parsed.hNotation ? 'swedish' : 'international',
   });
-  // transposeSource flyttar även {key}, men tonarten stämde redan
-  return upsertDirective(moved, 'key', parsed.meta.key!.trim());
+  // transposeSource flyttar även tonarterna, men de stämde redan (även tonartsbyten längre ner)
+  const original = source.replace(/\r\n?/g, '\n').split('\n');
+  const isKeyLine = (l: string) => {
+    const d = l.trim().startsWith('{') ? parseDirective(l) : null;
+    return !!d && (d.name === 'key' || (d.name === 'meta' && /^key\s/i.test(d.value.trim())));
+  };
+  return moved
+    .split('\n')
+    .map((l, i) => (isKeyLine(original[i] ?? '') ? original[i] : l))
+    .join('\n');
 }
 
 export function songPrefersFlats(song: ParsedSong, transpose: number): boolean {

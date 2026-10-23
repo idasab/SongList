@@ -790,3 +790,43 @@ describe('å, ä och ö som bokstav + prick/ring', () => {
     expect(song.sections.some((s) => s.type === 'chorus')).toBe(true);
   });
 });
+
+describe('direktiv överst i låten', () => {
+  it('lämnar tonartsbyten längre ner i låten', () => {
+    const src = '{title: Byte}\n{key: C}\n[C]Ett\n{key: D}\n[D]Två';
+    const out = upsertDirective(src, 'key', 'G');
+    expect(out).toContain('{key: G}');
+    expect(out).toContain('{key: D}');
+    // Utan tonart överst läggs den till överst; tonartsbytet står kvar
+    const noHead = upsertDirective('{title: X}\n[C]Ett\n{key: D}\n[D]Två', 'key', 'C');
+    expect(noHead.split('\n')[1]).toBe('{key: C}');
+    expect(noHead).toContain('{key: D}');
+  });
+  it('lämnar flera {meta: artist …}', () => {
+    const out = upsertDirective('{title: X}\n{meta: artist A}\n{meta: artist B}\nText', 'title', 'Y');
+    expect(out).toContain('{meta: artist A}');
+    expect(out).toContain('{meta: artist B}');
+  });
+  it('skriver om grepp med ett tonartsbyte utan att ta bort det', () => {
+    const src = '{key: A}\n{capo: 2}\n[G]Ett [C]två [D]tre [Em]fyra\n{key: B}\n[A]Fem [D]sex';
+    const out = shapesToSounding(src);
+    expect(out.split('\n')[0]).toBe('{key: A}');
+    expect(out).toContain('{key: B}');
+    expect(out).toContain('[A]Ett [D]två');
+  });
+});
+
+describe('grepp för kapo i andra tonarter', () => {
+  const shift = (src: string) => capoShapeShift(parseChordPro(src));
+  it('upptäcks även när greppens grundtoner finns i den riktiga tonarten', () => {
+    expect(shift('{key: Bb}\n{capo: 3}\n[G]Ett [C]två [D]tre [Em]fyra')).toBe(3);
+    expect(shift('{key: F}\n{capo: 1}\n[E]Ett [A]två [B]tre')).toBe(1);
+    expect(shift('{key: Bb}\n{capo: 1}\n[A]Ett [D]två [E]tre')).toBe(1);
+    expect(shift('{key: Am}\n{capo: 2}\n[Gm]Ett [Cm]två [Dm]tre')).toBe(2);
+  });
+  it('misstar fortfarande inte bVII för grepp', () => {
+    expect(shift('{key: D}\n{capo: 2}\n[D]Ett [C]två [G]tre [D]fyra')).toBe(0);
+    expect(shift('{key: G}\n{capo: 2}\n[G]Ett [F]två [C]tre [G]fyra [D]fem')).toBe(0);
+    expect(shift('{key: A}\n{capo: 2}\n[A]Ett [D]två [E]tre [F#m]fyra [Bm]fem')).toBe(0);
+  });
+});
