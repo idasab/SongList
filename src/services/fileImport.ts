@@ -53,6 +53,24 @@ const ZIP_EXT = /\.zip$/i;
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp|heic|heif|bmp|tiff?)$/i;
 
 /** Filtypen utifrån namn (och MIME-typ som reserv). */
+const MIME_BY_EXT: Record<string, string> = {
+  pdf: 'application/pdf',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  bmp: 'image/bmp',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+};
+
+function mimeFromName(name: string): string {
+  return MIME_BY_EXT[/\.([^.]+)$/.exec(name)?.[1].toLowerCase() ?? ''] ?? '';
+}
+
 function fileType(name: string, mime = ''): 'chordpro' | 'text' | 'pdf' | 'image' | 'zip' | null {
   if (isChordProFileName(name)) return 'chordpro';
   if (TEXT_EXT.test(name) || mime === 'text/plain') return 'text';
@@ -99,7 +117,9 @@ export async function expandFiles(
           result.skipped.push({ name: n, reason: 'zip-fil inuti zip-fil' });
           continue;
         }
-        queue.push(new File([entries[n]], baseName(realNames.get(n) ?? n)));
+        const name = baseName(realNames.get(n) ?? n);
+        // Filer i en zip-fil saknar filtyp; ta den från filändelsen
+        queue.push(new File([entries[n] as BlobPart], name, { type: mimeFromName(name) }));
       }
       if (!names.length) result.skipped.push({ name: f.name, reason: 'zip-filen är tom' });
     } catch {
@@ -121,7 +141,7 @@ export async function expandFiles(
         if (f.size > MAX_ORIGINAL_BYTES) throw new Error('filen är för stor (högst 25 MB)');
         const original: SongAttachment = {
           name: f.name,
-          mime: f.type || (type === 'pdf' ? 'application/pdf' : 'image/jpeg'),
+          mime: f.type || mimeFromName(f.name) || (type === 'pdf' ? 'application/pdf' : 'image/jpeg'),
           dataUrl: await readFileAsDataUrl(f),
           kind: type,
         };
