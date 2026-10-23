@@ -39,9 +39,14 @@ export interface Song extends SyncRecord {
 export interface SongAttachment {
   name: string;
   mime: string;
-  /** Filens innehåll som data-URL (base64) */
+  /** Filens innehåll som data-URL (base64). Tom i iCloud-säkerhetskopior, se file. */
   dataUrl: string;
   kind: 'pdf' | 'image';
+  /**
+   * Bara i säkerhetskopior i iCloud: filen ligger i Säkerhetskopior/Filer med detta namn
+   * (efter innehållet), så att samma notblad bara sparas en gång.
+   */
+  file?: string;
 }
 
 export interface SetlistItem {

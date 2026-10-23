@@ -1,5 +1,6 @@
 // Säkerhetskopiering: till iCloud Drive (iOS) eller som fil (alla plattformar).
 
+import { attachmentFileName, contentHash, dataUrlBase64, markMissingAttachments, referencedFiles } from '../lib/backupFiles';
 import { restoreMerge } from '../lib/merge';
 import { isBackupFile, type BackupFile, type SyncRecord } from '../lib/model';
 import { hasNativePlugin, SongListNative } from '../native/songlistNative';
@@ -8,6 +9,8 @@ import { saveTextFile } from './files';
 import { mirrorSongsToICloud } from './songFiles';
 
 const BACKUP_DIR = 'Säkerhetskopior';
+/** Originalfiler (PDF:er och bilder), en gång var oavsett hur många säkerhetskopior som har dem */
+const FILES_DIR = `${BACKUP_DIR}/Filer`;
 const AUTO_PREFIX = 'Auto ';
 const MAX_AUTO_BACKUPS = 10;
 const WEEK = 7 * 24 * 3600 * 1000;
@@ -46,7 +49,9 @@ export type RestoreMode = 'merge' | 'replace';
  * - merge: lägger till låtar som saknas och återskapar raderade, behåller nyare lokala ändringar
  * - replace: biblioteket blir exakt som säkerhetskopian (övrigt raderas, även på synkade enheter)
  */
-export async function restoreBackup(data: BackupFile, mode: RestoreMode): Promise<number> {
+export async function restoreBackup(backup: BackupFile, mode: RestoreMode): Promise<number> {
+  // Originalfiler som säkerhetskopian bara pekar på hämtas från iCloud (om det går)
+  const data = markMissingAttachments(hasNativePlugin() ? await loadAttachments(backup) : backup);
   const store = useStore.getState();
   const local = store.exportLibrary(true);
   const now = Date.now();
@@ -94,10 +99,11 @@ export interface ICloudBackup {
 export async function createICloudBackup(auto = false): Promise<string> {
   if (!hasNativePlugin()) throw new Error('iCloud är bara tillgängligt i iOS-appen.');
   const name = `${auto ? AUTO_PREFIX : ''}SongList ${stamp()}.json`;
+  const data = await storeAttachments(buildBackup());
   await SongListNative.writeFile({
     scope: 'documents',
     path: `${BACKUP_DIR}/${name}`,
-    data: JSON.stringify(buildBackup()),
+    data: JSON.stringify(data),
   });
   // Varje låt också som en egen fil (ChordPro eller originalfilen), läsbar i andra appar
   try {
@@ -107,7 +113,76 @@ export async function createICloudBackup(auto = false): Promise<string> {
   }
   await useStore.getState().updateSettings({ lastBackupAt: Date.now() });
   if (auto) await pruneAutoBackups();
+  await pruneFiles();
   return name;
+}
+
+/**
+ * Sparar säkerhetskopians originalfiler i Säkerhetskopior/Filer (bara de som inte redan
+ * finns där) och låter säkerhetskopian peka på dem i stället för att innehålla dem.
+ */
+async function storeAttachments(data: BackupFile): Promise<BackupFile> {
+  if (!data.songs.some((s) => s.attachment?.dataUrl)) return data;
+  const { files } = await SongListNative.listFiles({ scope: 'documents', path: FILES_DIR });
+  const have = new Set(files.map((f) => f.name));
+  const songs = [];
+  for (const s of data.songs) {
+    const a = s.attachment;
+    const base64 = a ? dataUrlBase64(a.dataUrl) : null;
+    if (!a || !base64) {
+      songs.push(s);
+      continue;
+    }
+    const file = attachmentFileName(await contentHash(base64), a);
+    if (!have.has(file)) {
+      await SongListNative.writeFile({ scope: 'documents', path: `${FILES_DIR}/${file}`, data: base64, base64: true });
+      have.add(file);
+    }
+    songs.push({ ...s, attachment: { ...a, dataUrl: '', file } });
+  }
+  return { ...data, songs };
+}
+
+/** Hämtar originalfilerna som en säkerhetskopia pekar på. */
+async function loadAttachments(data: BackupFile): Promise<BackupFile> {
+  const songs = [];
+  for (const s of data.songs) {
+    const a = s.attachment;
+    if (!a?.file || a.dataUrl) {
+      songs.push(s);
+      continue;
+    }
+    try {
+      const { data: base64 } = await SongListNative.readFile({ scope: 'documents', path: `${FILES_DIR}/${a.file}`, base64: true });
+      const { file: _file, ...rest } = a;
+      songs.push({ ...s, attachment: { ...rest, dataUrl: `data:${a.mime};base64,${base64}` } });
+    } catch {
+      // Filen saknas; tas om hand av markMissingAttachments
+      songs.push(s);
+    }
+  }
+  return { ...data, songs };
+}
+
+/**
+ * Tar bort originalfiler som ingen säkerhetskopia längre pekar på. Går någon säkerhetskopia
+ * inte att läsa tas ingenting bort, så att inga filer som behövs försvinner.
+ */
+async function pruneFiles(): Promise<void> {
+  try {
+    const { files } = await SongListNative.listFiles({ scope: 'documents', path: FILES_DIR });
+    if (!files.length) return;
+    const used = new Set<string>();
+    for (const b of await listICloudBackups()) {
+      const { data } = await SongListNative.readFile({ scope: 'documents', path: `${BACKUP_DIR}/${b.name}` });
+      for (const f of referencedFiles(parseBackup(data))) used.add(f);
+    }
+    for (const f of files) {
+      if (!used.has(f.name)) await SongListNative.deleteFile({ scope: 'documents', path: `${FILES_DIR}/${f.name}` });
+    }
+  } catch (e) {
+    console.warn('Kunde inte rensa originalfiler', e);
+  }
 }
 
 export async function listICloudBackups(): Promise<ICloudBackup[]> {
@@ -120,18 +195,19 @@ export async function listICloudBackups(): Promise<ICloudBackup[]> {
 
 export async function readICloudBackup(name: string): Promise<BackupFile> {
   const { data } = await SongListNative.readFile({ scope: 'documents', path: `${BACKUP_DIR}/${name}` });
-  return parseBackup(data);
+  return loadAttachments(parseBackup(data));
 }
 
 export async function deleteICloudBackup(name: string): Promise<void> {
   await SongListNative.deleteFile({ scope: 'documents', path: `${BACKUP_DIR}/${name}` });
+  await pruneFiles();
 }
 
 async function pruneAutoBackups(): Promise<void> {
   const autos = (await listICloudBackups()).filter((b) => b.name.startsWith(AUTO_PREFIX));
   for (const old of autos.slice(MAX_AUTO_BACKUPS)) {
     try {
-      await deleteICloudBackup(old.name);
+      await SongListNative.deleteFile({ scope: 'documents', path: `${BACKUP_DIR}/${old.name}` });
     } catch {
       // Försök igen nästa gång
     }

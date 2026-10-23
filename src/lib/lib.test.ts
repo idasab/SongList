@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CUE_ROUTE_ID, itemPath, itemTitle, liveItems, songCount } from './setlist';
-import type { Setlist, Song } from './model';
+import type { BackupFile, Setlist, Song } from './model';
+import { attachmentFileName, contentHash, dataUrlBase64, markMissingAttachments, referencedFiles } from './backupFiles';
 import { songFileNames } from '../services/songFiles';
 import { deriveSongMeta } from '../store/useStore';
 import { unzipSync, zipSync } from 'fflate';
@@ -669,5 +670,33 @@ describe('låtar som filer', () => {
       song('4', 'Noter', '', { name: 'noter.PDF', mime: 'application/pdf', dataUrl: 'data:,', kind: 'pdf' }),
     ]).map((f) => f.name);
     expect(names).toEqual(['Höstvisa – Kören.cho', 'Höstvisa – Kören (2).cho', 'Ja-nej-.cho', 'Noter.pdf']);
+  });
+});
+
+describe('originalfiler i säkerhetskopior', () => {
+  const backup = (attachment: Song['attachment']): BackupFile => ({
+    format: 'songlist-backup',
+    version: 1,
+    createdAt: 1,
+    deviceId: 'd',
+    songs: [{ id: 's', title: 'Noter', artist: '', content: '{title: Noter}', tags: [], transpose: 0, createdAt: 1, updatedAt: 1, attachment }],
+    setlists: [],
+    categories: [],
+    folders: [],
+  });
+  it('ger samma namn för samma innehåll', async () => {
+    const a = { name: 'Noter.PDF', mime: 'application/pdf', dataUrl: 'data:application/pdf;base64,QUJD', kind: 'pdf' as const };
+    const b64 = dataUrlBase64(a.dataUrl)!;
+    expect(b64).toBe('QUJD');
+    const h1 = await contentHash(b64);
+    expect(await contentHash('QUJD')).toBe(h1);
+    expect(await contentHash('QUJE')).not.toBe(h1);
+    expect(attachmentFileName(h1, a)).toBe(`${h1}.pdf`);
+    expect(referencedFiles(backup({ ...a, dataUrl: '', file: 'x.pdf' }))).toEqual(['x.pdf']);
+  });
+  it('behåller låten med en anteckning när filen saknas', () => {
+    const out = markMissingAttachments(backup({ name: 'Noter.pdf', mime: 'application/pdf', dataUrl: '', kind: 'pdf', file: 'x.pdf' }));
+    expect(out.songs[0].attachment).toBeUndefined();
+    expect(out.songs[0].content).toContain('Originalfilen Noter.pdf saknas');
   });
 });

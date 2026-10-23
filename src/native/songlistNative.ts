@@ -15,7 +15,8 @@ export interface SongListNativePlugin {
   iCloudStatus(): Promise<{ available: boolean; signedIn: boolean }>;
   /** base64: data är base64-kodade bytes (t.ex. en PDF), annars text */
   writeFile(options: { scope: ICloudScope; path: string; data: string; base64?: boolean }): Promise<void>;
-  readFile(options: { scope: ICloudScope; path: string }): Promise<{ data: string }>;
+  /** base64: ge filens bytes base64-kodade (t.ex. en PDF), annars som text */
+  readFile(options: { scope: ICloudScope; path: string; base64?: boolean }): Promise<{ data: string }>;
   listFiles(options: { scope: ICloudScope; path: string }): Promise<{ files: ICloudFile[] }>;
   deleteFile(options: { scope: ICloudScope; path: string }): Promise<void>;
   scanDocument(): Promise<{ pages: OcrPage[]; imageDataUrl?: string }>;

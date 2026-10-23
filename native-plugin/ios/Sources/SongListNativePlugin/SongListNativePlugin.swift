@@ -146,6 +146,7 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
             return
         }
         let scope = call.getString("scope") ?? "data"
+        let asBase64 = call.getBool("base64") ?? false
         queue.async {
             guard let url = self.resolveURL(scope: scope, path: path) else {
                 call.reject("iCloud är inte tillgängligt", "ICLOUD_UNAVAILABLE")
@@ -161,7 +162,7 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
                 ) { target in
                     do {
                         let data = try Data(contentsOf: target)
-                        result = String(data: data, encoding: .utf8)
+                        result = asBase64 ? data.base64EncodedString() : String(data: data, encoding: .utf8)
                     } catch {
                         readError = error
                     }
