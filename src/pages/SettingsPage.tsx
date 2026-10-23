@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Cloud, CloudUpload, Download, Pencil, Plus, RefreshCw, Trash, Upload } from 'lucide-react';
+import { Cloud, CloudUpload, Download, FileArchive, Pencil, Plus, RefreshCw, Trash, Upload } from 'lucide-react';
 import { askText, Header, Segmented, Sheet, Switch, toast, toastError } from '../components/ui';
 import type { Instrument } from '../lib/chordShapes';
 import type { BackupFile, Theme } from '../lib/model';
@@ -16,6 +16,7 @@ import {
   type ICloudBackup,
   type RestoreMode,
 } from '../services/backup';
+import { exportSongsZip } from '../services/songFiles';
 import { pickFiles } from '../services/files';
 import { iCloudAvailable, syncNow } from '../services/sync';
 import { liveCategories, liveSongs, useStore } from '../store/useStore';
@@ -260,7 +261,10 @@ function ICloudCard() {
       <div className="toggle-row">
         <div>
           <div>Automatisk backup varje vecka</div>
-          <div className="muted small-text">De tio senaste sparas i iCloud Drive › SongList. Senast: {formatTime(settings.lastBackupAt)}</div>
+          <div className="muted small-text">
+            De tio senaste sparas i iCloud Drive › SongList. Varje låt sparas också som en egen fil (ChordPro, PDF eller
+            bild) i mappen Låtar. Senast: {formatTime(settings.lastBackupAt)}
+          </div>
         </div>
         <Switch label="Automatisk backup" checked={settings.autoBackup} onChange={(v) => update({ autoBackup: v })} />
       </div>
@@ -349,6 +353,8 @@ function FileBackupCard() {
       <h2>Fil</h2>
       <p className="muted small-text" style={{ marginTop: 0 }}>
         Spara hela biblioteket som en fil, t.ex. för att flytta det till en annan enhet eller spara det på en dator.
+        Alla låtar som filer ger en zip-fil med en ChordPro-fil per låt (och PDF:er och bilder), som andra appar kan
+        läsa.
       </p>
       <div className="btn-row">
         <button
@@ -356,6 +362,16 @@ function FileBackupCard() {
           onClick={() => exportBackupFile().catch((e) => toastError(e, 'Exporten misslyckades'))}
         >
           <Download size={18} /> Exportera backupfil
+        </button>
+        <button
+          className="btn"
+          onClick={() =>
+            exportSongsZip()
+              .then((n) => toast(`${n} ${n === 1 ? 'låt' : 'låtar'} exporterade`))
+              .catch((e) => toastError(e, 'Exporten misslyckades'))
+          }
+        >
+          <FileArchive size={18} /> Alla låtar som filer
         </button>
         <button className="btn" onClick={importFile}>
           <Upload size={18} /> Återställ från fil

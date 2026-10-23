@@ -5,6 +5,7 @@ import { isBackupFile, type BackupFile, type SyncRecord } from '../lib/model';
 import { hasNativePlugin, SongListNative } from '../native/songlistNative';
 import { useStore } from '../store/useStore';
 import { saveTextFile } from './files';
+import { mirrorSongsToICloud } from './songFiles';
 
 const BACKUP_DIR = 'Säkerhetskopior';
 const AUTO_PREFIX = 'Auto ';
@@ -98,6 +99,12 @@ export async function createICloudBackup(auto = false): Promise<string> {
     path: `${BACKUP_DIR}/${name}`,
     data: JSON.stringify(buildBackup()),
   });
+  // Varje låt också som en egen fil (ChordPro eller originalfilen), läsbar i andra appar
+  try {
+    await mirrorSongsToICloud();
+  } catch (e) {
+    console.warn('Kunde inte spara låtarna som filer', e);
+  }
   await useStore.getState().updateSettings({ lastBackupAt: Date.now() });
   if (auto) await pruneAutoBackups();
   return name;

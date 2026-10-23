@@ -13,7 +13,8 @@ export interface ICloudFile {
 /** Gränssnitt mot den inbyggda iOS-koden i native-plugin/. */
 export interface SongListNativePlugin {
   iCloudStatus(): Promise<{ available: boolean; signedIn: boolean }>;
-  writeFile(options: { scope: ICloudScope; path: string; data: string }): Promise<void>;
+  /** base64: data är base64-kodade bytes (t.ex. en PDF), annars text */
+  writeFile(options: { scope: ICloudScope; path: string; data: string; base64?: boolean }): Promise<void>;
   readFile(options: { scope: ICloudScope; path: string }): Promise<{ data: string }>;
   listFiles(options: { scope: ICloudScope; path: string }): Promise<{ files: ICloudFile[] }>;
   deleteFile(options: { scope: ICloudScope; path: string }): Promise<void>;

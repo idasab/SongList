@@ -70,6 +70,17 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
             return
         }
         let scope = call.getString("scope") ?? "data"
+        // base64 = binärfil (t.ex. PDF eller bild), annars text
+        let bytes: Data
+        if call.getBool("base64") ?? false {
+            guard let decoded = Data(base64Encoded: text, options: .ignoreUnknownCharacters) else {
+                call.reject("Ogiltig base64-data")
+                return
+            }
+            bytes = decoded
+        } else {
+            bytes = Data(text.utf8)
+        }
         queue.async {
             guard let url = self.resolveURL(scope: scope, path: path) else {
                 call.reject("iCloud är inte tillgängligt", "ICLOUD_UNAVAILABLE")
@@ -84,7 +95,7 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
                     writingItemAt: url, options: .forReplacing, error: &coordinationError
                 ) { target in
                     do {
-                        try Data(text.utf8).write(to: target, options: .atomic)
+                        try bytes.write(to: target, options: .atomic)
                     } catch {
                         writeError = error
                     }

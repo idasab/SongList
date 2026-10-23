@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CUE_ROUTE_ID, itemPath, itemTitle, liveItems, songCount } from './setlist';
 import type { Setlist, Song } from './model';
+import { songFileNames } from '../services/songFiles';
 import { deriveSongMeta } from '../store/useStore';
 import { unzipSync, zipSync } from 'fflate';
 import { decodeZipName, zipNameMap } from './zipNames';
@@ -653,5 +654,20 @@ describe('alternativ titel', () => {
   it('går att söka på', () => {
     const s = { id: 'x', title: 'Vintervisa', subtitle: 'Snön faller', artist: '', content: '', tags: [], transpose: 0, createdAt: 1, updatedAt: 1 };
     expect(filterSongs([s], { query: 'snön', fullText: false, tags: [] })).toHaveLength(1);
+  });
+});
+
+describe('låtar som filer', () => {
+  const song = (id: string, title: string, artist = '', attachment?: Song['attachment']): Song => ({
+    id, title, artist, content: `{title: ${title}}`, tags: [], transpose: 0, createdAt: 1, updatedAt: 1, attachment,
+  });
+  it('ger unika och säkra filnamn', () => {
+    const names = songFileNames([
+      song('1', 'Höstvisa', 'Kören'),
+      song('2', 'Höstvisa', 'Kören'),
+      song('3', 'Ja/nej?'),
+      song('4', 'Noter', '', { name: 'noter.PDF', mime: 'application/pdf', dataUrl: 'data:,', kind: 'pdf' }),
+    ]).map((f) => f.name);
+    expect(names).toEqual(['Höstvisa – Kören.cho', 'Höstvisa – Kören (2).cho', 'Ja-nej-.cho', 'Noter.pdf']);
   });
 });
