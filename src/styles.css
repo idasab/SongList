@@ -582,6 +582,12 @@ a {
   background: var(--surface);
 }
 
+/* Långa listor: rader utanför skärmen ritas inte förrän de scrollas fram */
+.song-list .list-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 80px;
+}
+
 .list-item:last-child {
   border-bottom: none;
 }

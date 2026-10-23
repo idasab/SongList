@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { memo, useDeferredValue, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Music, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Header } from '../components/ui';
@@ -21,7 +21,7 @@ const session = {
 
 export function LibraryPage() {
   const navigate = useNavigate();
-  const scrollRef = useRememberScroll<HTMLDivElement>('library');
+  const scrollRef = useRememberScroll<HTMLDivElement>('library', 'data-song');
   const songsRec = useStore((s) => s.songs);
   const categoriesRec = useStore((s) => s.categories);
   const settings = useStore((s) => s.settings);
@@ -43,9 +43,11 @@ export function LibraryPage() {
   const keys = useMemo(() => keysInLibrary(songs), [songs]);
   const sort = settings.librarySort;
 
+  // Sökfältet svarar direkt; listan filtreras om när det finns tid över mellan tangenttrycken
+  const deferredQuery = useDeferredValue(query);
   const visible = useMemo(
-    () => sortSongs(filterSongs(songs, { query, fullText, tags, categoryId, keyId: key }), sort),
-    [songs, query, fullText, tags, categoryId, key, sort],
+    () => sortSongs(filterSongs(songs, { query: deferredQuery, fullText, tags, categoryId, keyId: key }), sort),
+    [songs, deferredQuery, fullText, tags, categoryId, key, sort],
   );
 
   // Filter i filterpanelen (taggarna ligger i en egen rad under sökfältet)
@@ -244,7 +246,7 @@ export function LibraryPage() {
               {groups.map((g) => (
                 <div key={g.letter || 'all'} data-letter={g.letter || undefined}>
                   {g.letter && <div className="letter-head">{g.letter}</div>}
-                  <div className="list">
+                  <div className="list song-list">
                     {g.songs.map((s) => (
                       <SongRow key={s.id} song={s} categoryName={categoryName(categoriesRec, s.categoryId)} />
                     ))}
@@ -261,11 +263,12 @@ export function LibraryPage() {
   );
 }
 
-function SongRow({ song, categoryName }: { song: Song; categoryName?: string }) {
+// Raden ritas bara om när låten själv ändras, inte vid varje ändring i listan
+const SongRow = memo(function SongRow({ song, categoryName }: { song: Song; categoryName?: string }) {
   const notation = useStore((s) => s.settings.notation);
   const key = songKey(song);
   return (
-    <Link className="list-item" to={`/song/${song.id}`}>
+    <Link className="list-item" to={`/song/${song.id}`} data-song={song.id}>
       <div className="main">
         <div className="title">
           {song.title}
@@ -302,4 +305,4 @@ function SongRow({ song, categoryName }: { song: Song; categoryName?: string }) 
       )}
     </Link>
   );
-}
+});
