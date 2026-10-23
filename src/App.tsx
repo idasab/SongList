@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, RouterProvider, createHashRouter } from 'react-router-dom';
 import { FileUp, ListMusic, Music, Settings } from 'lucide-react';
 import { AskTextHost, Toaster, toast } from './components/ui';
@@ -94,11 +94,17 @@ const router = createHashRouter([
 export function App() {
   const ready = useStore((s) => s.ready);
   const theme = useStore((s) => s.settings.theme);
+  const [startError, setStartError] = useState<string | null>(null);
 
   useEffect(() => {
     useStore
       .getState()
       .init()
+      .catch((e) => {
+        // Biblioteket gick inte att öppna: visa felet i stället för en tom skärm
+        setStartError(e instanceof Error ? e.message : String(e));
+        throw e;
+      })
       .then(() => {
         if (consumeUpdateNotice()) toast('SongList har uppdaterats till senaste versionen. Försök igen.');
         prefetchLazyParts([
@@ -116,6 +122,17 @@ export function App() {
     else root.setAttribute('data-theme', theme);
   }, [theme]);
 
-  if (!ready) return null;
+  if (!ready) {
+    if (!startError) return null;
+    return (
+      <div className="empty" style={{ padding: 24 }}>
+        <p>Biblioteket kunde inte öppnas.</p>
+        <p className="muted small-text">{startError}</p>
+        <button className="btn primary" onClick={() => location.reload()}>
+          Försök igen
+        </button>
+      </div>
+    );
+  }
   return <RouterProvider router={router} />;
 }

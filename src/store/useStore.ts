@@ -183,6 +183,10 @@ export const useStore = create<State>((set, get) => ({
         await db.songs.put(sample);
       }
     })();
+    // Gick det inte: låt nästa försök börja om
+    initPromise.catch(() => {
+      initPromise = null;
+    });
     return initPromise;
   },
 
