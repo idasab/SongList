@@ -25,3 +25,17 @@ export function itemPath(setlistId: string, it: SetlistItem, index: number): str
 export function songCount(items: SetlistItem[]): number {
   return items.filter((it) => !isCue(it)).length;
 }
+
+/**
+ * Flyttar en synlig punkt. Punkter som inte visas (låtar som raderats eller inte synkats än)
+ * ligger kvar på sina platser, så att de inte försvinner när listan sparas.
+ */
+export function moveVisible(all: SetlistItem[], visible: SetlistItem[], from: number, to: number): SetlistItem[] {
+  const order = [...visible];
+  const [moved] = order.splice(from, 1);
+  if (!moved) return all;
+  order.splice(to, 0, moved);
+  const shown = new Set(visible.map((it) => it.id));
+  let k = 0;
+  return all.map((it) => (shown.has(it.id) ? order[k++] : it));
+}

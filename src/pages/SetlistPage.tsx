@@ -11,7 +11,7 @@ import {
   useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core';
-import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Header, Segmented, Sheet, askText, toast, toastError } from '../components/ui';
 import { EmailInput, rememberEmails } from '../components/EmailInput';
@@ -37,7 +37,7 @@ import { formatKey, parseKey } from '../lib/chords';
 import { newId, type SetlistItem, type Song } from '../lib/model';
 import { allTags, liveSongs, useStore } from '../store/useStore';
 import { FolderSelect, formatDate } from './SetlistsPage';
-import { isCue, itemPath, liveItems, songCount } from '../lib/setlist';
+import { isCue, itemPath, liveItems, moveVisible, songCount } from '../lib/setlist';
 
 export function SetlistPage() {
   const { id = '' } = useParams();
@@ -86,22 +86,24 @@ export function SetlistPage() {
   const addCue = async () => {
     const text = (await askCue('Tal', true))?.trim();
     if (!text) return;
-    setItems([...items, { id: newId(), songId: '', cue: text }]);
+    setItems([...setlist.items, { id: newId(), songId: '', cue: text }]);
   };
 
   const editCue = async (it: SetlistItem) => {
     const text = (await askCue(it.cue ?? '', false))?.trim();
     if (!text) return;
-    setItems(items.map((x) => (x.id === it.id ? { ...x, cue: text } : x)));
+    setItems(setlist.items.map((x) => (x.id === it.id ? { ...x, cue: text } : x)));
   };
 
+  // Ändringar görs i hela listan, inte bara i de synliga punkterna: låtar som raderats eller
+  // inte synkats än ska ligga kvar
   const setItems = (next: SetlistItem[]) => void saveSetlist({ ...setlist, items: next });
 
   const onDragEnd = (e: DragEndEvent) => {
     if (!e.over || e.active.id === e.over.id) return;
     const from = items.findIndex((i) => i.id === e.active.id);
     const to = items.findIndex((i) => i.id === e.over!.id);
-    setItems(arrayMove(items, from, to));
+    setItems(moveVisible(setlist.items, items, from, to));
   };
 
   const play = (index: number) => {
@@ -157,7 +159,7 @@ export function SetlistPage() {
                       })()}
                       onOpen={() => play(idx)}
                       onEdit={isCue(it) ? () => void editCue(it) : undefined}
-                      onRemove={() => setItems(items.filter((x) => x.id !== it.id))}
+                      onRemove={() => setItems(setlist.items.filter((x) => x.id !== it.id))}
                     />
                   ))}
                 </div>
@@ -181,7 +183,7 @@ export function SetlistPage() {
           existing={new Set(items.filter((i) => !isCue(i)).map((i) => i.songId))}
           onClose={() => setAdding(false)}
           onAdd={(ids) => {
-            setItems([...items, ...ids.map((songId) => ({ id: newId(), songId }))]);
+            setItems([...setlist.items, ...ids.map((songId) => ({ id: newId(), songId }))]);
             setAdding(false);
             toast(`${ids.length} ${ids.length === 1 ? 'låt' : 'låtar'} tillagda`);
           }}

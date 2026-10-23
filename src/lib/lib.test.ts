@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CUE_ROUTE_ID, itemPath, itemTitle, liveItems, songCount } from './setlist';
+import { CUE_ROUTE_ID, itemPath, itemTitle, liveItems, moveVisible, songCount } from './setlist';
 import type { BackupFile, Setlist, Song } from './model';
 import { attachmentFileName, contentHash, dataUrlBase64, markMissingAttachments, referencedFiles } from './backupFiles';
 import { songFileNames } from '../services/songFiles';
@@ -711,5 +711,15 @@ describe('originalfiler i säkerhetskopior', () => {
     const out = markMissingAttachments(backup({ name: 'Noter.pdf', mime: 'application/pdf', dataUrl: '', kind: 'pdf', file: 'x.pdf' }));
     expect(out.songs[0].attachment).toBeUndefined();
     expect(out.songs[0].content).toContain('Originalfilen Noter.pdf saknas');
+  });
+});
+
+describe('ändringar i setlistor', () => {
+  it('behåller punkter som inte visas när en synlig punkt flyttas', () => {
+    const all = [{ id: '1', songId: 'a' }, { id: '2', songId: 'raderad' }, { id: '3', songId: 'b' }, { id: '4', songId: 'c' }];
+    const visible = [all[0], all[2], all[3]];
+    // Flytta c först
+    expect(moveVisible(all, visible, 2, 0).map((it) => it.id)).toEqual(['4', '2', '1', '3']);
+    expect(moveVisible(all, visible, 0, 2).map((it) => it.id)).toEqual(['3', '2', '4', '1']);
   });
 });
