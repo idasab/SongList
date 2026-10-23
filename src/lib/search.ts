@@ -119,7 +119,8 @@ export const NO_ARTIST_GROUP = 'Utan artist';
  * É räknas som E, Ü som Y, Æ som Ä och Ø som Ö. Siffror och tecken hamnar under #.
  */
 export function groupLetter(text: string): string {
-  const ch = text.trim().normalize('NFC').charAt(0).toLocaleUpperCase('sv');
+  // Första tecknet först, sedan versal (ß blir annars "SS")
+  const ch = text.trim().normalize('NFC').charAt(0).toLocaleUpperCase('sv').charAt(0);
   if (/[A-ZÅÄÖ]/.test(ch)) return ch;
   const special: Record<string, string> = { Ü: 'Y', Æ: 'Ä', Ø: 'Ö' };
   if (special[ch]) return special[ch];

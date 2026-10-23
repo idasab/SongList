@@ -159,7 +159,15 @@ export function sanitizeLibrary<T extends LibraryData>(data: T): T {
       tags: Array.isArray(s.tags) ? s.tags.filter((t) => typeof t === 'string') : [],
       transpose: typeof s.transpose === 'number' ? s.transpose : 0,
       createdAt: typeof s.createdAt === 'number' ? s.createdAt : s.updatedAt,
-      attachment: s.attachment && typeof s.attachment.name === 'string' ? s.attachment : undefined,
+      // En bifogad fil behålls så länge innehållet (eller en hänvisning till det) finns
+      attachment:
+        s.attachment && (typeof s.attachment.dataUrl === 'string' || typeof s.attachment.file === 'string')
+          ? {
+              ...s.attachment,
+              dataUrl: typeof s.attachment.dataUrl === 'string' ? s.attachment.dataUrl : '',
+              name: typeof s.attachment.name === 'string' && s.attachment.name ? s.attachment.name : 'fil',
+            }
+          : undefined,
     })),
     setlists: data.setlists.filter(isRecord).map((sl) => ({
       ...sl,

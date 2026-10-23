@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CUE_ROUTE_ID, itemPath, itemTitle, liveItems, moveVisible, songCount } from './setlist';
-import type { BackupFile, Setlist, Song } from './model';
+import { sanitizeLibrary, type BackupFile, type Setlist, type Song } from './model';
 import { pdfSafe } from './pdfText';
 import { attachmentFileName, contentHash, dataUrlBase64, markMissingAttachments, referencedFiles } from './backupFiles';
 import { songFileNames } from '../services/songFiles';
@@ -868,5 +868,21 @@ describe('långa namn i PDF:en', () => {
     // Första sidan: kortad med …; låtens egen rubrik radbryts i stället
     expect(raw).toMatch(/\(En väldigt lång titel[^)]*…\) Tj/);
     expect(raw).toContain('längre bort) Tj');
+  });
+});
+
+describe('småfel', () => {
+  it('ß ger bokstaven S', () => {
+    expect(groupLetter('ßtraße')).toBe('S');
+  });
+  it('en bifogad fil utan namn behålls', () => {
+    const lib = sanitizeLibrary({
+      songs: [{ id: 's', updatedAt: 1, attachment: { mime: 'application/pdf', dataUrl: '', file: 'x.pdf', kind: 'pdf' } } as unknown as Song],
+      setlists: [],
+      categories: [],
+      folders: [],
+    });
+    expect(lib.songs[0].attachment?.file).toBe('x.pdf');
+    expect(lib.songs[0].attachment?.name).toBe('fil');
   });
 });
