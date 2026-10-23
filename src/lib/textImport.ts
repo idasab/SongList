@@ -196,6 +196,7 @@ export function decodeText(buf: ArrayBuffer): string {
       }
     }
   }
-  // Ta bort BOM och eventuella nolltecken som annars syns som mellanrum
-  return text.replace(/^\uFEFF/, '').replace(/\u0000/g, '');
+  // Ta bort BOM och eventuella nolltecken som annars syns som mellanrum, och g\u00F6r om \u00E5, \u00E4 och \u00F6
+  // skrivna som bokstav + prick/ring till ett tecken
+  return text.replace(/^\uFEFF/, '').replace(/\u0000/g, '').normalize('NFC');
 }

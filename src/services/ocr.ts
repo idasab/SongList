@@ -15,7 +15,7 @@ export type ProgressFn = (message: string, progress?: number) => void;
 
 /** Gör om sidor med positionerad text (från OCR eller PDF) till ChordPro. */
 export function pagesToChordPro(pages: OcrPage[]): string {
-  return ocrToChordPro(pages, canvasMeasure('Arial'));
+  return ocrToChordPro(pages, canvasMeasure('Arial')).normalize('NFC');
 }
 
 const toChordPro = pagesToChordPro;

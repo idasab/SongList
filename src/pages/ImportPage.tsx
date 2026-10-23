@@ -78,7 +78,9 @@ export function ImportPage() {
     [songsRec, tags, items],
   );
 
-  const addRaw = (fileName: string, raw: string, extra: Partial<ImportItem> = {}) => {
+  const addRaw = (fileName: string, input: string, extra: Partial<ImportItem> = {}) => {
+    // å, ä och ö som bokstav + prick/ring görs om till ett tecken
+    const raw = input.normalize('NFC');
     // Filändelsen avgör först (.cho, .chopro …), annars innehållet
     const kind =
       extra.kind ?? (isChordProFileName(fileName) || looksLikeChordPro(raw) ? 'chordpro' : 'text');

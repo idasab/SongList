@@ -779,3 +779,14 @@ describe('direktiv med {meta: …} och dubbletter', () => {
     expect(transposeSource('{key: G}\n[G]Ett', ctx)).toContain('{key: A}');
   });
 });
+
+describe('å, ä och ö som bokstav + prick/ring', () => {
+  it('görs om till vanliga tecken när filen läses', () => {
+    const nfd = '{title: Sång}\nRefräng:\n[G]Hej'.normalize('NFD');
+    const text = decodeText(new TextEncoder().encode(nfd).buffer);
+    expect(text).toBe(text.normalize('NFC'));
+    const song = parseChordPro(text);
+    expect(song.meta.title).toBe('Sång');
+    expect(song.sections.some((s) => s.type === 'chorus')).toBe(true);
+  });
+});

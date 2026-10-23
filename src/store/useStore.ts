@@ -186,7 +186,10 @@ export const useStore = create<State>((set, get) => ({
     return initPromise;
   },
 
-  async saveSong({ id, content, tags, categoryId, attachment }) {
+  async saveSong({ id, content: input, tags, categoryId, attachment }) {
+    // å, ä och ö som bokstav + prick/ring görs om till ett tecken (annars känns t.ex.
+    // "Refräng:" inte igen och titlar sorteras fel)
+    const content = input.normalize('NFC');
     const now = Date.now();
     const existing = id ? get().songs[id] : undefined;
     const song: Song = {
@@ -214,9 +217,9 @@ export const useStore = create<State>((set, get) => ({
       createdAt: now + i,
       updatedAt: now + i,
       transpose: 0,
-      ...deriveSongMeta(it.content),
+      ...deriveSongMeta(it.content.normalize('NFC')),
       // Ackord skrivna som grepp för kapot skrivs om till tonarten
-      content: it.attachment ? it.content : shapesToSounding(it.content),
+      content: it.attachment ? it.content.normalize('NFC') : shapesToSounding(it.content.normalize('NFC')),
       tags: normalizeTags(it.tags ?? []),
       categoryId: it.categoryId || undefined,
       attachment: it.attachment,
