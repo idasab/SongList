@@ -3,6 +3,7 @@
 import {
   detectHNotation,
   formatChord,
+  formatKey,
   isMinorSuffix,
   keyPrefersFlats,
   parseChord,
@@ -385,16 +386,23 @@ const DIRECTIVE_NAME_VARIANTS: Record<string, string[]> = {
 export function upsertDirective(source: string, name: string, value: string): string {
   const variants = DIRECTIVE_NAME_VARIANTS[name] ?? [name];
   const lines = source.replace(/\r\n?/g, '\n').split('\n');
-  const idx = lines.findIndex((l) => {
+  // Både {title: X} (och kortformer som {t: X}) och {meta: title X} räknas
+  const matches = (l: string) => {
     const d = parseDirective(l);
     if (!d) return false;
     const raw = /^\s*\{\s*([A-Za-z_][\w-]*)/.exec(l)?.[1].toLowerCase() ?? '';
-    return variants.includes(raw);
-  });
+    if (variants.includes(raw)) return true;
+    if (d.name !== 'meta') return false;
+    const sub = /^(\S+)/.exec(d.value.trim())?.[1].toLowerCase() ?? '';
+    return variants.includes(sub) || (!!META_KEYS[sub] && META_KEYS[sub] === META_KEYS[name]);
+  };
+  const found = lines.flatMap((l, i) => (matches(l) ? [i] : []));
   const trimmed = value.trim();
-  if (idx >= 0) {
-    if (trimmed) lines[idx] = `{${name}: ${trimmed}}`;
-    else lines.splice(idx, 1);
+  if (found.length) {
+    // Det första direktivet gäller när låten läses; ta bort dubbletter så att det nya värdet syns
+    for (const i of found.slice(1).reverse()) lines.splice(i, 1);
+    if (trimmed) lines[found[0]] = `{${name}: ${trimmed}}`;
+    else lines.splice(found[0], 1);
     return lines.join('\n');
   }
   if (!trimmed) return source;
@@ -418,8 +426,13 @@ export function transposeSource(source: string, ctx: ChordContext): string {
     .map((line) => {
       const dir = line.trim().startsWith('{') ? parseDirective(line) : null;
       if (dir) {
-        if (dir.name === 'key' && dir.value) {
-          return `{key: ${formatChord(dir.value, c)}}`;
+        // Tonarten flyttas med, även skriven som "A moll" eller {meta: key A}
+        const metaKey = dir.name === 'meta' ? /^key\s+(.+)$/i.exec(dir.value.trim())?.[1] : undefined;
+        const keyValue = dir.name === 'key' ? dir.value.trim() : metaKey;
+        if (keyValue) {
+          const k = parseKey(keyValue, { hNotation });
+          const moved = k ? formatKey(k, c.transpose, c.notation) : formatChord(keyValue, c);
+          return dir.name === 'meta' ? `{meta: key ${moved}}` : `{key: ${moved}}`;
         }
         return line;
       }

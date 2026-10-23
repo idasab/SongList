@@ -758,3 +758,24 @@ describe('exempellåten', () => {
     expect(incoming[0].deletedAt).toBe(5000);
   });
 });
+
+describe('direktiv med {meta: …} och dubbletter', () => {
+  it('ändrar titel och kapo även när de står som {meta: …}', () => {
+    const out = upsertDirective('{meta: title Gammal}\n{meta: capo 2}\nText', 'title', 'Ny');
+    expect(parseChordPro(out).meta.title).toBe('Ny');
+    const capo = upsertDirective(out, 'capo', '3');
+    expect(capoOf(parseChordPro(capo))).toBe(3);
+    expect(capo).not.toContain('meta: capo');
+  });
+  it('tar bort dubbletter så att det nya värdet gäller', () => {
+    const src = '{title: A}\n{title: B}\nText';
+    expect(parseChordPro(upsertDirective(src, 'title', 'C')).meta.title).toBe('C');
+    expect(parseChordPro(upsertDirective(src, 'title', '')).meta.title).toBeUndefined();
+  });
+  it('flyttar tonarten vid permanent transponering, även "A moll" och {meta: key}', () => {
+    const ctx = { transpose: 2, preferFlats: false, notation: 'international' as const };
+    expect(transposeSource('{key: A moll}\n[Am]Ett', ctx)).toContain('{key: Bm}');
+    expect(transposeSource('{meta: key G}\n[G]Ett', ctx)).toContain('{meta: key A}');
+    expect(transposeSource('{key: G}\n[G]Ett', ctx)).toContain('{key: A}');
+  });
+});
