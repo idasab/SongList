@@ -433,3 +433,23 @@ describe('återställning av ovanliga filer', () => {
     expect(useStore.getState().setlists.sl.items).toEqual([]);
   });
 });
+
+describe('kategorier', () => {
+  it('en raderad kategori hamnar inte på importerade eller sparade låtar', async () => {
+    useStore.setState({
+      songs: {},
+      categories: {
+        kvar: { id: 'kvar', name: 'Psalmer', createdAt: 1, updatedAt: 1 },
+        borta: { id: 'borta', name: 'Gamla', createdAt: 1, updatedAt: 2, deletedAt: 2 },
+      },
+    });
+    const [a, b] = await useStore.getState().importSongs([
+      { content: '{title: A}', categoryId: 'borta' },
+      { content: '{title: B}', categoryId: 'kvar' },
+    ]);
+    expect(a.categoryId).toBeUndefined();
+    expect(b.categoryId).toBe('kvar');
+    const c = await useStore.getState().saveSong({ content: '{title: C}', categoryId: 'borta' });
+    expect(c.categoryId).toBeUndefined();
+  });
+});

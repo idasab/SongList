@@ -207,7 +207,8 @@ export const useStore = create<State>((set, get) => ({
       ...deriveSongMeta(content),
       content,
       tags: normalizeTags(tags ?? existing?.tags ?? []),
-      categoryId: categoryId === undefined ? existing?.categoryId : categoryId || undefined,
+      // Bara kategorier som finns kvar (en raderad kategori ska inte hamna på låten)
+      categoryId: liveCategoryId(get().categories, categoryId === undefined ? existing?.categoryId : categoryId),
     };
     set((s) => ({ songs: { ...s.songs, [song.id]: song }, revision: s.revision + 1 }));
     await db.songs.put(song);
@@ -225,7 +226,7 @@ export const useStore = create<State>((set, get) => ({
       // Ackord skrivna som grepp för kapot skrivs om till tonarten
       content: it.attachment ? it.content.normalize('NFC') : shapesToSounding(it.content.normalize('NFC')),
       tags: normalizeTags(it.tags ?? []),
-      categoryId: it.categoryId || undefined,
+      categoryId: liveCategoryId(get().categories, it.categoryId),
       attachment: it.attachment,
     }));
     set((s) => ({ songs: { ...s.songs, ...toRecord(songs) }, revision: s.revision + 1 }));
@@ -408,6 +409,10 @@ export function liveSongs(songs: Record<string, Song>): Song[] {
 
 export function liveSetlists(setlists: Record<string, Setlist>): Setlist[] {
   return Object.values(setlists).filter((s) => !s.deletedAt);
+}
+
+function liveCategoryId(categories: Record<string, Category>, id: string | undefined): string | undefined {
+  return id && categories[id] && !categories[id].deletedAt ? id : undefined;
 }
 
 /** Namnet på en kategori som finns kvar, annars undefined (t.ex. om den har raderats). */
