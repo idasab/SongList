@@ -110,3 +110,19 @@ export function sortSongs(songs: Song[], by: 'title' | 'artist' | 'updated'): So
   else list.sort((a, b) => coll.compare(a.title, b.title));
   return list;
 }
+
+/** Gruppen för låtar utan artist vid sortering på artist */
+export const NO_ARTIST_GROUP = 'Utan artist';
+
+/**
+ * Bokstaven en titel eller artist grupperas under, i samma ordning som den svenska sorteringen:
+ * É räknas som E, Ü som Y, Æ som Ä och Ø som Ö. Siffror och tecken hamnar under #.
+ */
+export function groupLetter(text: string): string {
+  const ch = text.trim().normalize('NFC').charAt(0).toLocaleUpperCase('sv');
+  if (/[A-ZÅÄÖ]/.test(ch)) return ch;
+  const special: Record<string, string> = { Ü: 'Y', Æ: 'Ä', Ø: 'Ö' };
+  if (special[ch]) return special[ch];
+  const base = ch.normalize('NFD').charAt(0);
+  return /[A-Z]/.test(base) ? base : '#';
+}

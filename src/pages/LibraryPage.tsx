@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Music, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Header } from '../components/ui';
-import { filterSongs, keyIdLabel, keysInLibrary, songKey, sortSongs } from '../lib/search';
+import { NO_ARTIST_GROUP, filterSongs, groupLetter, keyIdLabel, keysInLibrary, songKey, sortSongs } from '../lib/search';
 import { formatKey } from '../lib/chords';
 import { allTags, liveCategories, liveSongs, useStore } from '../store/useStore';
 import type { Song } from '../lib/model';
@@ -57,12 +57,17 @@ export function LibraryPage() {
   const groups = useMemo(() => {
     if (sort === 'updated') return [{ letter: '', songs: visible }];
     const out: { letter: string; songs: Song[] }[] = [];
+    const byLetter = new Map<string, { letter: string; songs: Song[] }>();
     for (const s of visible) {
-      const src = sort === 'artist' ? s.artist || '–' : s.title;
-      const ch = src.charAt(0).toLocaleUpperCase('sv');
-      const letter = /[A-ZÅÄÖ]/.test(ch) ? ch : '#';
-      if (!out.length || out[out.length - 1].letter !== letter) out.push({ letter, songs: [] });
-      out[out.length - 1].songs.push(s);
+      const letter = sort === 'artist' && !s.artist.trim() ? NO_ARTIST_GROUP : groupLetter(sort === 'artist' ? s.artist : s.title);
+      // En grupp per bokstav, även om sorteringen och bokstaven någon gång inte går ihop
+      let g = byLetter.get(letter);
+      if (!g) {
+        g = { letter, songs: [] };
+        byLetter.set(letter, g);
+        out.push(g);
+      }
+      g.songs.push(s);
     }
     return out;
   }, [visible, sort]);

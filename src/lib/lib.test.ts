@@ -16,7 +16,7 @@ import { mergeRecords, restoreMerge } from './merge';
 import { anchorAt, anchorToPx, hitStroke, strokeFromPx, strokeToPx } from './annotations';
 import { buildChordProExport, buildSongFiles, buildTextExport, mailBody, mailSubject } from '../services/setlistExport';
 import { isValidEmail } from '../services/mail';
-import { filterSongs, keyId, keyIdLabel, keysInLibrary, songKey } from './search';
+import { filterSongs, groupLetter, keyId, keyIdLabel, keysInLibrary, songKey, sortSongs } from './search';
 
 describe('ackord', () => {
   it('känner igen ackord men inte vanliga ord', () => {
@@ -729,5 +729,22 @@ describe('ackordgrepp med svensk notation', () => {
     expect(getPianoChord('B', true)!.notes).toEqual(getPianoChord('Bb')!.notes);
     expect(getPianoChord('H', true)!.notes).toEqual(getPianoChord('B')!.notes);
     expect(getPianoChord('Bm', true)!.notes).toEqual(getPianoChord('Bbm')!.notes);
+  });
+});
+
+describe('bokstavsgrupper i låtlistan', () => {
+  it('följer den svenska sorteringen', () => {
+    expect(['Émile', 'Über', 'Æble', 'Øresund', 'Åska', '2 små fåglar', '"Citat"'].map(groupLetter)).toEqual(['E', 'Y', 'Ä', 'Ö', 'Å', '#', '#']);
+    expect(groupLetter('Åska')).toBe('Å'); // å som a + ring
+  });
+  it('ger sammanhängande grupper efter sortering', () => {
+    const titles = ['Zorro', 'Über', 'Ett', 'Émile', 'Abba', 'Öde', 'Ørn', 'Yxa', '9 liv', 'Ärlig', 'Åsa'];
+    const songs = titles.map((title, i) => ({ id: String(i), title, artist: '', content: '', tags: [], transpose: 0, createdAt: 1, updatedAt: 1 }));
+    const letters = sortSongs(songs, 'title').map((s) => groupLetter(s.title));
+    const seen = new Set<string>();
+    letters.forEach((l, i) => {
+      if (i > 0 && letters[i - 1] !== l) expect(seen.has(l)).toBe(false);
+      seen.add(l);
+    });
   });
 });
