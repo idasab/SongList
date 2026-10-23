@@ -2,7 +2,7 @@
 
 import { attachmentFileName, contentHash, dataUrlBase64, markMissingAttachments, referencedFiles } from '../lib/backupFiles';
 import { restoreMerge } from '../lib/merge';
-import { isBackupFile, type BackupFile, type SyncRecord } from '../lib/model';
+import { isBackupFile, sanitizeLibrary, type BackupFile, type SyncRecord } from '../lib/model';
 import { hasNativePlugin, SongListNative } from '../native/songlistNative';
 import { useStore } from '../store/useStore';
 import { saveTextFile } from './files';
@@ -44,7 +44,7 @@ export function parseBackup(text: string): BackupFile {
     throw new Error('Filen är inte en giltig säkerhetskopia (felaktig JSON).');
   }
   if (!isBackupFile(data)) throw new Error('Filen är inte en SongList-säkerhetskopia.');
-  return data;
+  return sanitizeLibrary(data);
 }
 
 export type RestoreMode = 'merge' | 'replace';
@@ -54,7 +54,16 @@ export type RestoreMode = 'merge' | 'replace';
  * - merge: lägger till låtar som saknas och återskapar raderade, behåller nyare lokala ändringar
  * - replace: biblioteket blir exakt som säkerhetskopian (övrigt raderas, även på synkade enheter)
  */
-export async function restoreBackup(backup: BackupFile, mode: RestoreMode): Promise<number> {
+export async function restoreBackup(file: BackupFile, mode: RestoreMode): Promise<number> {
+  // Raderade poster (finns i synkfiler) ska inte komma tillbaka som tomma låtar
+  const alive = <T extends SyncRecord>(list: T[]) => list.filter((r) => !r.deletedAt);
+  const backup: BackupFile = {
+    ...file,
+    songs: alive(file.songs),
+    setlists: alive(file.setlists),
+    categories: alive(file.categories),
+    folders: alive(file.folders ?? []),
+  };
   // Originalfiler som säkerhetskopian bara pekar på hämtas från iCloud (om det går)
   const data = markMissingAttachments(hasNativePlugin() ? await loadAttachments(backup) : backup);
   const store = useStore.getState();
@@ -79,7 +88,7 @@ export async function restoreBackup(backup: BackupFile, mode: RestoreMode): Prom
           folders: restoreMerge(local.folders, data.folders ?? [], now),
         }
       : {
-          songs: replaceList(local.songs, data.songs, (s) => ({ ...s, content: '', tags: [] })),
+          songs: replaceList(local.songs, data.songs, (s) => ({ ...s, content: '', tags: [], attachment: undefined, annotations: undefined })),
           setlists: replaceList(local.setlists, data.setlists, (s) => ({ ...s, items: [] })),
           categories: replaceList(local.categories, data.categories, (c) => c),
           folders: replaceList(local.folders, data.folders ?? [], (f) => f),

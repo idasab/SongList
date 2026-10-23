@@ -7,7 +7,7 @@
 
 import { App } from '@capacitor/app';
 import { mergeLibrary } from '../lib/merge';
-import { isBackupFile, type BackupFile } from '../lib/model';
+import { isBackupFile, sanitizeLibrary, type BackupFile } from '../lib/model';
 import { hasNativePlugin, SongListNative } from '../native/songlistNative';
 import { useStore } from '../store/useStore';
 import { autoBackupIfDue } from './backup';
@@ -65,7 +65,7 @@ async function doSync(): Promise<SyncResult> {
       const remote: unknown = JSON.parse(data);
       if (!isBackupFile(remote)) continue;
       devices++;
-      const incoming = mergeLibrary(useStore.getState().exportLibrary(true), remote);
+      const incoming = mergeLibrary(useStore.getState().exportLibrary(true), sanitizeLibrary(remote));
       received +=
         incoming.songs.length + incoming.setlists.length + incoming.categories.length + incoming.folders.length;
       await useStore.getState().applyIncoming(incoming);

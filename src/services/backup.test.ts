@@ -369,3 +369,42 @@ describe('mappen Låtar i iCloud', () => {
     expect(filesIn('Låtar')).toHaveLength(4);
   });
 });
+
+describe('återställning av ovanliga filer', () => {
+  it('tar inte tillbaka raderade låtar från en synkfil, och tömmer raderade låtar vid "ersätt"', async () => {
+    const file: BackupFile = {
+      ...backup.buildBackup(),
+      format: 'songlist-sync',
+      songs: [
+        { ...song('a', 'Kvar'), annotations: undefined },
+        { ...song('gone', 'Raderad'), content: '', deletedAt: 5, updatedAt: 5 },
+      ],
+    };
+    setLibrary([song('x', 'Lokal', { b: PDF1, name: 'x.pdf', mime: 'application/pdf' })]);
+    await backup.restoreBackup(backup.parseBackup(JSON.stringify(file)), 'replace');
+    const songs = useStore.getState().songs;
+    expect(songs.gone).toBeUndefined();
+    expect(songs.a.deletedAt).toBeUndefined();
+    expect(songs.x.deletedAt).toBeDefined();
+    expect(songs.x.attachment).toBeUndefined();
+  });
+
+  it('klarar poster som saknar fält', async () => {
+    const broken = JSON.stringify({
+      format: 'songlist-backup',
+      version: 1,
+      createdAt: 1,
+      deviceId: 'd',
+      songs: [{ id: 'trasig', updatedAt: 10 }, { title: 'utan id' }],
+      setlists: [{ id: 'sl', updatedAt: 10, name: 'Lista' }],
+      categories: [],
+    });
+    setLibrary([]);
+    const n = await backup.restoreBackup(backup.parseBackup(broken), 'merge');
+    expect(n).toBe(1);
+    const s = useStore.getState().songs.trasig;
+    expect(s.tags).toEqual([]);
+    expect(s.content).toBe('');
+    expect(useStore.getState().setlists.sl.items).toEqual([]);
+  });
+});

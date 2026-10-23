@@ -139,3 +139,34 @@ export function isBackupFile(data: unknown): data is BackupFile {
     Array.isArray(d.categories)
   );
 }
+
+const isRecord = (r: unknown): r is SyncRecord =>
+  !!r && typeof r === 'object' && typeof (r as SyncRecord).id === 'string' && typeof (r as SyncRecord).updatedAt === 'number';
+
+/**
+ * Fyller i saknade fält i poster från synk eller säkerhetskopior (t.ex. från en äldre version
+ * eller en skadad fil), så att appen inte kraschar på dem. Poster utan id eller tidsstämpel
+ * hoppas över.
+ */
+export function sanitizeLibrary<T extends LibraryData>(data: T): T {
+  return {
+    ...data,
+    songs: data.songs.filter(isRecord).map((s) => ({
+      ...s,
+      title: typeof s.title === 'string' ? s.title : 'Namnlös',
+      artist: typeof s.artist === 'string' ? s.artist : '',
+      content: typeof s.content === 'string' ? s.content : '',
+      tags: Array.isArray(s.tags) ? s.tags.filter((t) => typeof t === 'string') : [],
+      transpose: typeof s.transpose === 'number' ? s.transpose : 0,
+      createdAt: typeof s.createdAt === 'number' ? s.createdAt : s.updatedAt,
+      attachment: s.attachment && typeof s.attachment.name === 'string' ? s.attachment : undefined,
+    })),
+    setlists: data.setlists.filter(isRecord).map((sl) => ({
+      ...sl,
+      name: typeof sl.name === 'string' ? sl.name : 'Setlista',
+      items: Array.isArray(sl.items) ? sl.items.filter((it) => it && typeof it.id === 'string') : [],
+    })),
+    categories: data.categories.filter(isRecord).map((c) => ({ ...c, name: typeof c.name === 'string' ? c.name : '' })),
+    folders: data.folders.filter(isRecord).map((f) => ({ ...f, name: typeof f.name === 'string' ? f.name : '' })),
+  };
+}
