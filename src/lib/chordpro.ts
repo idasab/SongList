@@ -470,20 +470,31 @@ function fitsKey(roots: number[], tonic: number, minor: boolean): number {
  * Om ackorden är skrivna som grepp för kapot – tonarten säger B men ackorden går i G med
  * kapo 4 – ges antalet halvtoner ackorden ska flyttas upp för att stämma med tonarten.
  * Annars 0.
+ *
+ * Det måste vara tydligt: minst tre olika grundtoner, alla passar i greppens tonart och dess
+ * grundton finns med, men högst hälften passar i den angivna tonarten. Annars kan vanliga
+ * låtar med t.ex. ett C i D-dur (bVII) misstas för grepp.
  */
 export function capoShapeShift(song: ParsedSong): number {
   const capo = capoOf(song);
   if (!capo) return 0;
   const key = parseKey(song.meta.key, { hNotation: song.hNotation });
   if (!key) return 0;
-  const roots = song.chords
-    .filter((c) => !c.startsWith('*'))
-    .map((c) => parseChord(c, { hNotation: song.hNotation })?.root)
-    .filter((r): r is number => r !== undefined);
-  if (roots.length < 2) return 0;
+  const roots = [
+    ...new Set(
+      song.chords
+        .filter((c) => !c.startsWith('*'))
+        .map((c) => parseChord(c, { hNotation: song.hNotation })?.root)
+        .filter((r): r is number => r !== undefined)
+        .map((r) => ((r % 12) + 12) % 12),
+    ),
+  ];
+  if (roots.length < 3) return 0;
+  const gripTonic = (((key.pc - capo) % 12) + 12) % 12;
   const inKey = fitsKey(roots, key.pc, key.minor);
-  const asShapes = fitsKey(roots, key.pc - capo, key.minor);
-  return asShapes > inKey && asShapes >= roots.length * 0.7 ? capo : 0;
+  const asShapes = fitsKey(roots, gripTonic, key.minor);
+  const clear = asShapes === roots.length && roots.includes(gripTonic) && inKey <= roots.length / 2;
+  return clear ? capo : 0;
 }
 
 /**

@@ -635,6 +635,19 @@ describe('ackord skrivna som grepp för kapo', () => {
     expect(capoShapeShift(parseChordPro('{key: G}\n{capo: 4}\n[G]Ett [D]två [C]tre'))).toBe(0);
     expect(capoShapeShift(parseChordPro('{key: B}\n[G]Ett [D]två [C]tre'))).toBe(0);
   });
+  it('misstar inte vanliga låtar med kapo för grepp', () => {
+    const shift = (src: string) => capoShapeShift(parseChordPro(src));
+    // bVII-ackord (C i D-dur, F i G-dur) är vanliga och betyder inte att ackorden är grepp
+    expect(shift('{key: D}\n{capo: 2}\n[D]Ett [C]två [G]tre [D]fyra')).toBe(0);
+    expect(shift('{key: G}\n{capo: 2}\n[G]Ett [F]två [C]tre [G]fyra')).toBe(0);
+    expect(shift('{key: G}\n{capo: 7}\n[G]Ett [F]två [C]tre [D]fyra')).toBe(0);
+    // För få ackord för att avgöra
+    expect(shift('{key: D}\n{capo: 2}\n[D]Ett [C]två')).toBe(0);
+    // Moll
+    expect(shift('{key: Am}\n{capo: 2}\n[Am]Ett [G]två [F]tre [E]fyra')).toBe(0);
+    // Tydliga grepp: G-ackord med tonart A och kapo 2
+    expect(shift('{key: A}\n{capo: 2}\n[G]Ett [C]två [D]tre [Em]fyra')).toBe(2);
+  });
   it('skrivs om till tonarten och visar samma grepp som förut', () => {
     const out = shapesToSounding(src);
     expect(out).toContain('{key: B}');
