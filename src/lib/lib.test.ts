@@ -723,3 +723,11 @@ describe('ändringar i setlistor', () => {
     expect(moveVisible(all, visible, 0, 2).map((it) => it.id)).toEqual(['3', '2', '4', '1']);
   });
 });
+
+describe('ackordgrepp med svensk notation', () => {
+  it('tolkar B som Bb och H som B', async () => {
+    expect(getPianoChord('B', true)!.notes).toEqual(getPianoChord('Bb')!.notes);
+    expect(getPianoChord('H', true)!.notes).toEqual(getPianoChord('B')!.notes);
+    expect(getPianoChord('Bm', true)!.notes).toEqual(getPianoChord('Bbm')!.notes);
+  });
+});

@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactElement } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getFrettedShapes, getPianoChord, type FrettedShapes, type FretPosition, type Instrument } from '../lib/chordShapes';
+import { useStore } from '../store/useStore';
 import { Sheet } from './ui';
 
 const INSTRUMENT_NAMES: Record<Instrument, string> = {
@@ -133,17 +134,26 @@ export function PianoSvg({ notes, bass, octaves, scale = 1 }: { notes: number[];
   );
 }
 
+/**
+ * Ackordnamnen som visas följer vald notation. Med svensk notation betyder B samma som Bb
+ * och H samma som B, så namnet måste tolkas därefter när greppet slås upp.
+ */
+function useHNotation(): boolean {
+  return useStore((s) => s.settings.notation) === 'swedish';
+}
+
 function useFretted(instrument: Instrument, chord: string) {
+  const hNotation = useHNotation();
   const [data, setData] = useState<FrettedShapes | null | undefined>(undefined);
   useEffect(() => {
     let alive = true;
     setData(undefined);
     if (instrument === 'piano') return;
-    getFrettedShapes(instrument, chord).then((d) => alive && setData(d));
+    getFrettedShapes(instrument, chord, hNotation).then((d) => alive && setData(d));
     return () => {
       alive = false;
     };
-  }, [instrument, chord]);
+  }, [instrument, chord, hNotation]);
   return data;
 }
 
@@ -162,9 +172,10 @@ export function ChordDiagram({
   onClick?: () => void;
 }) {
   const fretted = useFretted(instrument, chord);
+  const hNotation = useHNotation();
   let body: ReactElement;
   if (instrument === 'piano') {
-    const p = getPianoChord(chord);
+    const p = getPianoChord(chord, hNotation);
     body = p ? <PianoSvg {...p} scale={scale} /> : <div className="missing">Saknas</div>;
   } else if (fretted === undefined) {
     body = <div className="missing">…</div>;
@@ -185,9 +196,10 @@ export function ChordDiagram({
 /** Större visning av ett ackord med möjlighet att bläddra mellan grepp. */
 export function ChordSheet({ chord, instrument, onClose }: { chord: string; instrument: Instrument; onClose: () => void }) {
   const fretted = useFretted(instrument, chord);
+  const hNotation = useHNotation();
   const [variant, setVariant] = useState(0);
   const count = fretted?.positions.length ?? 0;
-  const piano = instrument === 'piano' ? getPianoChord(chord) : null;
+  const piano = instrument === 'piano' ? getPianoChord(chord, hNotation) : null;
 
   return (
     <Sheet title={`${chord} – ${INSTRUMENT_NAMES[instrument]}`} onClose={onClose}>
