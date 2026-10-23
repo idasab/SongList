@@ -7,7 +7,7 @@ import { Header, Segmented, toast } from '../components/ui';
 import { parseChordPro, upsertDirective } from '../lib/chordpro';
 import { textToChordPro } from '../lib/textImport';
 import { useMediaQuery } from '../hooks/useMediaQuery';
-import { allTags, liveCategories, useStore } from '../store/useStore';
+import { allTags, categoryName, liveCategories, useStore } from '../store/useStore';
 
 const NEW_TEMPLATE = `{title: }
 {artist: }
@@ -35,10 +35,12 @@ export function EditorPage() {
   const categoriesRec = useStore((s) => s.categories);
   const settings = useStore((s) => s.settings);
 
+  const startCategory = existing?.categoryId ?? draft?.categoryId;
   const initial = useRef({
     content: existing?.content ?? draft?.content ?? NEW_TEMPLATE,
     tags: existing?.tags ?? draft?.tags ?? [],
-    categoryId: existing?.categoryId ?? draft?.categoryId ?? '',
+    // En kategori som raderats visas som Ingen
+    categoryId: categoryName(categoriesRec, startCategory) ? startCategory! : '',
   });
   const [refImage] = useState(id ? undefined : draft?.imageDataUrl);
   const [importItemId] = useState(id ? undefined : draft?.importItemId);

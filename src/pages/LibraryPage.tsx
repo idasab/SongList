@@ -4,7 +4,7 @@ import { Music, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Header } from '../components/ui';
 import { NO_ARTIST_GROUP, filterSongs, groupLetter, keyIdLabel, keysInLibrary, songKey, sortSongs } from '../lib/search';
 import { formatKey } from '../lib/chords';
-import { allTags, liveCategories, liveSongs, useStore } from '../store/useStore';
+import { allTags, categoryName, liveCategories, liveSongs, useStore } from '../store/useStore';
 import type { Song } from '../lib/model';
 import { useRememberScroll } from '../hooks/useRememberScroll';
 import { ALPHABET, AlphabetIndex } from '../components/AlphabetIndex';
@@ -30,7 +30,9 @@ export function LibraryPage() {
   const [query, setQuery] = useState(session.query);
   const [fullText, setFullText] = useState(session.fullText);
   const [tags, setTags] = useState<string[]>(session.tags);
-  const [categoryId, setCategoryId] = useState(session.categoryId);
+  const [chosenCategory, setCategoryId] = useState(session.categoryId);
+  // Ett filter på en kategori som raderats gäller inte längre
+  const categoryId = categoryName(categoriesRec, chosenCategory) ? chosenCategory : undefined;
   const [key, setKey] = useState(session.keyId);
   const [showFilters, setShowFilters] = useState(session.showFilters || !!categoryId || !!key);
   Object.assign(session, { query, fullText, tags, categoryId, keyId: key, showFilters });
@@ -244,7 +246,7 @@ export function LibraryPage() {
                   {g.letter && <div className="letter-head">{g.letter}</div>}
                   <div className="list">
                     {g.songs.map((s) => (
-                      <SongRow key={s.id} song={s} categoryName={s.categoryId ? categoriesRec[s.categoryId]?.name : undefined} />
+                      <SongRow key={s.id} song={s} categoryName={categoryName(categoriesRec, s.categoryId)} />
                     ))}
                   </div>
                 </div>

@@ -19,7 +19,7 @@ import { newId } from '../lib/model';
 import { canUseDocumentScanner, recognizeImageFile, scanDocument } from '../services/ocr';
 import { pickFiles } from '../services/files';
 import { attachmentToFile, expandFiles, interpretFile } from '../services/fileImport';
-import { allTags, liveCategories, normalizeTags, useStore, type ImportQueueItem } from '../store/useStore';
+import { allTags, categoryName, liveCategories, normalizeTags, useStore, type ImportQueueItem } from '../store/useStore';
 
 type ImportItem = ImportQueueItem;
 
@@ -288,7 +288,7 @@ export function ImportPage() {
                   onPatch={(patch) => setItems((cur) => cur.map((x) => (x.id === it.id ? { ...x, ...patch } : x)))}
                   onRemove={() => setItems((cur) => cur.filter((x) => x.id !== it.id))}
                   onEdit={() => openInEditor(it)}
-                  commonCategoryName={categoryId ? categoriesRec[categoryId]?.name : undefined}
+                  commonCategoryName={categoryName(categoriesRec, categoryId)}
                   tagSuggestions={tagSuggestions}
                 />
               ))}

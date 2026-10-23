@@ -403,6 +403,12 @@ export function liveSetlists(setlists: Record<string, Setlist>): Setlist[] {
   return Object.values(setlists).filter((s) => !s.deletedAt);
 }
 
+/** Namnet på en kategori som finns kvar, annars undefined (t.ex. om den har raderats). */
+export function categoryName(categories: Record<string, Category>, id: string | undefined): string | undefined {
+  const c = id ? categories[id] : undefined;
+  return c && !c.deletedAt ? c.name : undefined;
+}
+
 export function liveCategories(categories: Record<string, Category>): Category[] {
   return Object.values(categories)
     .filter((c) => !c.deletedAt)
