@@ -30,7 +30,9 @@ import {
   capoOf,
   capoShapeShift,
   displayChordContext,
+  formatDuration,
   parseChordPro,
+  parseDuration,
   shapesToSounding,
   songPrefersFlats,
   transposeSource,
@@ -93,6 +95,8 @@ export function SongPage() {
   const parsed = useMemo(() => parseChordPro(song?.content ?? ''), [song?.content]);
   const transpose = song?.transpose ?? 0;
   const preferFlats = songPrefersFlats(parsed, transpose);
+  // Med {duration} och utan egen hastighet: scrolla genom hela låten på den tiden
+  const duration = song?.scrollSpeed === undefined ? parseDuration(parsed.meta.duration) : undefined;
   const speed = song?.scrollSpeed ?? 3;
 
   const saved = song?.annotations ?? EMPTY_ANNOTATIONS;
@@ -193,22 +197,47 @@ export function SongPage() {
     let last = performance.now();
     let acc = el.scrollTop;
     let raf = 0;
+    // Medan ett finger ligger på låten, och strax efter (så att svepets fart hinner klinga av),
+    // väntar scrollningen och fortsätter sedan därifrån
+    let held = false;
+    let pauseUntil = 0;
+    const onDown = () => (held = true);
+    const onUp = () => {
+      held = false;
+      pauseUntil = performance.now() + 700;
+    };
+    const onWheel = () => (pauseUntil = performance.now() + 400);
+    el.addEventListener('touchstart', onDown, { passive: true });
+    el.addEventListener('touchend', onUp, { passive: true });
+    el.addEventListener('touchcancel', onUp, { passive: true });
+    el.addEventListener('wheel', onWheel, { passive: true });
     const step = (now: number) => {
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
-      // Om användaren har scrollat manuellt: fortsätt därifrån
-      if (Math.abs(el.scrollTop - acc) > 2) acc = el.scrollTop;
-      acc += scrollPxPerSecond(speed) * dt;
-      el.scrollTop = acc;
-      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 1) {
-        setScrolling(false);
+      raf = requestAnimationFrame(step);
+      if (held || now < pauseUntil) {
+        acc = el.scrollTop;
         return;
       }
-      raf = requestAnimationFrame(step);
+      // Om användaren har scrollat manuellt: fortsätt därifrån
+      if (Math.abs(el.scrollTop - acc) > 2) acc = el.scrollTop;
+      const rest = el.scrollHeight - el.clientHeight;
+      acc += (duration ? rest / duration : scrollPxPerSecond(speed)) * dt;
+      el.scrollTop = acc;
+      if (el.scrollTop >= rest - 1) {
+        cancelAnimationFrame(raf);
+        setScrolling(false);
+      }
     };
     raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [scrolling, speed]);
+    return () => {
+      cancelAnimationFrame(raf);
+      el.removeEventListener('touchstart', onDown);
+      el.removeEventListener('touchend', onUp);
+      el.removeEventListener('touchcancel', onUp);
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, [scrolling, speed, duration]);
 
   // Tangentbord: piltangenter/mellanslag (fungerar även med många bladvändarpedaler)
   useEffect(() => {
@@ -318,6 +347,16 @@ export function SongPage() {
   };
   const setFont = (n: number) => void updateSettings({ fontSize: Math.max(MIN_FONT, Math.min(MAX_FONT, n)) });
   const setSpeed = (n: number) => void updateSongPrefs(song.id, { scrollSpeed: Math.max(1, Math.min(10, n)) });
+  const hasDuration = parseDuration(parsed.meta.duration) !== undefined;
+  // Från låtens längd till en egen hastighet: börja från den nivå som ligger närmast
+  const changeSpeed = (delta: number) => {
+    const el = scrollRef.current;
+    if (!duration || !el) return setSpeed(speed + delta);
+    const pxs = (el.scrollHeight - el.clientHeight) / duration;
+    let nearest = 1;
+    for (let l = 1; l <= 10; l++) if (Math.abs(scrollPxPerSecond(l) - pxs) < Math.abs(scrollPxPerSecond(nearest) - pxs)) nearest = l;
+    setSpeed(nearest + delta);
+  };
 
   const exportCho = async () => {
     setMenu(false);
@@ -493,11 +532,17 @@ export function SongPage() {
             >
               {scrolling ? <Pause size={18} /> : <Play size={18} />}
             </button>
-            <button className="btn icon" aria-label="Långsammare" onClick={() => setSpeed(speed - 1)}>
+            <button className="btn icon" aria-label="Långsammare" onClick={() => changeSpeed(-1)}>
               <Minus size={16} />
             </button>
-            <span className="tool-value">{speed}</span>
-            <button className="btn icon" aria-label="Snabbare" onClick={() => setSpeed(speed + 1)}>
+            <span
+              className="tool-value"
+              title={duration ? 'Scrollar genom låten på dess längd' : hasDuration ? 'Tryck för att scrolla på låtens längd' : undefined}
+              onClick={() => hasDuration && !duration && void updateSongPrefs(song.id, { scrollSpeed: undefined })}
+            >
+              {duration ? formatDuration(duration) : speed}
+            </span>
+            <button className="btn icon" aria-label="Snabbare" onClick={() => changeSpeed(1)}>
               <Plus size={16} />
             </button>
           </div>

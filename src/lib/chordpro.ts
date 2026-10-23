@@ -132,6 +132,21 @@ export interface Directive {
   value: string;
 }
 
+/** Låtens längd i sekunder från {duration}: "3:30", "1:02:03" eller "210". */
+export function parseDuration(value: string | undefined): number | undefined {
+  const m = /^\s*(?:(\d+):)?(\d+)(?::(\d{1,2}))?\s*$/.exec(value ?? '');
+  if (!m) return undefined;
+  const [h, mm, ss] = m[3] !== undefined ? [Number(m[1] ?? 0), Number(m[2]), Number(m[3])] : m[1] !== undefined ? [0, Number(m[1]), Number(m[2])] : [0, 0, Number(m[2])];
+  const s = h * 3600 + mm * 60 + ss;
+  return s > 0 ? s : undefined;
+}
+
+/** "3:30" från sekunder. */
+export function formatDuration(seconds: number): string {
+  const s = Math.round(seconds);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
 export function parseDirective(line: string): Directive | null {
   const m = DIRECTIVE_RE.exec(line);
   if (!m) return null;

@@ -296,7 +296,7 @@ export function EditorPage() {
                 </select>
               </label>
             </div>
-            <div className="grid-2">
+            <div className="grid-2 grid-3">
               <label className="field">
                 <span>Kategori</span>
                 <select className="select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
@@ -311,6 +311,10 @@ export function EditorPage() {
               <label className="field">
                 <span>Tempo</span>
                 <DirectiveInput inputMode="numeric" value={meta.tempo ?? ''} onChange={(v) => setMeta('tempo', v)} />
+              </label>
+              <label className="field">
+                <span>Längd</span>
+                <DirectiveInput value={meta.duration ?? ''} onChange={(v) => setMeta('duration', v)} placeholder="3:30" />
               </label>
             </div>
             <div className="field">
@@ -350,10 +354,12 @@ function DirectiveInput({
   value,
   onChange,
   inputMode,
+  placeholder,
 }: {
   value: string;
   onChange: (v: string) => void;
   inputMode?: 'numeric' | 'text';
+  placeholder?: string;
 }) {
   const [text, setText] = useState(value);
   const focused = useRef(false);
@@ -365,6 +371,7 @@ function DirectiveInput({
     <input
       className="input"
       inputMode={inputMode}
+      placeholder={placeholder}
       value={text}
       onFocus={() => {
         focused.current = true;

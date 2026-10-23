@@ -310,6 +310,10 @@ a {
   gap: 0 12px;
 }
 
+.grid-2.grid-3 {
+  grid-template-columns: 2fr 1fr 1fr;
+}
+
 .grid-4 {
   display: grid;
   grid-template-columns: 2fr 2fr 1fr 1fr;

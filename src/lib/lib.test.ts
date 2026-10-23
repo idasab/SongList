@@ -8,7 +8,7 @@ import { deriveSongMeta } from '../store/useStore';
 import { unzipSync, zipSync } from 'fflate';
 import { decodeZipName, zipNameMap } from './zipNames';
 import { formatChord, isChord, parseChord, parseKey, formatKey } from './chords';
-import { capoOf, capoShapeShift, displayChordContext, isChordRow, shapesToSounding, midWordBreaks, parseChordPro, parseLyricsLine, splitWords, transposeSource, upsertDirective } from './chordpro';
+import { capoOf, capoShapeShift, displayChordContext, formatDuration, isChordRow, parseDuration, shapesToSounding, midWordBreaks, parseChordPro, parseLyricsLine, splitWords, transposeSource, upsertDirective } from './chordpro';
 import { isChordLine, parseHeader } from './layout';
 import { decodeText, isChordProFileName, looksLikeChordPro, textToChordPro, titleFromFileName, type Measure } from './textImport';
 import { ocrToChordPro, type OcrPage } from './ocrLayout';
@@ -62,6 +62,17 @@ describe('ackord', () => {
 });
 
 describe('ChordPro', () => {
+  it('låtens längd från {duration}', () => {
+    expect(parseDuration('3:30')).toBe(210);
+    expect(parseDuration(' 210 ')).toBe(210);
+    expect(parseDuration('1:02:03')).toBe(3723);
+    expect(parseDuration('0:00')).toBeUndefined();
+    expect(parseDuration('ca 3 min')).toBeUndefined();
+    expect(parseDuration(undefined)).toBeUndefined();
+    expect(parseChordPro('{duration: 4:05}\nText').meta.duration).toBe('4:05');
+    expect(formatDuration(245)).toBe('4:05');
+  });
+
   const src = `{title: Morgonvisa}
 {artist: Test}
 {key: G}
