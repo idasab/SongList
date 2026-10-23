@@ -131,8 +131,13 @@ export function SongPage() {
     setLive,
   });
 
+  const annotatingRef = useRef(annotating);
+  annotatingRef.current = annotating;
+
   // Ny låt: nollställ anteckningsläget
   useEffect(() => {
+    setAnnotating(false);
+    setLive(null);
     setDraft(null);
     setSelectedId(null);
     setEditingId(null);
@@ -200,6 +205,8 @@ export function SongPage() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest('input, textarea, select')) return;
+      // Inte medan en meny eller ruta är öppen, eller i anteckningsläget
+      if (annotatingRef.current || document.querySelector('[role="dialog"]')) return;
       const el = scrollRef.current;
       if (e.key === ' ') {
         e.preventDefault();
