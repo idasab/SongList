@@ -843,6 +843,8 @@ describe('text i PDF:en', () => {
     const setlist: Setlist = { id: 'l', name: 'Lista', createdAt: 1, updatedAt: 1, items: [{ id: '1', songId: 's' }] };
     const blob = await buildPdfExport(setlist, { s }, 'international', false);
     const raw = new TextDecoder('latin1').decode(new Uint8Array(await blob.arrayBuffer()));
-    expect(raw).not.toMatch(/\u0000S\u0000j/); // inte två byte per tecken
+    // Titeln ritas i ett stycke: med en emoji blev den två byte per tecken
+    expect(raw).not.toMatch(/\u0000G\u0000i\u0000t/);
+    expect(raw).toContain('Gitarr');
   });
 });
