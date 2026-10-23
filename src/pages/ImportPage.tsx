@@ -387,7 +387,8 @@ function ImportItemCard({
   const [bigPreview, setBigPreview] = useState(false);
   const [interpreting, setInterpreting] = useState('');
   const notation = useStore((s) => s.settings.notation);
-  const content = useMemo(() => convert(item), [item]);
+  // Som den blir efter importen (ackord skrivna som grepp skrivs om)
+  const content = useMemo(() => shapesToSounding(convert(item)), [item]);
   const parsed = useMemo(() => parseChordPro(content), [content]);
   const asFile = item.display === 'file';
 
