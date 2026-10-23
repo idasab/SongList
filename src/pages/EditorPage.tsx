@@ -4,7 +4,7 @@ import { ChevronDown, ChevronUp, Image as ImageIcon, Wand2 } from 'lucide-react'
 import { SongRenderer } from '../components/SongRenderer';
 import { TagInput } from '../components/TagInput';
 import { Header, Segmented, toast } from '../components/ui';
-import { parseChordPro, upsertDirective } from '../lib/chordpro';
+import { parseChordPro, shapesToSounding, upsertDirective } from '../lib/chordpro';
 import { textToChordPro } from '../lib/textImport';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { allTags, categoryName, liveCategories, useStore } from '../store/useStore';
@@ -88,7 +88,9 @@ export function EditorPage() {
   const categories = useMemo(() => liveCategories(categoriesRec), [categoriesRec]);
 
   const save = useCallback(async () => {
-    const song = await saveSong({ id: existing?.id, content, tags, categoryId, attachment: draftAttachment });
+    // Från importen: samma omskrivning av ackord skrivna som grepp som vid vanlig import
+    const finalContent = importItemId && !draftAttachment ? shapesToSounding(content) : content;
+    const song = await saveSong({ id: existing?.id, content: finalContent, tags, categoryId, attachment: draftAttachment });
     setSaved(true);
     toast('Sparat');
     if (importItemId) updateImportQueue((q) => ({ ...q, items: q.items.filter((x) => x.id !== importItemId) }));
