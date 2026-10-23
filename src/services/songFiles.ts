@@ -71,12 +71,20 @@ async function readManifest(): Promise<Manifest> {
  */
 export async function mirrorSongsToICloud(): Promise<number> {
   if (!hasNativePlugin()) return 0;
-  const files = songFileNames(liveSongs(useStore.getState().songs));
+  const allSongs = useStore.getState().songs;
+  const files = songFileNames(liveSongs(allSongs));
   const { files: existing } = await SongListNative.listFiles({ scope: 'documents', path: SONG_FILES_DIR });
   const present = new Set(existing.map((e) => e.name));
   const manifest = await readManifest();
+  const byId = new Map(Object.entries(manifest).map(([name, e]) => [e.id, { name, ...e }]));
   const next: Manifest = {};
   for (const f of files) {
+    // En annan enhet har redan skrivit en nyare version (den här enheten har inte synkat än)
+    const ahead = byId.get(f.song.id);
+    if (ahead && ahead.updatedAt > f.song.updatedAt && present.has(ahead.name)) {
+      next[ahead.name] = { id: ahead.id, updatedAt: ahead.updatedAt };
+      continue;
+    }
     const known = manifest[f.name];
     next[f.name] = { id: f.song.id, updatedAt: f.song.updatedAt };
     if (present.has(f.name) && known?.id === f.song.id && known.updatedAt === f.song.updatedAt) continue;
@@ -87,6 +95,11 @@ export async function mirrorSongsToICloud(): Promise<number> {
     } else {
       await SongListNative.writeFile({ scope: 'documents', path, data: f.song.content.replace(/\n?$/, '\n') });
     }
+  }
+  // Låtar som den här enheten inte känner till än (från en annan enhet) får vara kvar;
+  // låtar som raderats här tas bort
+  for (const [name, e] of Object.entries(manifest)) {
+    if (!next[name] && !allSongs[e.id] && present.has(name)) next[name] = e;
   }
   for (const e of existing) {
     if (next[e.name] || !FILE_EXT.test(e.name)) continue;

@@ -354,14 +354,39 @@ describe('mappen Låtar i iCloud', () => {
     expect(fs.has('Låtar/Visa (2).cho')).toBe(false);
   });
 
-  it('skriver ändringar som kommit via synk, även med äldre tidsstämpel', async () => {
+  it('skriver ändringar som kommit via synk, även när filen är nyare än ändringen', async () => {
+    const songs0 = useStore.getState().songs;
     await mirrorSongsToICloud();
     advance(60_000);
     const songs = useStore.getState().songs;
-    // Ändrad på en annan enhet innan den här speglade, men tagen emot först nu
-    useStore.setState({ songs: { ...songs, d: { ...songs.d, content: '{title: Text}\n[Am]Från iPad', updatedAt: songs.d.updatedAt - 30_000 } } });
+    // Ändrad på en annan enhet strax efter förra versionen, men före den här enheten speglade,
+    // och tagen emot först nu: nyare än versionen i filen men äldre än själva filen
+    useStore.setState({ songs: { ...songs, d: { ...songs.d, content: '{title: Text}\n[Am]Från iPad', updatedAt: songs0.d.updatedAt + 10 } } });
     await mirrorSongsToICloud();
     expect(new TextDecoder().decode(fs.get('Låtar/Text.cho')!.bytes)).toContain('Från iPad');
+  });
+
+  it('skriver inte över en nyare version från en annan enhet och tar inte bort dess låtar', async () => {
+    // iPad: ändrad text och en egen låt
+    setLibrary([
+      { ...song('d', 'Text'), content: '{title: Text}\n[Am]Från iPad', updatedAt: 5000 },
+      song('ipad', 'Bara på iPad'),
+    ]);
+    await mirrorSongsToICloud();
+    advance(60_000);
+    // iPhone har inte synkat än: äldre version av Text och ingen låt Bara på iPad
+    setLibrary([{ ...song('d', 'Text'), updatedAt: 1000 }]);
+    await mirrorSongsToICloud();
+    expect(new TextDecoder().decode(fs.get('Låtar/Text.cho')!.bytes)).toContain('Från iPad');
+    expect(fs.has('Låtar/Bara på iPad.cho')).toBe(true);
+    // Efter synk raderar iPhone låten: då tas filen bort
+    advance(60_000);
+    setLibrary([
+      { ...song('d', 'Text'), content: '{title: Text}\n[Am]Från iPad', updatedAt: 5000 },
+      { ...song('ipad', 'Bara på iPad'), deletedAt: Date.now(), updatedAt: Date.now() },
+    ]);
+    await mirrorSongsToICloud();
+    expect(fs.has('Låtar/Bara på iPad.cho')).toBe(false);
   });
 
   it('sparas vid varje säkerhetskopiering', async () => {
