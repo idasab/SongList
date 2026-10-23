@@ -14,6 +14,11 @@ const FILES_DIR = `${BACKUP_DIR}/Filer`;
 const AUTO_PREFIX = 'Auto ';
 const MAX_AUTO_BACKUPS = 10;
 const WEEK = 7 * 24 * 3600 * 1000;
+/**
+ * Originalfiler yngre än så rensas aldrig: en annan enhet kan ha sparat filen men ännu inte
+ * hunnit skriva säkerhetskopian som pekar på den.
+ */
+const KEEP_NEW_FILES = 24 * 3600 * 1000;
 
 export function buildBackup(): BackupFile {
   const s = useStore.getState();
@@ -94,6 +99,8 @@ export interface ICloudBackup {
   name: string;
   modifiedAt: number;
   size: number;
+  /** Falskt om filen bara finns i molnet än (den laddas ner när den listas) */
+  downloaded?: boolean;
 }
 
 export async function createICloudBackup(auto = false): Promise<string> {
@@ -166,19 +173,25 @@ async function loadAttachments(data: BackupFile): Promise<BackupFile> {
 
 /**
  * Tar bort originalfiler som ingen säkerhetskopia längre pekar på. Går någon säkerhetskopia
- * inte att läsa tas ingenting bort, så att inga filer som behövs försvinner.
+ * inte att läsa tas ingenting bort, så att inga filer som behövs försvinner. Nya filer får vara
+ * kvar (se KEEP_NEW_FILES).
  */
 async function pruneFiles(): Promise<void> {
   try {
     const { files } = await SongListNative.listFiles({ scope: 'documents', path: FILES_DIR });
     if (!files.length) return;
+    const backups = await listICloudBackups();
+    // Säkerhetskopior som inte laddats ner än skulle ta tid att läsa; rensa nästa gång i stället
+    if (backups.some((b) => b.downloaded === false)) return;
     const used = new Set<string>();
-    for (const b of await listICloudBackups()) {
+    for (const b of backups) {
       const { data } = await SongListNative.readFile({ scope: 'documents', path: `${BACKUP_DIR}/${b.name}` });
       for (const f of referencedFiles(parseBackup(data))) used.add(f);
     }
+    const now = Date.now();
     for (const f of files) {
-      if (!used.has(f.name)) await SongListNative.deleteFile({ scope: 'documents', path: `${FILES_DIR}/${f.name}` });
+      if (used.has(f.name) || now - f.modifiedAt < KEEP_NEW_FILES) continue;
+      await SongListNative.deleteFile({ scope: 'documents', path: `${FILES_DIR}/${f.name}` });
     }
   } catch (e) {
     console.warn('Kunde inte rensa originalfiler', e);
