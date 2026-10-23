@@ -20,6 +20,8 @@ export interface SyncResult {
 }
 
 let running: Promise<SyncResult> | null = null;
+/** En synk begärdes medan en annan pågick, t.ex. efter en ändring: kör en gång till efteråt */
+let again = false;
 
 export async function iCloudAvailable(): Promise<boolean> {
   if (!hasNativePlugin()) return false;
@@ -31,8 +33,20 @@ export async function iCloudAvailable(): Promise<boolean> {
 }
 
 export function syncNow(): Promise<SyncResult> {
-  if (running) return running;
-  running = doSync().finally(() => {
+  if (running) {
+    // Ändringar som gjorts efter att den pågående synken tog sin ögonblicksbild kommer annars
+    // inte med förrän nästa ändring
+    again = true;
+    return running;
+  }
+  running = (async () => {
+    let result: SyncResult;
+    do {
+      again = false;
+      result = await doSync();
+    } while (again);
+    return result;
+  })().finally(() => {
     running = null;
   });
   return running;
