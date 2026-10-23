@@ -32,8 +32,8 @@ import {
   type MailOutcome,
   type MailRequest,
 } from '../services/mail';
-import { filterSongs, sortSongs } from '../lib/search';
-import { formatKey, parseKey } from '../lib/chords';
+import { filterSongs, songKey, sortSongs } from '../lib/search';
+import { formatKey } from '../lib/chords';
 import { newId, type SetlistItem, type Song } from '../lib/model';
 import { allTags, liveSongs, useStore } from '../store/useStore';
 import { FolderSelect, formatDate } from './SetlistsPage';
@@ -153,9 +153,10 @@ export function SetlistPage() {
                       song={isCue(it) ? undefined : songs[it.songId]}
                       keyLabel={(() => {
                         const s = songs[it.songId];
-                        if (isCue(it) || !s) return '';
-                        const k = parseKey(s.key);
-                        return k ? formatKey(k, s.transpose, notation) : '';
+                        if (isCue(it) || !s || s.attachment) return '';
+                        // Samma tonart som i låtlistan (tar hänsyn till H-notation och transponering)
+                        const k = songKey(s);
+                        return k ? formatKey(k.key, 0, notation) : '';
                       })()}
                       onOpen={() => play(idx)}
                       onEdit={isCue(it) ? () => void editCue(it) : undefined}
