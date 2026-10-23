@@ -47,17 +47,39 @@ async function fileBytes(f: SongFile): Promise<Uint8Array> {
 }
 
 /**
- * Speglar alla låtar till iCloud Drive › SongList › Låtar. Filer skrivs bara om när låten har
- * ändrats, och filer för låtar som har raderats tas bort.
+ * Förteckning i mappen över vilken låt och version varje fil innehåller. Dold (punkt först),
+ * så att den inte syns bland låtarna. Delas av alla enheter som skriver till mappen.
+ */
+const MANIFEST = `${SONG_FILES_DIR}/.songlist.json`;
+
+type Manifest = Record<string, { id: string; updatedAt: number }>;
+
+async function readManifest(): Promise<Manifest> {
+  try {
+    const { data } = await SongListNative.readFile({ scope: 'documents', path: MANIFEST });
+    const m: unknown = JSON.parse(data);
+    return m && typeof m === 'object' ? (m as Manifest) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Speglar alla låtar till iCloud Drive › SongList › Låtar. En fil skrivs om när den hör till
+ * en annan låt än förut (t.ex. efter att en låt bytt namn eller raderats) eller när låten har
+ * ändrats, även om ändringen kom via synk. Filer för raderade låtar tas bort.
  */
 export async function mirrorSongsToICloud(): Promise<number> {
   if (!hasNativePlugin()) return 0;
   const files = songFileNames(liveSongs(useStore.getState().songs));
   const { files: existing } = await SongListNative.listFiles({ scope: 'documents', path: SONG_FILES_DIR });
-  const byName = new Map(existing.map((e) => [e.name, e]));
+  const present = new Set(existing.map((e) => e.name));
+  const manifest = await readManifest();
+  const next: Manifest = {};
   for (const f of files) {
-    const old = byName.get(f.name);
-    if (old && old.modifiedAt >= f.song.updatedAt) continue;
+    const known = manifest[f.name];
+    next[f.name] = { id: f.song.id, updatedAt: f.song.updatedAt };
+    if (present.has(f.name) && known?.id === f.song.id && known.updatedAt === f.song.updatedAt) continue;
     const path = `${SONG_FILES_DIR}/${f.name}`;
     if (f.song.attachment) {
       const data = f.song.attachment.dataUrl.replace(/^data:[^,]*,/, '');
@@ -66,15 +88,15 @@ export async function mirrorSongsToICloud(): Promise<number> {
       await SongListNative.writeFile({ scope: 'documents', path, data: f.song.content.replace(/\n?$/, '\n') });
     }
   }
-  const wanted = new Set(files.map((f) => f.name));
   for (const e of existing) {
-    if (wanted.has(e.name) || !FILE_EXT.test(e.name)) continue;
+    if (next[e.name] || !FILE_EXT.test(e.name)) continue;
     try {
       await SongListNative.deleteFile({ scope: 'documents', path: `${SONG_FILES_DIR}/${e.name}` });
     } catch {
       // Försök igen nästa gång
     }
   }
+  await SongListNative.writeFile({ scope: 'documents', path: MANIFEST, data: JSON.stringify(next) });
   return files.length;
 }
 

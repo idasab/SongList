@@ -38,6 +38,7 @@ vi.mock('../native/songlistNative', () => ({
       for (const [p, f] of fs) {
         if (!p.startsWith(path + '/')) continue;
         const rest = p.slice(path.length + 1);
+        if (rest.startsWith('.')) continue; // dolda filer listas inte, som i iOS-koden
         const slash = rest.indexOf('/');
         if (slash < 0) names.set(rest, f);
         else names.set(rest.slice(0, slash), null); // undermapp
@@ -104,7 +105,9 @@ function setLibrary(songs: Song[]) {
   useStore.setState({ songs: Object.fromEntries(songs.map((s) => [s.id, s])), setlists: {}, categories: {}, folders: {} });
 }
 
-const filesIn = (dir: string) => [...fs.keys()].filter((p) => p.startsWith(dir + '/') && !p.slice(dir.length + 1).includes('/'));
+// Synliga filer direkt i mappen (dolda filer som förteckningen räknas inte)
+const filesIn = (dir: string) =>
+  [...fs.keys()].filter((p) => p.startsWith(dir + '/') && !p.slice(dir.length + 1).includes('/') && !p.slice(dir.length + 1).startsWith('.'));
 const storedFiles = () => filesIn('Säkerhetskopior/Filer');
 const DAY = 24 * 3600 * 1000;
 let clock = new Date('2026-10-01T10:00:00').getTime();
@@ -317,7 +320,7 @@ describe('mappen Låtar i iCloud', () => {
     native.writes = [];
     advance(60_000);
     await mirrorSongsToICloud();
-    expect(native.writes).toHaveLength(0);
+    expect(native.writes.filter((p) => !p.endsWith('.songlist.json'))).toHaveLength(0);
 
     advance(60_000);
     const songs = useStore.getState().songs;
@@ -330,9 +333,35 @@ describe('mappen Låtar i iCloud', () => {
     });
     fs.set('Låtar/Egen anteckning.txt', { bytes: new TextEncoder().encode('min fil'), modifiedAt: 0 });
     await mirrorSongsToICloud();
-    expect(native.writes).toEqual(['Låtar/Text.cho']);
+    expect(native.writes.filter((p) => !p.endsWith('.songlist.json'))).toEqual(['Låtar/Text.cho']);
     expect(fs.has('Låtar/Noter B.pdf')).toBe(false);
     expect(fs.has('Låtar/Egen anteckning.txt')).toBe(true); // filer appen inte skapat lämnas
+  });
+
+  it('skriver om en fil som nu hör till en annan låt med samma namn', async () => {
+    setLibrary([
+      { ...song('a', 'Visa'), content: '{title: Visa}\nFörsta', createdAt: 1 },
+      { ...song('b', 'Visa'), content: '{title: Visa}\nAndra', createdAt: 2 },
+    ]);
+    await mirrorSongsToICloud();
+    expect(new TextDecoder().decode(fs.get('Låtar/Visa (2).cho')!.bytes)).toContain('Andra');
+    advance(60_000);
+    // Den första raderas: den andra tar över namnet Visa.cho
+    const songs = useStore.getState().songs;
+    useStore.setState({ songs: { ...songs, a: { ...songs.a, deletedAt: Date.now(), updatedAt: Date.now() } } });
+    await mirrorSongsToICloud();
+    expect(new TextDecoder().decode(fs.get('Låtar/Visa.cho')!.bytes)).toContain('Andra');
+    expect(fs.has('Låtar/Visa (2).cho')).toBe(false);
+  });
+
+  it('skriver ändringar som kommit via synk, även med äldre tidsstämpel', async () => {
+    await mirrorSongsToICloud();
+    advance(60_000);
+    const songs = useStore.getState().songs;
+    // Ändrad på en annan enhet innan den här speglade, men tagen emot först nu
+    useStore.setState({ songs: { ...songs, d: { ...songs.d, content: '{title: Text}\n[Am]Från iPad', updatedAt: songs.d.updatedAt - 30_000 } } });
+    await mirrorSongsToICloud();
+    expect(new TextDecoder().decode(fs.get('Låtar/Text.cho')!.bytes)).toContain('Från iPad');
   });
 
   it('sparas vid varje säkerhetskopiering', async () => {
