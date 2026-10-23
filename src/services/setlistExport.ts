@@ -484,10 +484,12 @@ function drawAnnotations(doc: JsPdf, ann: Annotations, tops: number[]) {
     const c = anchorToPx(metrics, n.anchor);
     const anchorTop = tops[Math.min(n.anchor.line, tops.length - 1)] ?? 0;
     const { page } = toPage(anchorTop);
-    const cx = MARGIN_X + c.x;
-    const cy = c.y - (page - 1) * PAGE_H;
     const w = n.w * EM;
     const h = n.h * EM;
+    // Inom sidans textyta: appens spalt kan vara bredare än PDF:ens
+    const contentW = PAGE_W - 2 * MARGIN_X;
+    const cx = MARGIN_X + (contentW > w ? Math.min(Math.max(c.x, w / 2), contentW - w / 2) : contentW / 2);
+    const cy = Math.min(Math.max(c.y - (page - 1) * PAGE_H, h / 2 + 12), PAGE_H - MARGIN_BOTTOM + 20 - h / 2);
     // PDF:ens y-axel pekar nedåt här, precis som på skärmen: positiv vinkel = medurs
     const a = (n.rotation * Math.PI) / 180;
     const cos = Math.cos(a);

@@ -168,3 +168,13 @@ export function clamp(v: number, min: number, max: number): number {
 export function hasAnnotations(a: Annotations | undefined): boolean {
   return !!a && (a.strokes.length > 0 || a.notes.length > 0);
 }
+
+/**
+ * Lappens mittpunkt inom låtens bredd, så att lappen alltid syns och går att nå – även efter
+ * att texten gjorts större eller iPaden vridits. Används både när lappen ritas och när den flyttas.
+ */
+export function clampNoteCenter(c: { x: number; y: number }, w: number, h: number, areaWidth: number): { x: number; y: number } {
+  if (!(areaWidth > 0)) return c;
+  const x = areaWidth > w ? Math.min(Math.max(c.x, w / 2), areaWidth - w / 2) : areaWidth / 2;
+  return { x, y: Math.max(c.y, h / 2) };
+}

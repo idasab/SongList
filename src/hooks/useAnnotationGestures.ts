@@ -11,6 +11,7 @@ import {
   anchorAt,
   anchorToPx,
   clamp,
+  clampNoteCenter,
   hitStroke,
   strokeFromPx,
   strokeToPx,
@@ -120,8 +121,11 @@ export function useAnnotationGestures(options: GestureOptions) {
   };
 
   const geomOf = (n: StickyNote, m: LineMetrics): Geom => {
-    const c = anchorToPx(m, n.anchor);
-    return { cx: c.x, cy: c.y, w: n.w * m.fontPx, h: n.h * m.fontPx, rot: n.rotation };
+    const w = n.w * m.fontPx;
+    const h = n.h * m.fontPx;
+    // Samma plats som lappen ritas på (inom låtens bredd)
+    const c = clampNoteCenter(anchorToPx(m, n.anchor), w, h, opt.current.songRef.current?.clientWidth ?? 0);
+    return { cx: c.x, cy: c.y, w, h, rot: n.rotation };
   };
 
   const rebaseline = () => {

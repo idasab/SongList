@@ -1,8 +1,9 @@
-import { useLayoutEffect, useState, type RefObject } from 'react';
+import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import {
   INK_COLORS,
   NOTE_COLORS,
   anchorToPx,
+  clampNoteCenter,
   smoothPath,
   strokeToPx,
   type Annotations,
@@ -64,8 +65,20 @@ export function AnnotationLayer({
   onTextDone: (id: string) => void;
 }) {
   const fp = metrics.fontPx;
+  // Låtens bredd: lappar hålls inom den
+  const layerRef = useRef<HTMLDivElement>(null);
+  const [areaWidth, setAreaWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = layerRef.current;
+    if (!el) return;
+    const update = () => setAreaWidth(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   return (
-    <div className={`annot-layer${interactive ? ' on' : ''}`} aria-hidden={!interactive}>
+    <div ref={layerRef} className={`annot-layer${interactive ? ' on' : ''}`} aria-hidden={!interactive}>
       <svg className="annot-svg">
         {annotations.strokes.map((s) => (
           <path
@@ -90,7 +103,7 @@ export function AnnotationLayer({
         )}
       </svg>
       {annotations.notes.map((n) => {
-        const c = anchorToPx(metrics, n.anchor);
+        const c = clampNoteCenter(anchorToPx(metrics, n.anchor), n.w * fp, n.h * fp, areaWidth);
         const selected = interactive && selectedId === n.id;
         const editing = interactive && editingId === n.id;
         return (

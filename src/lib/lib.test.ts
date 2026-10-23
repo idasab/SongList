@@ -14,7 +14,7 @@ import { decodeText, isChordProFileName, looksLikeChordPro, textToChordPro, titl
 import { ocrToChordPro, type OcrPage } from './ocrLayout';
 import { getPianoChord, normalizeSuffix } from './chordShapes';
 import { mergeRecords, restoreMerge } from './merge';
-import { anchorAt, anchorToPx, hitStroke, strokeFromPx, strokeToPx } from './annotations';
+import { anchorAt, anchorToPx, clampNoteCenter, hitStroke, strokeFromPx, strokeToPx } from './annotations';
 import { buildChordProExport, buildPdfExport, buildSongFiles, buildTextExport, mailBody, mailSubject } from '../services/setlistExport';
 import { isValidEmail } from '../services/mail';
 import { filterSongs, groupLetter, keyId, keyIdLabel, keysInLibrary, songKey, sortSongs } from './search';
@@ -846,5 +846,15 @@ describe('text i PDF:en', () => {
     // Titeln ritas i ett stycke: med en emoji blev den två byte per tecken
     expect(raw).not.toMatch(/\u0000G\u0000i\u0000t/);
     expect(raw).toContain('Gitarr');
+  });
+});
+
+describe('lappar inom låten', () => {
+  it('hålls inom bredden och under överkanten', () => {
+    expect(clampNoteCenter({ x: 900, y: 50 }, 100, 60, 400)).toEqual({ x: 350, y: 50 });
+    expect(clampNoteCenter({ x: -20, y: -10 }, 100, 60, 400)).toEqual({ x: 50, y: 30 });
+    expect(clampNoteCenter({ x: 200, y: 100 }, 100, 60, 400)).toEqual({ x: 200, y: 100 });
+    // Bredare än låten: mitt i
+    expect(clampNoteCenter({ x: 10, y: 100 }, 500, 60, 400).x).toBe(200);
   });
 });
