@@ -113,6 +113,8 @@ export function useAnnotationGestures(options: GestureOptions) {
   const startPan = () => {
     const s = st.current;
     if (s.mode === 'draw') opt.current.setLive(null);
+    // Suddning som övergår i scrollning: spara det som suddats
+    if (s.mode === 'erase' && s.changed) push(current(), true);
     s.mode = 'pan';
     s.lastPan = midClient();
   };
@@ -216,6 +218,9 @@ export function useAnnotationGestures(options: GestureOptions) {
     const target = e.target as HTMLElement;
     if (target.closest('textarea')) return;
     const s = st.current;
+    // Handflata eller finger på skärmen medan man ritar med pennan: ignorera, så att strecket
+    // inte avbryts
+    if (e.pointerType === 'touch' && s.mode === 'draw' && [...s.pointers.values()].some((p) => p.type === 'pen')) return;
     s.pointers.set(e.pointerId, { cx: e.clientX, cy: e.clientY, type: e.pointerType });
     if (e.pointerType === 'pen') s.penSeen = true;
     try {
@@ -385,5 +390,18 @@ export function useAnnotationGestures(options: GestureOptions) {
     }
   };
 
-  return { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp };
+  /** Nollställer pågående gester, t.ex. när låten byts, vid ångra eller när man slutar anteckna. */
+  const reset = () => {
+    const s = st.current;
+    s.mode = 'idle';
+    s.pointers.clear();
+    s.note = null;
+    s.stroke = [];
+    s.latest = null;
+    s.changed = false;
+    s.tap = null;
+    opt.current.setLive(null);
+  };
+
+  return { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp, reset };
 }

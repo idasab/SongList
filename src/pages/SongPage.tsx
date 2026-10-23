@@ -131,11 +131,20 @@ export function SongPage() {
     setLive,
   });
 
+  // När redigeringen av en lapp avslutas (även utan att textrutan hann tappa fokus): spara texten
+  const prevEditing = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevEditing.current && !editingId && draft) updateAnnotations(draft, true);
+    prevEditing.current = editingId;
+  }, [editingId, draft, updateAnnotations]);
+
   const annotatingRef = useRef(annotating);
   annotatingRef.current = annotating;
 
   // Ny låt: nollställ anteckningsläget
   useEffect(() => {
+    // Även gesternas tillstånd, så att inget från förra låten hamnar på den nya
+    gestures.reset();
     setAnnotating(false);
     setLive(null);
     setDraft(null);
@@ -362,6 +371,7 @@ export function SongPage() {
   };
   const stopAnnotating = () => {
     if (draft) updateAnnotations(draft, true);
+    gestures.reset();
     setAnnotating(false);
     setSelectedId(null);
     setEditingId(null);
@@ -370,6 +380,7 @@ export function SongPage() {
   const undo = () => {
     const prev = history.current.pop();
     if (!prev) return;
+    gestures.reset();
     setDraft(null);
     setSelectedId(null);
     setEditingId(null);
