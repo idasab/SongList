@@ -4,7 +4,7 @@ import { Camera, ChevronDown, ChevronUp, ClipboardPaste, FileUp, Image as ImageI
 import { SongRenderer } from '../components/SongRenderer';
 import { TagInput } from '../components/TagInput';
 import { askText, Header, Segmented, Sheet, toast, toastError } from '../components/ui';
-import { parseChordPro, songPrefersFlats } from '../lib/chordpro';
+import { parseChordPro } from '../lib/chordpro';
 import {
   SOURCE_FONTS,
   canvasMeasure,
@@ -491,7 +491,6 @@ function ImportItemCard({
             song={parsed}
             opts={{
               transpose: 0,
-              preferFlats: songPrefersFlats(parsed, 0),
               notation,
               showChords: true,
               fontSize: 16,

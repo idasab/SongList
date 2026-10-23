@@ -441,6 +441,21 @@ export function chordsInSource(source: string): string[] {
 }
 
 /** Avgör om transponerade ackord ska skrivas med b-förtecken, utifrån tonart eller första ackordet. */
+/** Kapo enligt {capo}, 0 om det saknas. */
+export function capoOf(song: ParsedSong): number {
+  const n = parseInt(song.meta.capo ?? '', 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(11, n) : 0;
+}
+
+/**
+ * Hur ackorden visas. Ackorden i låten är de som klingar; med kapo visas greppen, dvs.
+ * ackorden flyttade ner så många halvtoner som kapot sitter (A med kapo 2 visas som G).
+ */
+export function displayChordContext(song: ParsedSong, transpose: number, notation: ChordContext['notation']): ChordContext {
+  const shift = transpose - capoOf(song);
+  return { transpose: shift, preferFlats: songPrefersFlats(song, shift), notation, hNotation: song.hNotation };
+}
+
 export function songPrefersFlats(song: ParsedSong, transpose: number): boolean {
   let key = parseKey(song.meta.key, { hNotation: song.hNotation });
   if (!key && song.chords.length) {

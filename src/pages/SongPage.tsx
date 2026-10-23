@@ -26,7 +26,7 @@ import { ChordDiagram, ChordSheet } from '../components/ChordDiagram';
 import { SongRenderer } from '../components/SongRenderer';
 import { Header, Sheet, toast, toastError } from '../components/ui';
 import { formatChord, normalizeTranspose } from '../lib/chords';
-import { parseChordPro, songPrefersFlats, transposeSource } from '../lib/chordpro';
+import { capoOf, displayChordContext, parseChordPro, songPrefersFlats, transposeSource, upsertDirective } from '../lib/chordpro';
 import { liveSetlists, useStore } from '../store/useStore';
 import { safeFileName, saveTextFile } from '../services/files';
 import { newId } from '../lib/model';
@@ -278,11 +278,19 @@ export function SongPage() {
 
   // Låten visas som en bifogad fil (t.ex. noter) i stället för text och ackord
   const isFile = !!song.attachment;
-  const ctx = { transpose, preferFlats, notation: settings.notation, hNotation: parsed.hNotation };
+  // Ackorden visas som grepp när låten har kapo
+  const ctx = displayChordContext(parsed, transpose, settings.notation);
+  const capo = capoOf(parsed);
   const displayChords = parsed.chords.filter((c) => !c.startsWith('*')).map((c) => formatChord(c, ctx));
   const uniqueChords = [...new Set(displayChords)];
 
   const setTranspose = (n: number) => void updateSongPrefs(song.id, { transpose: normalizeTranspose(n) });
+  // Kapot sparas i låten ({capo}), så att det följer med i synk, export och redigering
+  const setCapo = (n: number) => {
+    const next = Math.max(0, Math.min(11, n));
+    if (next === capo) return;
+    void saveSong({ id: song.id, content: upsertDirective(song.content, 'capo', next ? String(next) : '') });
+  };
   const setFont = (n: number) => void updateSettings({ fontSize: Math.max(MIN_FONT, Math.min(MAX_FONT, n)) });
   const setSpeed = (n: number) => void updateSongPrefs(song.id, { scrollSpeed: Math.max(1, Math.min(10, n)) });
 
@@ -425,6 +433,20 @@ export function SongPage() {
           </div>
           )}
 
+          {!isFile && (
+          <div className="tool-group" title="Kapo">
+            <button className="btn icon" aria-label="Kapo ner" disabled={capo <= 0} onClick={() => setCapo(capo - 1)}>
+              <Minus size={18} />
+            </button>
+            <span className="tool-value capo-value" onClick={() => setCapo(0)}>
+              {capo ? `Kapo ${capo}` : 'Kapo'}
+            </span>
+            <button className="btn icon" aria-label="Kapo upp" disabled={capo >= 11} onClick={() => setCapo(capo + 1)}>
+              <Plus size={18} />
+            </button>
+          </div>
+          )}
+
           <div className="tool-group" title={isFile ? 'Zooma' : 'Textstorlek'}>
             <button className="btn icon" aria-label="Mindre text" onClick={() => setFont(settings.fontSize - 2)}>
               <span style={{ fontSize: 13, fontWeight: 700 }}>A</span>
@@ -528,7 +550,6 @@ export function SongPage() {
             song={parsed}
             opts={{
               transpose,
-              preferFlats,
               notation: settings.notation,
               showChords,
               fontSize: settings.fontSize,

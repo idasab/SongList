@@ -5,6 +5,8 @@
 // post-it-lappar och handritade streck på samma rad som i appen.
 
 import {
+  capoOf,
+  displayChordContext,
   isChordRow,
   parseChordPro,
   midWordBreaks,
@@ -51,16 +53,8 @@ function prepare(setlist: Setlist, songs: Record<string, Song>, notation: Notati
     .filter((s): s is Song => !!s && !s.deletedAt)
     .map((song) => {
       const parsed = parseChordPro(song.content);
-      return {
-        song,
-        parsed,
-        ctx: {
-          transpose: song.transpose,
-          preferFlats: songPrefersFlats(parsed, song.transpose),
-          notation,
-          hNotation: parsed.hNotation,
-        },
-      };
+      // Ackorden exporteras som de visas: som grepp när låten har kapo
+      return { song, parsed, ctx: displayChordContext(parsed, song.transpose, notation) };
     });
 }
 
@@ -73,10 +67,10 @@ function infoLine(p: PreparedSong): string {
   const parts: string[] = [];
   const key = keyLabel(p);
   if (key) parts.push(`Tonart ${key}`);
-  const capo = p.parsed.meta.capo ? parseInt(p.parsed.meta.capo, 10) : 0;
+  const capo = capoOf(p.parsed);
   if (capo > 0) {
     const k = parseKey(p.parsed.meta.key, { hNotation: p.parsed.hNotation });
-    parts.push(`Kapo ${capo}` + (k ? ` (klingar ${formatKey(k, p.song.transpose + capo, p.ctx.notation)})` : ''));
+    parts.push(`Kapo ${capo}` + (k ? ` (grepp i ${formatKey(k, p.song.transpose - capo, p.ctx.notation)})` : ''));
   }
   if (p.parsed.meta.tempo) parts.push(`Tempo ${p.parsed.meta.tempo}`);
   if (p.parsed.meta.time) parts.push(`Takt ${p.parsed.meta.time}`);
@@ -173,7 +167,8 @@ function songChordPro(p: PreparedSong): string {
   const src = p.song.transpose
     ? transposeSource(p.song.content, {
         transpose: p.song.transpose,
-        preferFlats: p.ctx.preferFlats,
+        // ChordPro-filen behåller ackorden som de klingar, med {capo} kvar
+        preferFlats: songPrefersFlats(p.parsed, p.song.transpose),
         notation: p.parsed.hNotation ? 'swedish' : 'international',
       })
     : p.song.content;

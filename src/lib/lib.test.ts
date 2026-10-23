@@ -4,7 +4,7 @@ import type { Setlist, Song } from './model';
 import { unzipSync, zipSync } from 'fflate';
 import { decodeZipName, zipNameMap } from './zipNames';
 import { formatChord, isChord, parseChord, parseKey, formatKey } from './chords';
-import { isChordRow, midWordBreaks, parseChordPro, parseLyricsLine, splitWords, transposeSource, upsertDirective } from './chordpro';
+import { capoOf, displayChordContext, isChordRow, midWordBreaks, parseChordPro, parseLyricsLine, splitWords, transposeSource, upsertDirective } from './chordpro';
 import { isChordLine, parseHeader } from './layout';
 import { decodeText, isChordProFileName, looksLikeChordPro, textToChordPro, titleFromFileName, type Measure } from './textImport';
 import { ocrToChordPro, type OcrPage } from './ocrLayout';
@@ -606,5 +606,21 @@ describe('mellanpunkter i setlistor', () => {
     expect(itemPath('s', items[1], 1)).toBe(`/song/${CUE_ROUTE_ID}?setlist=s&i=1`);
     const text = buildTextExport(setlist, songs, 'international');
     expect(text).toContain('1. Första\n   – Tal –\n2. Andra');
+  });
+});
+
+describe('kapo', () => {
+  it('visar greppen: ackorden flyttas ner så många halvtoner som kapot sitter', () => {
+    const song = parseChordPro('{key: A}\n{capo: 2}\n[A]Ett [D]två [E7]tre [F#m]fyra');
+    expect(capoOf(song)).toBe(2);
+    const ctx = displayChordContext(song, 0, 'international');
+    expect(song.chords.map((c) => formatChord(c, ctx))).toEqual(['G', 'C', 'D7', 'Em']);
+    // Transponering räknas på det som klingar, kapot dras av för greppen
+    const up = displayChordContext(song, 2, 'international');
+    expect(formatChord('A', up)).toBe('A');
+  });
+  it('lämnar ackorden som de är utan kapo', () => {
+    const song = parseChordPro('[Bb]Ett');
+    expect(formatChord('Bb', displayChordContext(song, 0, 'international'))).toBe('Bb');
   });
 });

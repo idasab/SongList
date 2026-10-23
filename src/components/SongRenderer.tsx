@@ -1,10 +1,10 @@
 import { memo, type CSSProperties, type ReactNode, type Ref } from 'react';
-import { isChordRow, midWordBreaks, splitWords, type Line, type ParsedSong, type Section } from '../lib/chordpro';
+import { capoOf, displayChordContext, isChordRow, midWordBreaks, splitWords, type Line, type ParsedSong, type Section } from '../lib/chordpro';
 import { formatChord, formatKey, parseKey, type ChordContext } from '../lib/chords';
 
 export interface RenderOptions {
+  /** Transponering av låten (som den klingar). Kapot räknas av automatiskt för ackorden. */
   transpose: number;
-  preferFlats: boolean;
   notation: ChordContext['notation'];
   showChords: boolean;
   fontSize: number;
@@ -152,15 +152,10 @@ export const SongRenderer = memo(function SongRenderer({
   /** Lager som ritas ovanpå låten, t.ex. anteckningar */
   overlay?: ReactNode;
 }) {
-  const ctx: ChordContext = {
-    transpose: opts.transpose,
-    preferFlats: opts.preferFlats,
-    notation: opts.notation,
-    hNotation: song.hNotation,
-  };
+  const ctx: ChordContext = displayChordContext(song, opts.transpose, opts.notation);
   const { meta } = song;
   const key = parseKey(meta.key, { hNotation: song.hNotation });
-  const capo = meta.capo ? parseInt(meta.capo, 10) : 0;
+  const capo = capoOf(song);
   const style: CSSProperties = { fontSize: opts.fontSize };
   const starts = sectionStarts(song.sections);
 
@@ -182,7 +177,7 @@ export const SongRenderer = memo(function SongRenderer({
                 {key && (
                   <>
                     {' '}
-                    (klingar <span className="chordish">{formatKey(key, opts.transpose + capo, opts.notation)}</span>)
+                    (grepp i <span className="chordish">{formatKey(key, opts.transpose - capo, opts.notation)}</span>)
                   </>
                 )}
               </span>

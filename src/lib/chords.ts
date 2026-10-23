@@ -126,7 +126,8 @@ function normalizeNoteName(name: string, pc: number): string {
   return sharp.length === 1 ? sharp : flat;
 }
 
-const FLAT_MAJOR_KEYS = new Set([5, 10, 3, 8, 1, 6]); // F Bb Eb Ab Db Gb
+// F# dur skrivs med korsförtecken (F#, B, C#7), som är vanligast för gitarrgrepp
+const FLAT_MAJOR_KEYS = new Set([5, 10, 3, 8, 1]); // F Bb Eb Ab Db
 const FLAT_MINOR_KEYS = new Set([2, 7, 0, 5, 10, 3]); // Dm Gm Cm Fm Bbm Ebm
 
 /** Avgör om en tonart normalt skrivs med b-förtecken. */

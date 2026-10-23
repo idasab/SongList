@@ -4,7 +4,7 @@ import { ChevronDown, ChevronUp, Image as ImageIcon, Wand2 } from 'lucide-react'
 import { SongRenderer } from '../components/SongRenderer';
 import { TagInput } from '../components/TagInput';
 import { Header, Segmented, toast } from '../components/ui';
-import { parseChordPro, songPrefersFlats, upsertDirective } from '../lib/chordpro';
+import { parseChordPro, upsertDirective } from '../lib/chordpro';
 import { textToChordPro } from '../lib/textImport';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { allTags, liveCategories, useStore } from '../store/useStore';
@@ -150,7 +150,6 @@ export function EditorPage() {
     replaceSelection((sel) => ({ text: textToChordPro(sel).replace(/\n$/, sel.endsWith('\n') ? '\n' : '') }));
   };
 
-  const preferFlats = songPrefersFlats(parsed, 0);
   // Alla ackord i låten, i den ordning de först förekommer
   const quickChords = parsed.chords.filter((c) => !c.startsWith('*'));
 
@@ -158,7 +157,7 @@ export function EditorPage() {
     <div className="preview">
       <SongRenderer
         song={parsed}
-        opts={{ transpose: 0, preferFlats, notation: settings.notation, showChords: true, fontSize: Math.min(settings.fontSize, 20) }}
+        opts={{ transpose: 0, notation: settings.notation, showChords: true, fontSize: Math.min(settings.fontSize, 20) }}
       />
     </div>
   );
