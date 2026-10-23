@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CUE_ROUTE_ID, itemPath, itemTitle, liveItems, moveVisible, songCount } from './setlist';
 import type { BackupFile, Setlist, Song } from './model';
+import { pdfSafe } from './pdfText';
 import { attachmentFileName, contentHash, dataUrlBase64, markMissingAttachments, referencedFiles } from './backupFiles';
 import { songFileNames } from '../services/songFiles';
 import { deriveSongMeta } from '../store/useStore';
@@ -14,7 +15,7 @@ import { ocrToChordPro, type OcrPage } from './ocrLayout';
 import { getPianoChord, normalizeSuffix } from './chordShapes';
 import { mergeRecords, restoreMerge } from './merge';
 import { anchorAt, anchorToPx, hitStroke, strokeFromPx, strokeToPx } from './annotations';
-import { buildChordProExport, buildSongFiles, buildTextExport, mailBody, mailSubject } from '../services/setlistExport';
+import { buildChordProExport, buildPdfExport, buildSongFiles, buildTextExport, mailBody, mailSubject } from '../services/setlistExport';
 import { isValidEmail } from '../services/mail';
 import { filterSongs, groupLetter, keyId, keyIdLabel, keysInLibrary, songKey, sortSongs } from './search';
 
@@ -828,5 +829,20 @@ describe('grepp för kapo i andra tonarter', () => {
     expect(shift('{key: D}\n{capo: 2}\n[D]Ett [C]två [G]tre [D]fyra')).toBe(0);
     expect(shift('{key: G}\n{capo: 2}\n[G]Ett [F]två [C]tre [G]fyra [D]fem')).toBe(0);
     expect(shift('{key: A}\n{capo: 2}\n[A]Ett [D]två [E]tre [F#m]fyra [Bm]fem')).toBe(0);
+  });
+});
+
+describe('text i PDF:en', () => {
+  it('byter ut tecken som PDF-typsnittet saknar', () => {
+    expect(pdfSafe('“Hej” – så — där…')).toBe('“Hej” – så — där…');
+    expect(pdfSafe('Hej 🎸 nu')).toBe('Hej  nu');
+    expect(pdfSafe('F♯ och B♭ − ő')).toBe('F# och Bb - o');
+  });
+  it('ger läsbar text i exporten även med emoji', async () => {
+    const s: Song = { id: 's', title: 'Gitarr 🎸', artist: '', content: '{title: Gitarr 🎸}\n[G]Sjung 🎶 så glatt', tags: [], transpose: 0, createdAt: 1, updatedAt: 1 };
+    const setlist: Setlist = { id: 'l', name: 'Lista', createdAt: 1, updatedAt: 1, items: [{ id: '1', songId: 's' }] };
+    const blob = await buildPdfExport(setlist, { s }, 'international', false);
+    const raw = new TextDecoder('latin1').decode(new Uint8Array(await blob.arrayBuffer()));
+    expect(raw).not.toMatch(/\u0000S\u0000j/); // inte två byte per tecken
   });
 });

@@ -29,6 +29,7 @@ import {
 import type { Setlist, Song, SongAttachment } from '../lib/model';
 import { safeFileName, saveBinaryFile, saveTextFile } from './files';
 import { loadPdfJs } from './fileImport';
+import { pdfSafe } from '../lib/pdfText';
 import { isCue, itemTitle, liveItems } from '../lib/setlist';
 
 export type SetlistExportFormat = 'text' | 'pdf-annotated' | 'pdf-clean' | 'chordpro';
@@ -642,13 +643,28 @@ async function toJpeg(dataUrl: string, size: { w: number; h: number }): Promise<
   return canvas.toDataURL('image/jpeg', 0.9);
 }
 
+/**
+ * Låter all text som ritas och mäts gå genom pdfSafe, så att tecken som PDF-typsnittet saknar
+ * (t.ex. emoji) inte gör hela raden oläsbar.
+ */
+function safeText(doc: JsPdf) {
+  const safe = (t: string | string[]) => (Array.isArray(t) ? t.map(pdfSafe) : pdfSafe(t));
+  const text = doc.text.bind(doc);
+  const width = doc.getTextWidth.bind(doc);
+  const split = doc.splitTextToSize.bind(doc);
+  doc.text = ((t: string | string[], ...rest: unknown[]) => (text as (...a: unknown[]) => JsPdf)(safe(t), ...rest)) as JsPdf['text'];
+  doc.getTextWidth = (t: string) => width(pdfSafe(t));
+  doc.splitTextToSize = ((t: string, ...rest: unknown[]) => (split as (...a: unknown[]) => string[])(pdfSafe(t), ...rest)) as JsPdf['splitTextToSize'];
+}
+
 async function renderPdf(
   entries: { p: PreparedSong; number: number }[],
   opts: { title: string; footer: string; cover?: { setlist: Setlist; rows: OverviewRow[] }; withAnnotations: boolean },
 ): Promise<Blob> {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-  doc.setProperties({ title: opts.title, creator: 'SongList' });
+  safeText(doc);
+  doc.setProperties({ title: pdfSafe(opts.title), creator: 'SongList' });
   const c: PdfCtx = { doc, page: 1, y: MARGIN_TOP };
 
   if (opts.cover) drawCover(c, opts.cover.setlist, opts.cover.rows);
