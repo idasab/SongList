@@ -430,22 +430,17 @@ function drawSongHeader(c: PdfCtx, p: PreparedSong, index: number, tops: number[
   const title = doc.splitTextToSize(`${index}. ${p.song.title}`, PAGE_W - 2 * MARGIN_X) as string[];
   title.forEach((t, i) => doc.text(t, MARGIN_X, c.y + i * 1.5 * EM * 1.2, { baseline: 'top' }));
   c.y += title.length * 1.5 * EM * 1.2;
-  if (p.parsed.meta.subtitle) {
-    setFont(doc, 'italic', EM, MUTED);
-    doc.text(p.parsed.meta.subtitle, MARGIN_X, c.y + 2, { baseline: 'top' });
-    c.y += 1.4 * EM + 2;
-  }
-  if (p.song.artist) {
-    setFont(doc, 'normal', EM, MUTED);
-    doc.text(p.song.artist, MARGIN_X, c.y + 2, { baseline: 'top' });
-    c.y += 1.4 * EM + 2;
-  }
+  // Långa rader radbryts i stället för att gå ut i marginalen
+  const wrapped = (text: string, style: 'normal' | 'italic', size: number, before: number, rowH: number) => {
+    setFont(doc, style, size, MUTED);
+    const rows = doc.splitTextToSize(text, PAGE_W - 2 * MARGIN_X) as string[];
+    rows.forEach((r, i) => doc.text(r, MARGIN_X, c.y + before + i * rowH, { baseline: 'top' }));
+    c.y += before + rows.length * rowH;
+  };
+  if (p.parsed.meta.subtitle) wrapped(p.parsed.meta.subtitle, 'italic', EM, 2, 1.4 * EM);
+  if (p.song.artist) wrapped(p.song.artist, 'normal', EM, 2, 1.4 * EM);
   const info = infoLine(p);
-  if (info) {
-    setFont(doc, 'normal', 0.8 * EM, MUTED);
-    doc.text(info, MARGIN_X, c.y + 0.4 * EM, { baseline: 'top' });
-    c.y += 0.4 * EM + 1.12 * EM;
-  }
+  if (info) wrapped(info, 'normal', 0.8 * EM, 0.4 * EM, 1.12 * EM);
   c.y += 1.1 * EM;
 }
 
@@ -525,11 +520,20 @@ function drawAnnotations(doc: JsPdf, ann: Annotations, tops: number[]) {
   doc.setPage(current);
 }
 
+/** Kortar texten med … så att den ryms på bredden (med det typsnitt som är valt). */
+function fitWidth(doc: JsPdf, text: string, maxW: number): string {
+  if (doc.getTextWidth(text) <= maxW) return text;
+  let t = text;
+  while (t.length > 1 && doc.getTextWidth(t + '…') > maxW) t = t.slice(0, -1);
+  return t.length > 1 ? t.trimEnd() + '…' : '';
+}
+
 function drawCover(c: PdfCtx, setlist: Setlist, rows: OverviewRow[]) {
   const doc = c.doc;
   setFont(doc, 'bold', 24);
-  doc.text(setlist.name, MARGIN_X, c.y, { baseline: 'top' });
-  c.y += 32;
+  const nameRows = doc.splitTextToSize(setlist.name, PAGE_W - 2 * MARGIN_X) as string[];
+  nameRows.forEach((r, i) => doc.text(r, MARGIN_X, c.y + i * 29, { baseline: 'top' }));
+  c.y += 32 + (nameRows.length - 1) * 29;
   if (setlist.date) {
     setFont(doc, 'normal', 12, MUTED);
     doc.text(formatDateSv(setlist.date), MARGIN_X, c.y, { baseline: 'top' });
@@ -539,6 +543,7 @@ function drawCover(c: PdfCtx, setlist: Setlist, rows: OverviewRow[]) {
     setFont(doc, 'normal', 11, TEXT);
     const rows = doc.splitTextToSize(setlist.notes, PAGE_W - 2 * MARGIN_X) as string[];
     rows.forEach((r) => {
+      ensureSpace(c, 15);
       doc.text(r, MARGIN_X, c.y, { baseline: 'top' });
       c.y += 15;
     });
@@ -548,20 +553,24 @@ function drawCover(c: PdfCtx, setlist: Setlist, rows: OverviewRow[]) {
     ensureSpace(c, 22);
     if (r.kind === 'cue') {
       setFont(doc, 'italic', 12, MUTED);
-      doc.text(r.text, MARGIN_X + 26, c.y, { baseline: 'top' });
+      doc.text(fitWidth(doc, r.text, PAGE_W - 2 * MARGIN_X - 26), MARGIN_X + 26, c.y, { baseline: 'top' });
       c.y += 22;
       return;
     }
     const p = r.p;
     setFont(doc, 'bold', 12);
     doc.text(`${r.number}.`, MARGIN_X, c.y, { baseline: 'top' });
-    doc.text(p.song.title, MARGIN_X + 26, c.y, { baseline: 'top' });
     const key = keyLabel(p);
     if (key) doc.text(key, PAGE_W - MARGIN_X, c.y, { baseline: 'top', align: 'right' });
-    if (p.song.artist) {
-      const tw = doc.getTextWidth(p.song.title);
+    // Titel och artist får inte gå in i tonarten till höger: korta med … vid behov
+    const room = PAGE_W - MARGIN_X - (MARGIN_X + 26) - (key ? doc.getTextWidth(key) + 12 : 0);
+    const title = fitWidth(doc, p.song.title, room);
+    doc.text(title, MARGIN_X + 26, c.y, { baseline: 'top' });
+    const tw = doc.getTextWidth(title);
+    if (p.song.artist && tw < room) {
       setFont(doc, 'normal', 12, MUTED);
-      doc.text(`  ${p.song.artist}`, MARGIN_X + 26 + tw, c.y, { baseline: 'top' });
+      const artist = fitWidth(doc, `  ${p.song.artist}`, room - tw);
+      if (artist.trim()) doc.text(artist, MARGIN_X + 26 + tw, c.y, { baseline: 'top' });
     }
     c.y += 22;
   });

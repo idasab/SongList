@@ -858,3 +858,15 @@ describe('lappar inom låten', () => {
     expect(clampNoteCenter({ x: 10, y: 100 }, 500, 60, 400).x).toBe(200);
   });
 });
+
+describe('långa namn i PDF:en', () => {
+  it('kortar långa titlar på första sidan så att de inte går in i tonarten', async () => {
+    const title = 'En väldigt lång titel som aldrig tar slut och fortsätter och fortsätter ännu längre bort';
+    const s: Song = { id: 's', title, artist: 'Kören', content: `{title: ${title}}\n{key: G}\n[G]Hej`, tags: [], transpose: 0, createdAt: 1, updatedAt: 1 };
+    const setlist: Setlist = { id: 'l', name: 'Lista', createdAt: 1, updatedAt: 1, items: [{ id: '1', songId: 's' }] };
+    const raw = new TextDecoder('latin1').decode(new Uint8Array(await (await buildPdfExport(setlist, { s }, 'international', false)).arrayBuffer()));
+    // Första sidan: kortad med …; låtens egen rubrik radbryts i stället
+    expect(raw).toMatch(/\(En väldigt lång titel[^)]*…\) Tj/);
+    expect(raw).toContain('längre bort) Tj');
+  });
+});
