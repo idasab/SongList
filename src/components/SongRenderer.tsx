@@ -164,7 +164,8 @@ export const SongRenderer = memo(function SongRenderer({
       {opts.showHeader !== false && (
         <div className="song-head" data-ln={0}>
           <h2>{meta.title || 'Namnlös'}</h2>
-          {(meta.artist || meta.subtitle) && <div className="artist">{meta.artist || meta.subtitle}</div>}
+          {meta.subtitle && <div className="subtitle">{meta.subtitle}</div>}
+          {meta.artist && <div className="artist">{meta.artist}</div>}
           <div className="song-info">
             {key && (
               <span>

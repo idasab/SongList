@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CUE_ROUTE_ID, itemPath, itemTitle, liveItems, songCount } from './setlist';
 import type { Setlist, Song } from './model';
+import { deriveSongMeta } from '../store/useStore';
 import { unzipSync, zipSync } from 'fflate';
 import { decodeZipName, zipNameMap } from './zipNames';
 import { formatChord, isChord, parseChord, parseKey, formatKey } from './chords';
@@ -640,5 +641,17 @@ describe('ackord skrivna som grepp för kapo', () => {
     const parsed = parseChordPro(out);
     const ctx = displayChordContext(parsed, 0, 'international');
     expect(parsed.chords.map((c) => formatChord(c, ctx))).toEqual(['G', 'D', 'C']);
+  });
+});
+
+describe('alternativ titel', () => {
+  it('tolkar {subtitle} som alternativ titel, inte som artist', () => {
+    const meta = deriveSongMeta('{title: Vintervisa}\n{subtitle: Snön faller}\n');
+    expect(meta.subtitle).toBe('Snön faller');
+    expect(meta.artist).toBe('');
+  });
+  it('går att söka på', () => {
+    const s = { id: 'x', title: 'Vintervisa', subtitle: 'Snön faller', artist: '', content: '', tags: [], transpose: 0, createdAt: 1, updatedAt: 1 };
+    expect(filterSongs([s], { query: 'snön', fullText: false, tags: [] })).toHaveLength(1);
   });
 });

@@ -95,7 +95,7 @@ export function filterSongs(songs: Song[], f: SongFilter): Song[] {
       if (!k || keyId(k.key) !== f.keyId) return false;
     }
     if (!terms.length) return true;
-    const head = normalizeForSearch(`${s.title} ${s.artist}`);
+    const head = normalizeForSearch(`${s.title} ${s.subtitle ?? ''} ${s.artist}`);
     const body = f.fullText ? songLyrics(s) : '';
     return terms.every((t) => head.includes(t) || (f.fullText && body.includes(t)));
   });

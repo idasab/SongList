@@ -255,10 +255,14 @@ export function EditorPage() {
       <div className="editor-meta" style={showMeta ? undefined : { paddingBottom: 0 }}>
         {showMeta && (
           <>
-            <div className="grid-4">
+            <div className="grid-4 grid-5">
               <label className="field">
                 <span>Titel</span>
                 <DirectiveInput value={meta.title ?? ''} onChange={(v) => setMeta('title', v)} />
+              </label>
+              <label className="field">
+                <span>Alternativ titel</span>
+                <DirectiveInput value={meta.subtitle ?? ''} onChange={(v) => setMeta('subtitle', v)} />
               </label>
               <label className="field">
                 <span>Artist</span>

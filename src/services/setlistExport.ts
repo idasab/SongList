@@ -92,6 +92,7 @@ function fileBase(setlist: Setlist): string {
 /** En låts text utan ackord. */
 function songText(p: PreparedSong, number?: number): string {
   const out: string[] = [number ? `${number}. ${p.song.title}` : p.song.title];
+  if (p.parsed.meta.subtitle) out.push(p.parsed.meta.subtitle);
   if (p.song.artist) out.push(p.song.artist);
   out.push('');
   if (p.song.attachment) {
@@ -428,6 +429,11 @@ function drawSongHeader(c: PdfCtx, p: PreparedSong, index: number, tops: number[
   const title = doc.splitTextToSize(`${index}. ${p.song.title}`, PAGE_W - 2 * MARGIN_X) as string[];
   title.forEach((t, i) => doc.text(t, MARGIN_X, c.y + i * 1.5 * EM * 1.2, { baseline: 'top' }));
   c.y += title.length * 1.5 * EM * 1.2;
+  if (p.parsed.meta.subtitle) {
+    setFont(doc, 'italic', EM, MUTED);
+    doc.text(p.parsed.meta.subtitle, MARGIN_X, c.y + 2, { baseline: 'top' });
+    c.y += 1.4 * EM + 2;
+  }
   if (p.song.artist) {
     setFont(doc, 'normal', EM, MUTED);
     doc.text(p.song.artist, MARGIN_X, c.y + 2, { baseline: 'top' });

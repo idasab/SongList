@@ -260,7 +260,10 @@ function SongRow({ song, categoryName }: { song: Song; categoryName?: string }) 
   return (
     <Link className="list-item" to={`/song/${song.id}`}>
       <div className="main">
-        <div className="title">{song.title}</div>
+        <div className="title">
+          {song.title}
+          {song.subtitle && <span className="alt-title"> · {song.subtitle}</span>}
+        </div>
         {(song.artist || categoryName) && (
           <div className="sub">
             {song.artist}

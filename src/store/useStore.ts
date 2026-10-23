@@ -107,7 +107,8 @@ export function deriveSongMeta(content: string) {
   const capo = meta.capo ? parseInt(meta.capo, 10) : undefined;
   return {
     title: meta.title?.trim() || 'Namnlös',
-    artist: (meta.artist ?? meta.subtitle ?? '').trim(),
+    subtitle: meta.subtitle?.trim() || undefined,
+    artist: (meta.artist ?? '').trim(),
     key: meta.key?.trim() || undefined,
     capo: capo && !Number.isNaN(capo) ? capo : undefined,
     tempo: meta.tempo?.trim() || undefined,
@@ -119,6 +120,16 @@ function toRecord<T extends { id: string }>(list: T[]): Record<string, T> {
 }
 
 let initPromise: Promise<void> | null = null;
+
+/**
+ * Tidigare tolkades {subtitle} som artist när artist saknades. Nu är det en alternativ titel:
+ * räkna om fälten för låtar som har en {subtitle} men saknar det nya fältet.
+ */
+function withSubtitle(s: Song): Song {
+  if (s.subtitle !== undefined || s.deletedAt || !/\{\s*(subtitle|st|su)\s*:/i.test(s.content)) return s;
+  const meta = deriveSongMeta(s.content);
+  return { ...s, subtitle: meta.subtitle, artist: meta.artist };
+}
 
 export const useStore = create<State>((set, get) => ({
   ready: false,
@@ -146,7 +157,7 @@ export const useStore = create<State>((set, get) => ({
         db.isFirstRun(),
       ]);
       set({
-        songs: toRecord(songs),
+        songs: toRecord(songs.map(withSubtitle)),
         setlists: toRecord(setlists),
         categories: toRecord(categories),
         folders: toRecord(folders),

@@ -15,6 +15,8 @@ export interface SyncRecord {
 
 export interface Song extends SyncRecord {
   title: string;
+  /** Alternativ titel ({subtitle}) */
+  subtitle?: string;
   artist: string;
   key?: string;
   capo?: number;
