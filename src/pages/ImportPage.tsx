@@ -4,7 +4,7 @@ import { Camera, ChevronDown, ChevronUp, ClipboardPaste, FileUp, Image as ImageI
 import { SongRenderer } from '../components/SongRenderer';
 import { TagInput } from '../components/TagInput';
 import { askText, Header, Segmented, Sheet, toast, toastError } from '../components/ui';
-import { parseChordPro } from '../lib/chordpro';
+import { parseChordPro, shapesToSounding } from '../lib/chordpro';
 import {
   SOURCE_FONTS,
   canvasMeasure,
@@ -188,7 +188,8 @@ export function ImportPage() {
   const openInEditor = (it: ImportItem) => {
     // Låten ligger kvar i listan tills den sparas i editorn
     setDraft({
-      content: contentFor(it),
+      // Ackord skrivna som grepp skrivs om redan här, så att editorn visar det som sparas
+      content: it.display === 'file' ? contentFor(it) : shapesToSounding(contentFor(it)),
       imageDataUrl: it.display === 'file' ? undefined : it.imageDataUrl,
       attachment: it.display === 'file' ? it.original : undefined,
       importItemId: it.id,
