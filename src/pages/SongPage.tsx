@@ -335,6 +335,8 @@ export function SongPage() {
   };
 
   const backTo = setlist ? `/setlists/${setlist.id}` : '/';
+  // Redigering från en setlista behåller platsen i setlistan
+  const editPath = `/song/${song.id}/edit${setlist ? `?setlist=${setlist.id}&i=${setlistIndex}` : ''}`;
   const tapToHide = (stage || !!setlist) && !annotating;
 
   const selectedNote = annotations.notes.find((n) => n.id === selectedId) ?? null;
@@ -378,7 +380,7 @@ export function SongPage() {
     <div className={`screen${stage ? ' stage' : ''}`}>
       {!stage && !controlsHidden && (
         <Header title={song.title} back={backTo}>
-          <button className="btn ghost icon" aria-label="Redigera" onClick={() => navigate(`/song/${song.id}/edit`)}>
+          <button className="btn ghost icon" aria-label="Redigera" onClick={() => navigate(editPath)}>
             <Pencil size={20} />
           </button>
           <button className="btn ghost icon" aria-label="Mer" onClick={() => setMenu(true)}>
@@ -621,7 +623,7 @@ export function SongPage() {
       {menu && (
         <Sheet title={song.title} onClose={() => setMenu(false)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <button className="btn" onClick={() => navigate(`/song/${song.id}/edit`)}>
+            <button className="btn" onClick={() => navigate(editPath)}>
               <Pencil size={18} /> Redigera
             </button>
             <button

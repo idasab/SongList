@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { useBlocker, useNavigate, useParams } from 'react-router-dom';
+import { useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronDown, ChevronUp, Image as ImageIcon, Wand2 } from 'lucide-react';
 import { SongRenderer } from '../components/SongRenderer';
 import { TagInput } from '../components/TagInput';
@@ -24,6 +24,9 @@ const KEY_OPTIONS = [...KEYS, ...KEYS.filter(Boolean).map((k) => k + 'm')];
 export function EditorPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  // Öppnad från en setlista: gå tillbaka till låten i setlistan efter att den sparats
+  const [params] = useSearchParams();
+  const setlistQuery = params.get('setlist') ? `?setlist=${params.get('setlist')}&i=${params.get('i') ?? 0}` : '';
   const existing = useStore((s) => (id ? s.songs[id] : undefined));
   const draft = useStore((s) => s.draft);
   const setDraft = useStore((s) => s.setDraft);
@@ -88,8 +91,8 @@ export function EditorPage() {
     toast('Sparat');
     if (importItemId) updateImportQueue((q) => ({ ...q, items: q.items.filter((x) => x.id !== importItemId) }));
     leavingAfterSave.current = true;
-    navigate(`/song/${song.id}`, { replace: true });
-  }, [saveSong, existing?.id, content, tags, categoryId, navigate]);
+    navigate(`/song/${song.id}${setlistQuery}`, { replace: true });
+  }, [saveSong, existing?.id, content, tags, categoryId, draftAttachment, importItemId, updateImportQueue, setlistQuery, navigate]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
