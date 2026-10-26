@@ -296,7 +296,7 @@ export function EditorPage() {
                 </select>
               </label>
             </div>
-            <div className="grid-2 grid-3">
+            <div className="grid-2 grid-meta">
               <label className="field">
                 <span>Kategori</span>
                 <select className="select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
@@ -311,6 +311,10 @@ export function EditorPage() {
               <label className="field">
                 <span>Tempo</span>
                 <DirectiveInput inputMode="numeric" value={meta.tempo ?? ''} onChange={(v) => setMeta('tempo', v)} />
+              </label>
+              <label className="field">
+                <span>Takt</span>
+                <DirectiveInput value={meta.time ?? ''} onChange={(v) => setMeta('time', v)} placeholder="4/4" />
               </label>
               <label className="field">
                 <span>Längd</span>

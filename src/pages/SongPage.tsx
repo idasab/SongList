@@ -10,6 +10,7 @@ import {
   ListMusic,
   Minus,
   Moon,
+  Metronome as MetronomeIcon,
   MoreHorizontal,
   PenLine,
   Pause,
@@ -41,6 +42,7 @@ import {
 import { liveSetlists, useStore } from '../store/useStore';
 import { safeFileName, saveTextFile } from '../services/files';
 import { newId } from '../lib/model';
+import { Metronome, beatsPerBar, parseTempo } from '../lib/metronome';
 import { useWakeLock } from '../hooks/useWakeLock';
 import { useSwipeNavigation } from '../hooks/useSwipeNavigation';
 import { AttachmentView } from '../components/AttachmentView';
@@ -183,6 +185,37 @@ export function SongPage() {
     onPrev: () => goSetlist(-1),
     onNext: () => goSetlist(1),
   });
+
+  // Metronom i låtens tempo, med takten från {time}
+  const bpm = parseTempo(parsed.meta.tempo);
+  const beats = beatsPerBar(parsed.meta.time);
+  const [ticking, setTicking] = useState(false);
+  const metroRef = useRef<HTMLButtonElement>(null);
+  const metronome = useRef<Metronome | null>(null);
+  const toggleMetronome = () => {
+    if (!bpm) return;
+    // Knappen blinkar i takt, starkare på första slaget
+    metronome.current ??= new Metronome((beat) => {
+      const el = metroRef.current;
+      if (!el) return;
+      el.classList.remove('tick', 'tick-accent');
+      void el.offsetWidth;
+      el.classList.add(beat === 0 ? 'tick-accent' : 'tick');
+    });
+    if (metronome.current.running) {
+      metronome.current.stop();
+      setTicking(false);
+    } else {
+      metronome.current.start(bpm, beats);
+      setTicking(true);
+    }
+  };
+  // Tystnar när låten byts eller sidan lämnas
+  useEffect(() => {
+    metronome.current?.stop();
+    setTicking(false);
+  }, [id]);
+  useEffect(() => () => metronome.current?.close(), []);
 
   // Börja om från toppen när låten byts
   useEffect(() => {
@@ -551,6 +584,21 @@ export function SongPage() {
               <Plus size={16} />
             </button>
           </div>
+
+          {bpm && (
+            <div className="tool-group" title={`Metronom, ${bpm} slag per minut${parsed.meta.time ? ` i ${parsed.meta.time}` : ''}`}>
+              <button
+                ref={metroRef}
+                className={`btn metro${ticking ? ' active' : ''}`}
+                aria-label={ticking ? 'Stoppa metronomen' : 'Starta metronomen'}
+                aria-pressed={ticking}
+                onClick={toggleMetronome}
+              >
+                <MetronomeIcon size={18} />
+                <span>{bpm}</span>
+              </button>
+            </div>
+          )}
 
           <div className="tool-group">
             {!isFile && (

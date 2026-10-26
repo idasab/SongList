@@ -310,8 +310,8 @@ a {
   gap: 0 12px;
 }
 
-.grid-2.grid-3 {
-  grid-template-columns: 2fr 1fr 1fr;
+.grid-2.grid-meta {
+  grid-template-columns: 2fr 1fr 1fr 1fr;
 }
 
 .grid-4 {
@@ -1926,4 +1926,34 @@ textarea.note-text {
 
 .select-bar .btn {
   flex: 1;
+}
+
+/* --- Metronom --- */
+
+.btn.metro {
+  gap: 4px;
+  padding-left: 10px;
+  padding-right: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.btn.metro.tick {
+  animation: metro-tick 0.15s ease-out;
+}
+
+.btn.metro.tick-accent {
+  animation: metro-accent 0.2s ease-out;
+}
+
+@keyframes metro-tick {
+  from {
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+}
+
+@keyframes metro-accent {
+  from {
+    box-shadow: 0 0 0 5px var(--accent);
+    transform: scale(1.06);
+  }
 }
