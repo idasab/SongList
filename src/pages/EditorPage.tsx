@@ -353,11 +353,6 @@ export function EditorPage() {
   );
 }
 
-/**
- * Fält som är kopplat till ett direktiv i ChordPro-texten (t.ex. {title: …}). Medan man skriver
- * behåller fältet sitt eget värde, eftersom direktivets värde trimmas och ett mellanslag i
- * slutet annars försvinner innan nästa ord hunnit skrivas.
- */
 /** Knacka i takt: tempot räknas fram och fylls i medan man knackar. */
 function TapTempoButton({ onTempo }: { onTempo: (bpm: number) => void }) {
   const taps = useRef<number[]>([]);
@@ -387,6 +382,11 @@ function TapTempoButton({ onTempo }: { onTempo: (bpm: number) => void }) {
   );
 }
 
+/**
+ * Fält som är kopplat till ett direktiv i ChordPro-texten (t.ex. {title: …}). Medan man skriver
+ * behåller fältet sitt eget värde, eftersom direktivets värde trimmas och ett mellanslag i
+ * slutet annars försvinner innan nästa ord hunnit skrivas.
+ */
 function DirectiveInput({
   value,
   onChange,
