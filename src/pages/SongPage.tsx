@@ -7,6 +7,7 @@ import {
   Eye,
   EyeOff,
   Guitar,
+  History,
   ListMusic,
   Minus,
   Moon,
@@ -42,7 +43,7 @@ import {
 } from '../lib/chordpro';
 import { liveSetlists, useStore } from '../store/useStore';
 import { safeFileName, saveTextFile } from '../services/files';
-import { newId } from '../lib/model';
+import { newId, type Song } from '../lib/model';
 import { Metronome, beatsPerBar, parseTempo } from '../lib/metronome';
 import { useWakeLock } from '../hooks/useWakeLock';
 import { useMediaQuery } from '../hooks/useMediaQuery';
@@ -50,7 +51,9 @@ import { useSwipeNavigation } from '../hooks/useSwipeNavigation';
 import { AttachmentView } from '../components/AttachmentView';
 import { isCue, itemPath, itemTitle, itemTranspose, liveItems, songCount } from '../lib/setlist';
 import { useAnnotationGestures, type AnnotTool } from '../hooks/useAnnotationGestures';
-import { EMPTY_ANNOTATIONS, INK_WIDTHS, type Annotations, type InkColor, type StickyNote } from '../lib/annotations';
+import { EMPTY_ANNOTATIONS, INK_WIDTHS, hasAnnotations, type Annotations, type InkColor, type StickyNote } from '../lib/annotations';
+import { lastPlayed, songHistory } from '../lib/history';
+import { formatDate } from './SetlistsPage';
 
 const MIN_FONT = 12;
 const MAX_FONT = 44;
@@ -107,6 +110,31 @@ export function SongPage() {
   // Låten som punkt i setlistan: kan ha en egen tonart där
   const setlistItem = setlistItems[setlistIndex]?.songId === id ? setlistItems[setlistIndex] : undefined;
   const transpose = song ? itemTranspose(setlistItem, song) : 0;
+
+  // Historik: när låten lämnas i en setlista sparas en kopia av dess anteckningar i setlistan,
+  // så att man senare kan se hur de såg ut den gången
+  const snapshotRef = useRef({ setlistId: '', itemId: '', annotations: undefined as Annotations | undefined });
+  // Uppdateras efter renderingen: när låten byts har referensen kvar den förra låtens värden
+  // när kopian sparas nedan
+  useEffect(() => {
+    snapshotRef.current = { setlistId: setlist?.id ?? '', itemId: setlistItem?.id ?? '', annotations: song?.annotations };
+  });
+  useEffect(() => {
+    const save = () => {
+      const { setlistId, itemId, annotations: a } = snapshotRef.current;
+      const sl = setlistId ? useStore.getState().setlists[setlistId] : undefined;
+      const it = sl?.items.find((x) => x.id === itemId);
+      if (!sl || !it) return;
+      const next = hasAnnotations(a) ? a : undefined;
+      if (JSON.stringify(next) === JSON.stringify(it.annotations)) return;
+      void useStore.getState().saveSetlist({ ...sl, items: sl.items.map((x) => (x.id === itemId ? { ...x, annotations: next, playedAt: Date.now() } : x)) });
+    };
+    return save;
+  }, [setlistItem?.id, setlist?.id]);
+  const [showHistory, setShowHistory] = useState(false);
+  /** Anteckningar från ett tidigare tillfälle som visas i stället för de nuvarande */
+  const [pastNotes, setPastNotes] = useState<{ annotations: Annotations; label: string } | null>(null);
+  useEffect(() => setPastNotes(null), [id]);
 
   // Nästa punkt i setlistan: visas sist i låten (titel, tonart och de första ackorden)
   const nextItem = setlist ? setlistItems[setlistIndex + 1] : undefined;
@@ -500,6 +528,7 @@ export function SongPage() {
     );
   };
   const startAnnotating = () => {
+    setPastNotes(null);
     setControlsHidden(false);
     setScrolling(false);
     setAnnotating(true);
@@ -528,7 +557,7 @@ export function SongPage() {
     updateAnnotations(EMPTY_ANNOTATIONS, true);
     setSelectedId(null);
   };
-  const showLayer = metrics && (settings.showAnnotations || annotating);
+  const showLayer = metrics && (settings.showAnnotations || annotating || !!pastNotes);
 
   return (
     <div className={`screen${stage ? ' stage' : ''}`}>
@@ -732,6 +761,29 @@ export function SongPage() {
           }}
         >
           <div style={swipe.style}>
+          {pastNotes && (
+            <div className="tip small-text past-notes" onClick={(e) => e.stopPropagation()}>
+              <div>
+                Anteckningar från <b>{pastNotes.label}</b>
+              </div>
+              <div className="btn-row">
+                <button
+                  className="btn small"
+                  onClick={() => {
+                    if (hasAnnotations(saved) && !confirm('Ersätta låtens nuvarande anteckningar med dessa?')) return;
+                    updateAnnotations(pastNotes.annotations, true);
+                    setPastNotes(null);
+                    toast('Anteckningarna är återställda');
+                  }}
+                >
+                  Använd dessa
+                </button>
+                <button className="btn small primary" onClick={() => setPastNotes(null)}>
+                  Stäng
+                </button>
+              </div>
+            </div>
+          )}
           {!isFile && !stage && !controlsHidden && !annotating && capoShapeShift(parsed) > 0 && (
             <div className="tip small-text capo-tip" onClick={(e) => e.stopPropagation()}>
               <div>
@@ -770,7 +822,7 @@ export function SongPage() {
             overlay={
               showLayer ? (
                 <AnnotationLayer
-                  annotations={settings.showAnnotations || annotating ? annotations : EMPTY_ANNOTATIONS}
+                  annotations={pastNotes ? pastNotes.annotations : settings.showAnnotations || annotating ? annotations : EMPTY_ANNOTATIONS}
                   metrics={metrics}
                   live={live}
                   interactive={annotating}
@@ -836,6 +888,15 @@ export function SongPage() {
             >
               <ListMusic size={18} /> Lägg till i setlista
             </button>
+            <button
+              className="btn"
+              onClick={() => {
+                setMenu(false);
+                setShowHistory(true);
+              }}
+            >
+              <History size={18} /> Historik
+            </button>
             <button className="btn" disabled={!transpose} onClick={applyTranspose}>
               <Wand2 size={18} /> Skriv in transponeringen i texten
             </button>
@@ -850,7 +911,78 @@ export function SongPage() {
       )}
 
       {addToSetlist && <AddToSetlistSheet songId={song.id} onClose={() => setAddToSetlist(false)} />}
+
+      {showHistory && (
+        <HistorySheet
+          song={song}
+          onClose={() => setShowHistory(false)}
+          onShowNotes={(a, label) => {
+            setShowHistory(false);
+            setAnnotating(false);
+            setPastNotes({ annotations: a, label });
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function HistorySheet({
+  song,
+  onClose,
+  onShowNotes,
+}: {
+  song: Song;
+  onClose: () => void;
+  onShowNotes: (annotations: Annotations, label: string) => void;
+}) {
+  const navigate = useNavigate();
+  const setlists = useStore((s) => s.setlists);
+  const songs = useStore((s) => s.songs);
+  const notation = useStore((s) => s.settings.notation);
+  const history = useMemo(() => songHistory(song.id, setlists, songs), [song.id, setlists, songs]);
+  const last = lastPlayed(history);
+  const label = (h: (typeof history)[number]) => `${h.setlist.name}${h.setlist.date ? `, ${formatDate(h.setlist.date)}` : ''}`;
+  return (
+    <Sheet title="Historik" onClose={onClose}>
+      {history.length === 0 ? (
+        <p className="muted">Låten finns inte i någon setlista än.</p>
+      ) : (
+        <>
+          <p className="muted small-text" style={{ marginTop: 0 }}>
+            {last ? (
+              <>
+                Senast spelad <b>{formatDate(last.setlist.date!)}</b> i {last.setlist.name}.
+              </>
+            ) : (
+              'Ingen av setlistorna har ett datum som har varit.'
+            )}{' '}
+            Anteckningarna sparas när låten visas i setlistan.
+          </p>
+          <div className="list">
+            {history.map((h) => {
+              const k = song.attachment ? null : songKey(song, itemTranspose(h.item, song));
+              return (
+                <div className="list-item" key={h.setlist.id}>
+                  <button className="main history-open" onClick={() => navigate(itemPath(h.setlist.id, h.item, h.index))}>
+                    <div className="title">{h.setlist.name}</div>
+                    <div className="sub">
+                      {h.setlist.date ? formatDate(h.setlist.date) : 'Utan datum'}
+                      {k ? ` · ${formatKey(k.key, 0, notation)}` : ''}
+                    </div>
+                  </button>
+                  {hasAnnotations(h.item.annotations) && (
+                    <button className="btn small" onClick={() => onShowNotes(h.item.annotations!, label(h))}>
+                      <PenLine size={15} /> Anteckningar
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </Sheet>
   );
 }
 

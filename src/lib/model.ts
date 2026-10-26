@@ -58,6 +58,10 @@ export interface SetlistItem {
   cue?: string;
   /** Transponering som bara gäller i den här setlistan (annars låtens egen) */
   transpose?: number;
+  /** Låtens anteckningar som de var när låten senast visades i setlistan (historik) */
+  annotations?: Annotations;
+  /** När låten senast visades i setlistan (ms) */
+  playedAt?: number;
 }
 
 export interface Setlist extends SyncRecord {
@@ -183,7 +187,12 @@ export function sanitizeLibrary<T extends LibraryData>(data: T): T {
       items: Array.isArray(sl.items)
         ? sl.items
             .filter((it) => it && typeof it.id === 'string')
-            .map((it) => (it.transpose === undefined || typeof it.transpose === 'number' ? it : { ...it, transpose: undefined }))
+            .map((it) => ({
+              ...it,
+              transpose: typeof it.transpose === 'number' ? it.transpose : undefined,
+              annotations:
+                it.annotations && Array.isArray(it.annotations.strokes) && Array.isArray(it.annotations.notes) ? it.annotations : undefined,
+            }))
         : [],
     })),
     categories: data.categories.filter(isRecord).map((c) => ({ ...c, name: typeof c.name === 'string' ? c.name : '' })),

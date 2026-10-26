@@ -2059,3 +2059,24 @@ textarea.note-text {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Historik: anteckningar från ett tidigare tillfälle */
+.past-notes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.history-open {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
