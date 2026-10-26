@@ -20,7 +20,8 @@ import { newId } from '../lib/model';
 import { canUseDocumentScanner, recognizeImageFile, scanDocument } from '../services/ocr';
 import { pickFiles } from '../services/files';
 import { attachmentToFile, expandFiles, interpretFile } from '../services/fileImport';
-import { allTags, categoryName, normalizeTags, useStore, type ImportQueueItem } from '../store/useStore';
+import { allTags, categoryName, liveSongs, normalizeTags, useStore, type DuplicateAction, type ImportQueueItem } from '../store/useStore';
+import { findDuplicates, type Duplicate } from '../lib/duplicates';
 
 type ImportItem = ImportQueueItem;
 
@@ -44,6 +45,19 @@ function contentFor(item: ImportItem): string {
   return `{title: ${title}}\n`;
 }
 
+/** Låtens text som den sparas (ackord skrivna som grepp skrivs om). */
+function savedContent(item: ImportItem): string {
+  return item.display === 'file' ? contentFor(item) : shapesToSounding(contentFor(item));
+}
+
+/** Förval för en dubblett: en likadan låt hoppas över, annars läggs den till. */
+function duplicateAction(item: ImportItem, dup: Duplicate | undefined): DuplicateAction {
+  if (!dup) return 'add';
+  const chosen = item.duplicate ?? (dup.identical ? 'skip' : 'add');
+  // Ersätta går bara när dubbletten finns i biblioteket
+  return chosen === 'replace' && !dup.song ? 'add' : chosen;
+}
+
 // Valet för PDF och bilder sparas under sessionen
 const importPrefs = { keepOriginals: true };
 
@@ -53,6 +67,7 @@ const ACCEPT =
 export function ImportPage() {
   const navigate = useNavigate();
   const importSongs = useStore((s) => s.importSongs);
+  const saveSong = useStore((s) => s.saveSong);
   const setDraft = useStore((s) => s.setDraft);
   const songsRec = useStore((s) => s.songs);
   const categoriesRec = useStore((s) => s.categories);
@@ -157,6 +172,30 @@ export function ImportPage() {
     }
   };
 
+  // Låtar som redan finns i biblioteket eller tidigare i importen
+  const duplicates = useMemo(
+    () =>
+      findDuplicates(
+        items.map((it) => {
+          const content = savedContent(it);
+          const meta = parseChordPro(content).meta;
+          return {
+            title: meta.title?.trim() || titleFromFileName(it.fileName),
+            artist: meta.artist ?? '',
+            content,
+            fileData: it.display === 'file' ? it.original?.dataUrl : undefined,
+          };
+        }),
+        liveSongs(songsRec),
+      ),
+    [items, songsRec],
+  );
+  const actions = items.map((it, i) => duplicateAction(it, duplicates[i]));
+  const dupCount = duplicates.filter(Boolean).length;
+  const toImport = actions.filter((a) => a !== 'skip').length;
+  const setAllDuplicates = (action: DuplicateAction) =>
+    setItems((cur) => cur.map((x, i) => (duplicates[i] ? { ...x, duplicate: action } : x)));
+
   const [importing, setImporting] = useState(false);
   // Spärr som slår till direkt: ett dubbeltryck ska inte importera allt två gånger
   const importingRef = useRef(false);
@@ -164,14 +203,31 @@ export function ImportPage() {
     if (importingRef.current) return;
     importingRef.current = true;
     setImporting(true);
-    const list = items.map((it) => ({
-      content: contentFor(it),
-      attachment: it.display === 'file' ? it.original : undefined,
-      ...resolveMeta(it, { tags, categoryId }),
-    }));
+    const list = items
+      .filter((_, i) => actions[i] === 'add')
+      .map((it) => ({
+        content: contentFor(it),
+        attachment: it.display === 'file' ? it.original : undefined,
+        ...resolveMeta(it, { tags, categoryId }),
+      }));
     let songs: Awaited<ReturnType<typeof importSongs>>;
+    let replaced = 0;
     try {
       songs = await importSongs(list);
+      // Ersätt: låtens text eller fil byts, taggar läggs till och kategorin behålls om ingen valts
+      for (const [i, it] of items.entries()) {
+        const old = duplicates[i]?.song;
+        if (actions[i] !== 'replace' || !old) continue;
+        const meta = resolveMeta(it, { tags, categoryId });
+        await saveSong({
+          id: old.id,
+          content: savedContent(it),
+          attachment: it.display === 'file' ? it.original : null,
+          tags: [...old.tags, ...meta.tags],
+          categoryId: meta.categoryId || old.categoryId,
+        });
+        replaced++;
+      }
     } catch (e) {
       importingRef.current = false;
       setImporting(false);
@@ -180,9 +236,18 @@ export function ImportPage() {
     }
     importingRef.current = false;
     setImporting(false);
-    toast(`${songs.length} ${songs.length === 1 ? 'låt' : 'låtar'} importerade`);
+    const skipped = items.length - songs.length - replaced;
+    toast(
+      [
+        songs.length || !replaced ? `${songs.length} ${songs.length === 1 ? 'låt' : 'låtar'} importerade` : '',
+        replaced ? `${replaced} ${replaced === 1 ? 'ersatt' : 'ersatta'}` : '',
+        skipped ? `${skipped} hoppades över` : '',
+      ]
+        .filter(Boolean)
+        .join(', '),
+    );
     resetQueue();
-    if (songs.length === 1) navigate(`/song/${songs[0].id}`);
+    if (songs.length === 1 && !replaced) navigate(`/song/${songs[0].id}`);
     else navigate('/');
   };
 
@@ -284,10 +349,33 @@ export function ImportPage() {
                 </div>
               </div>
 
-              {items.map((it) => (
+              {dupCount > 0 && (
+                <div className="card dup-summary">
+                  <div>
+                    <b>
+                      {dupCount} {dupCount === 1 ? 'låt finns' : 'låtar finns'} redan
+                    </b>
+                    <div className="muted small-text">
+                      Likadana låtar hoppas över, övriga läggs till. Du kan välja för varje låt nedan.
+                    </div>
+                  </div>
+                  <div className="btn-row">
+                    <button className="btn small" onClick={() => setAllDuplicates('skip')}>
+                      Hoppa över alla
+                    </button>
+                    <button className="btn small" onClick={() => setAllDuplicates('add')}>
+                      Lägg till alla
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {items.map((it, i) => (
                 <ImportItemCard
                   key={it.id}
                   item={it}
+                  duplicate={duplicates[i]}
+                  action={actions[i]}
                   onChange={(next) => setItems((cur) => cur.map((x) => (x.id === it.id ? next : x)))}
                   onPatch={(patch) => setItems((cur) => cur.map((x) => (x.id === it.id ? { ...x, ...patch } : x)))}
                   onRemove={() => setItems((cur) => cur.filter((x) => x.id !== it.id))}
@@ -302,8 +390,8 @@ export function ImportPage() {
                   <button className="btn" onClick={() => setItems([])}>
                     Rensa
                   </button>
-                  <button className="btn primary" disabled={importing} onClick={importAll}>
-                    Importera {items.length} {items.length === 1 ? 'låt' : 'låtar'}
+                  <button className="btn primary" disabled={importing || !toImport} onClick={importAll}>
+                    Importera {toImport} {toImport === 1 ? 'låt' : 'låtar'}
                   </button>
                 </div>
               </div>
@@ -367,6 +455,8 @@ export function ImportPage() {
 
 function ImportItemCard({
   item,
+  duplicate,
+  action,
   onChange,
   onPatch,
   onRemove,
@@ -375,6 +465,8 @@ function ImportItemCard({
   tagSuggestions,
 }: {
   item: ImportItem;
+  duplicate?: Duplicate;
+  action: DuplicateAction;
   onChange: (i: ImportItem) => void;
   /** Ändrar bara de angivna fälten i den aktuella versionen (för resultat som kommer senare) */
   onPatch: (patch: Partial<ImportItem>) => void;
@@ -413,7 +505,7 @@ function ImportItemCard({
   };
 
   return (
-    <div className="import-item">
+    <div className={`import-item${action === 'skip' ? ' skipped' : ''}`}>
       <div className="head">
         {item.previewDataUrl && (
           <button className="import-thumb" onClick={() => setBigPreview(true)} aria-label="Visa filen större">
@@ -437,6 +529,25 @@ function ImportItemCard({
           <X size={18} />
         </button>
       </div>
+      {duplicate && (
+        <div className="opts dup-row">
+          <div className="small-text">
+            <b>{duplicate.song ? 'Finns redan' : 'Finns redan i importen'}</b>
+            {duplicate.identical ? ', likadan' : ''}: {duplicate.title}
+            {duplicate.song?.artist ? ` – ${duplicate.song.artist}` : ''}
+            {duplicate.otherPage && <div className="muted">Kan vara en annan sida av samma noter.</div>}
+          </div>
+          <Segmented
+            value={action}
+            onChange={(v) => onChange({ ...item, duplicate: v })}
+            options={[
+              { value: 'add', label: 'Lägg till' },
+              { value: 'skip', label: 'Hoppa över' },
+              ...(duplicate.song ? [{ value: 'replace' as const, label: 'Ersätt' }] : []),
+            ]}
+          />
+        </div>
+      )}
       {item.original && (
         <div className="opts">
           <Segmented

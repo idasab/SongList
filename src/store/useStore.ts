@@ -49,7 +49,11 @@ export interface ImportQueueItem {
   display?: 'chordpro' | 'file';
   /** Sant om innehållet har tolkats (OCR/PDF-text); annars bara en titel */
   interpreted?: boolean;
+  /** Valet för en låt som redan finns (undefined = förvalet) */
+  duplicate?: DuplicateAction;
 }
+
+export type DuplicateAction = 'add' | 'skip' | 'replace';
 
 /** Importlistan finns kvar när man byter sida (men sparas inte mellan omstarter). */
 export interface ImportQueue {

@@ -1965,3 +1965,26 @@ textarea.note-text {
   font-size: 12px;
   white-space: nowrap;
 }
+
+/* --- Dubbletter vid import --- */
+
+.import-item .dup-row {
+  justify-content: space-between;
+  margin: 0 12px 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--tip-bg, var(--accent-soft));
+}
+
+.import-item.skipped .head,
+.import-item.skipped .opts:not(.dup-row) {
+  opacity: 0.5;
+}
+
+.dup-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
