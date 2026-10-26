@@ -16,12 +16,21 @@ import {
   titleFromFileName,
   type SourceFont,
 } from '../lib/textImport';
-import { newId } from '../lib/model';
+import { newId, type Song } from '../lib/model';
 import { canUseDocumentScanner, recognizeImageFile, scanDocument } from '../services/ocr';
 import { pickFiles } from '../services/files';
 import { attachmentToFile, expandFiles, interpretFile } from '../services/fileImport';
 import { allTags, categoryName, liveSongs, normalizeTags, useStore, type DuplicateAction, type ImportQueueItem } from '../store/useStore';
 import { findDuplicates, type Duplicate } from '../lib/duplicates';
+import {
+  existingSongs,
+  importSharedSetlist,
+  isSharedSetlistFile,
+  receiveSharedText,
+  useIncomingShare,
+  type SharedSetlist,
+} from '../services/setlistShare';
+import { formatDate } from './SetlistsPage';
 
 type ImportItem = ImportQueueItem;
 
@@ -62,7 +71,7 @@ function duplicateAction(item: ImportItem, dup: Duplicate | undefined): Duplicat
 const importPrefs = { keepOriginals: true };
 
 const ACCEPT =
-  '.cho,.chopro,.chordpro,.crd,.pro,.txt,.text,text/plain,.pdf,application/pdf,.zip,application/zip,image/*';
+  '.cho,.chopro,.chordpro,.crd,.pro,.txt,.text,text/plain,.pdf,application/pdf,.zip,application/zip,image/*,.songlist';
 
 export function ImportPage() {
   const navigate = useNavigate();
@@ -105,7 +114,11 @@ export function ImportPage() {
   };
 
   const chooseFiles = async () => {
-    const files = await pickFiles({ accept: ACCEPT, multiple: true });
+    const picked = await pickFiles({ accept: ACCEPT, multiple: true });
+    // En delad setlista (.songlist) importeras för sig
+    const shared = picked.filter((f) => isSharedSetlistFile(f.name));
+    if (shared.length) await receiveSharedText(await shared[0].text());
+    const files = picked.filter((f) => !isSharedSetlistFile(f.name));
     if (!files.length) return;
     setBusy({ message: 'Läser filer…' });
     try {
@@ -413,6 +426,8 @@ export function ImportPage() {
         </div>
       </div>
 
+      <SharedSetlistSheet />
+
       {pasting && (
         <Sheet
           title="Klistra in text"
@@ -636,5 +651,81 @@ function ImportItemCard({
         </div>
       )}
     </div>
+  );
+}
+
+/** En delad setlista från någon annan med SongList: visar vad som läggs till och importerar. */
+function SharedSetlistSheet() {
+  const navigate = useNavigate();
+  const shared = useIncomingShare((s) => s.shared);
+  const setShared = useIncomingShare((s) => s.setShared);
+  const songs = useStore((s) => s.songs);
+  const [busy, setBusy] = useState(false);
+  if (!shared) return null;
+  const run = async () => {
+    setBusy(true);
+    try {
+      const sl = await importSharedSetlist(shared);
+      setShared(null);
+      toast(`Setlistan ${sl.name} är tillagd`);
+      navigate(`/setlists/${sl.id}`);
+    } catch (e) {
+      toastError(e, 'Setlistan kunde inte importeras');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <SharedSetlistSummary shared={shared} songs={songs} busy={busy} onClose={() => setShared(null)} onImport={run} />;
+}
+
+function SharedSetlistSummary({
+  shared,
+  songs,
+  busy,
+  onClose,
+  onImport,
+}: {
+  shared: SharedSetlist;
+  songs: Record<string, Song>;
+  busy: boolean;
+  onClose: () => void;
+  onImport: () => void;
+}) {
+  const have = useMemo(() => existingSongs(shared, songs).size, [shared, songs]);
+  const total = shared.songs.length;
+  const added = total - have;
+  return (
+    <Sheet
+      title="Importera setlista"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Avbryt
+          </button>
+          <button className="btn primary" disabled={busy} onClick={onImport}>
+            {busy ? 'Importerar…' : 'Importera'}
+          </button>
+        </>
+      }
+    >
+      <h2 style={{ margin: '0 0 2px' }}>{shared.setlist.name}</h2>
+      {shared.setlist.date && <div className="muted small-text">{formatDate(shared.setlist.date)}</div>}
+      <p>
+        {total} {total === 1 ? 'låt' : 'låtar'}
+        {have > 0 ? `, varav ${have} redan finns och används som de är` : ''}.
+        {added > 0 ? ` ${added} läggs till i ditt bibliotek.` : ''}
+      </p>
+      <div className="list small-text">
+        {shared.songs.map((s) => (
+          <div className="list-item" key={s.id}>
+            <div className="main">
+              <div className="title">{s.title}</div>
+              {s.artist && <div className="sub">{s.artist}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Sheet>
   );
 }

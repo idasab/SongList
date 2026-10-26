@@ -11,6 +11,7 @@ import { SetlistPage } from './pages/SetlistPage';
 import { SetlistsPage } from './pages/SetlistsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SongPage } from './pages/SongPage';
+import { listenForSharedFiles } from './services/setlistShare';
 import { startAutoSync } from './services/sync';
 import { useStore } from './store/useStore';
 
@@ -107,6 +108,7 @@ export function App() {
       })
       .then(() => {
         if (consumeUpdateNotice()) toast('SongList har uppdaterats till senaste versionen. Försök igen.');
+        listenForSharedFiles();
         prefetchLazyParts([
           () => import('jspdf'),
           () => preloadChordDb(useStore.getState().settings.instrument),

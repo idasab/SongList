@@ -30,16 +30,26 @@ import type { Setlist, Song, SongAttachment } from '../lib/model';
 import { safeFileName, saveBinaryFile, saveTextFile } from './files';
 import { loadPdfJs } from './fileImport';
 import { pdfSafe } from '../lib/pdfText';
+import { SHARE_EXTENSION, buildSharedSetlist } from './setlistShare';
 import { isCue, itemTitle, itemTranspose, liveItems } from '../lib/setlist';
 
-export type SetlistExportFormat = 'text' | 'pdf-annotated' | 'pdf-clean' | 'chordpro';
+export type SetlistExportFormat = 'text' | 'pdf-annotated' | 'pdf-clean' | 'chordpro' | 'songlist';
 
 export const EXPORT_FORMATS: { value: SetlistExportFormat; label: string; description: string }[] = [
   { value: 'text', label: 'Texter', description: 'Sångtexterna utan ackord, i setlistans ordning (.txt)' },
   { value: 'pdf-annotated', label: 'PDF med anteckningar', description: 'Ackord ovanför texten, med lappar och det du ritat' },
   { value: 'pdf-clean', label: 'PDF utan anteckningar', description: 'Ackord ovanför texten, utan lappar och ritningar' },
   { value: 'chordpro', label: 'ChordPro', description: 'Alla låtar i en ChordPro-fil (.txt)' },
+  {
+    value: 'songlist',
+    label: 'SongList-fil',
+    description: 'Setlistan med alla låtar, för någon annan med SongList. Öppnas direkt i appen (.songlist)',
+  },
 ];
+
+function sharedFile(setlist: Setlist, songs: Record<string, Song>): Blob {
+  return new Blob([JSON.stringify(buildSharedSetlist(setlist, songs))], { type: 'application/json' });
+}
 
 interface PreparedSong {
   song: Song;
@@ -735,6 +745,10 @@ export async function buildSongFiles(
   songs: Record<string, Song>,
   notation: Notation,
 ): Promise<ExportFile[]> {
+  // En enda fil med setlistan och alla låtar
+  if (format === 'songlist') {
+    return [{ name: `${fileBase(setlist)}${SHARE_EXTENSION}`, mime: 'application/json', blob: sharedFile(setlist, songs) }];
+  }
   const list = prepare(setlist, songs, notation);
   const width = String(list.length).length < 2 ? 2 : String(list.length).length;
   const files: ExportFile[] = [];
@@ -774,10 +788,17 @@ export function mailSubject(setlist: Setlist): string {
 }
 
 /** Mejlets text: hela setlistan med titel och artist. */
-export function mailBody(setlist: Setlist, songs: Record<string, Song>, notation: Notation): string {
+export function mailBody(setlist: Setlist, songs: Record<string, Song>, notation: Notation, format?: SetlistExportFormat): string {
   const list = prepare(setlist, songs, notation);
   const out = setlistOverview(setlist, songs, list);
-  out.push('', 'Varje låt finns bifogad som en egen fil.', '', 'Skickat från SongList');
+  out.push(
+    '',
+    format === 'songlist'
+      ? 'Setlistan och alla låtar finns i den bifogade filen. Öppna den i SongList, så läggs setlistan till.'
+      : 'Varje låt finns bifogad som en egen fil.',
+    '',
+    'Skickat från SongList',
+  );
   return out.join('\n');
 }
 
@@ -795,6 +816,8 @@ export async function exportSetlist(
       return saveTextFile(`${base}.txt`, buildTextExport(setlist, songs, notation));
     case 'chordpro':
       return saveTextFile(`${base} (ChordPro).txt`, buildChordProExport(setlist, songs, notation));
+    case 'songlist':
+      return saveBinaryFile(`${base}${SHARE_EXTENSION}`, sharedFile(setlist, songs), 'application/json');
     case 'pdf-annotated':
     case 'pdf-clean': {
       const blob = await buildPdfExport(setlist, songs, notation, format === 'pdf-annotated');

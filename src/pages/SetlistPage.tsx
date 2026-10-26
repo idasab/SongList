@@ -470,7 +470,7 @@ function ExportSheet({ setlistId, onClose }: { setlistId: string; onClose: () =>
       }
       const files = await buildSongFiles(format, setlist, songs, notation);
       void updateSettings({ recentEmails: rememberEmails(recentEmails, to) });
-      const req: MailRequest = { to, subject: mailSubject(setlist), body: mailBody(setlist, songs, notation), files };
+      const req: MailRequest = { to, subject: mailSubject(setlist), body: mailBody(setlist, songs, notation, format), files };
       if (canComposeNatively()) finish(await composeNativeMail(req));
       else setPrepared(req);
     } catch (e) {
@@ -576,7 +576,7 @@ function ExportSheet({ setlistId, onClose }: { setlistId: string; onClose: () =>
         </label>
       ))}
       <p className="muted small-text" style={{ marginBottom: 0 }}>
-        {mode === 'mail'
+        {mode === 'mail' && format !== 'songlist'
           ? 'Varje låt bifogas som en egen fil. Hela setlistan med titel och artist står i mejlet. '
           : ''}
         Ackorden exporteras med låtarnas transponering, precis som de visas i appen.
