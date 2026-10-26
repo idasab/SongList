@@ -868,7 +868,7 @@ export function SongPage() {
             }
           />
           )}
-          {nextUp && (
+          {nextUp && !annotating && (
             <button
               className="next-up"
               onClick={(e) => {

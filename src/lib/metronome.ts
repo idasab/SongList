@@ -60,6 +60,10 @@ export class Metronome {
     const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
     if (session) session.type = 'playback';
     const ctx = (this.ctx ??= new AudioContext());
+    // iPhone: ljudet avbryts av t.ex. ett samtal; fortsätt när det går igen
+    ctx.onstatechange = () => {
+      if (this.timer && ctx.state !== 'running' && ctx.state !== 'closed') void ctx.resume().catch(() => undefined);
+    };
     this.bpm = bpm;
     this.beats = beats;
     this.beat = 0;
