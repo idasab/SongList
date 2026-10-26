@@ -168,7 +168,8 @@ export function SongPage() {
   const wantColumns = wide && settings.twoColumns !== false && !song?.attachment;
   const [columnsFit, setColumnsFit] = useState(true);
   const columns = wantColumns && columnsFit;
-  const fitKey = [song?.id, song?.content, showChords, settings.fontSize, transpose, stage, wantColumns, settings.simplifyChords].join('|');
+  // Ökar när låtytans höjd ändras (t.ex. när kontrollerna eller ackorddiagrammen visas)
+  const [areaHeight, setAreaHeight] = useState(0);
   const metrics = useLineMetrics(songRef, [parsed, showChords, settings.fontSize, transpose, stage, song?.id, columns, settings.simplifyChords]);
 
   const updateAnnotations = useCallback(
@@ -276,14 +277,36 @@ export function SongPage() {
   }, [id]);
   useEffect(() => () => metronome.current?.close(), []);
 
-  // Får låten inte plats i två spalter: en spalt som vanligt (prövas om när något ändras)
+  // Får låten inte plats i två spalter: en spalt som vanligt (prövas om när något ändras,
+  // även sådant ovanför låten som tipset om kapo och höjden på ytan)
+  const fitKey = [
+    song?.id,
+    song?.content,
+    showChords,
+    settings.fontSize,
+    transpose,
+    stage,
+    wantColumns,
+    settings.simplifyChords,
+    controlsHidden,
+    settings.showDiagrams,
+    !!pastNotes,
+    areaHeight,
+  ].join('|');
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!wantColumns || !el) return;
+    const ro = new ResizeObserver(() => setAreaHeight(Math.round(el.clientHeight)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [wantColumns, id]);
   useLayoutEffect(() => setColumnsFit(true), [fitKey]);
   useLayoutEffect(() => {
     const el = scrollRef.current;
     const songEl = songRef.current;
     if (!columns || !el || !songEl) return;
-    const pad = parseFloat(getComputedStyle(el).paddingTop) || 0;
-    if (songEl.offsetHeight + pad > el.clientHeight) setColumnsFit(false);
+    const bottom = songEl.getBoundingClientRect().bottom - el.getBoundingClientRect().top + el.scrollTop;
+    if (bottom > el.clientHeight) setColumnsFit(false);
   }, [columns, fitKey]);
 
   // Börja om från toppen när låten byts
