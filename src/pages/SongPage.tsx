@@ -108,7 +108,9 @@ export function SongPage() {
     [setlist, songs],
   );
   // Låten som punkt i setlistan: kan ha en egen tonart där
-  const setlistItem = setlistItems[setlistIndex]?.songId === id ? setlistItems[setlistIndex] : undefined;
+  // (har setlistan ändrats på en annan enhet så att platsen inte stämmer: låtens första förekomst)
+  const setlistItem =
+    setlistItems[setlistIndex]?.songId === id ? setlistItems[setlistIndex] : setlistItems.find((it) => it.songId === id);
   const transpose = song ? itemTranspose(setlistItem, song) : 0;
 
   // Historik: när låten lämnas i en setlista sparas en kopia av dess anteckningar i setlistan,
@@ -474,7 +476,8 @@ export function SongPage() {
     setlist && setlistItem && void saveSetlist({ ...setlist, items: setlist.items.map((x) => (x.id === setlistItem.id ? { ...x, transpose: t } : x)) });
   const setTranspose = (n: number) => {
     const t = normalizeTranspose(n);
-    if (transposeInSetlist) return setItemTranspose(t);
+    // Samma som låtens egen: setlistan följer låten igen
+    if (transposeInSetlist) return setItemTranspose(t === song.transpose ? undefined : t);
     // Överallt: setlistan följer låtens tonart igen
     if (setlistItem?.transpose !== undefined) setItemTranspose(undefined);
     void updateSongPrefs(song.id, { transpose: t });
