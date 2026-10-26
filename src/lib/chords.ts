@@ -148,7 +148,8 @@ export interface ChordContext {
 /** Ackordets typ i förenklad form: "m" för moll, "dim" för förminskat, annars dur. */
 export function simplifySuffix(suffix: string): string {
   if (/^(dim|°|o$)/.test(suffix)) return 'dim';
-  return isMinorSuffix(suffix) ? 'm' : '';
+  // Halvförminskat (ø, m7b5) spelas förenklat som moll
+  return isMinorSuffix(suffix) || suffix.startsWith('ø') ? 'm' : '';
 }
 
 /** Formaterar ett ackord för visning, transponerat och i vald notation. */
@@ -169,8 +170,8 @@ export function formatChord(raw: string, ctx: ChordContext): string {
     rootStr = pcName(c.root + t, flats, ctx.notation);
     if (c.bass !== undefined) bassStr = pcName(c.bass + t, flats, ctx.notation);
   }
-  // En slutparentes utan startparentes hör till ackordtypen, t.ex. "E7(b9)", och försvinner med den
-  if (ctx.simplify) return `${c.prefix}${rootStr}${simplifySuffix(c.suffix)}${c.prefix ? c.postfix : ''}`;
+  // Slutparenteser utöver startparenteserna hör till ackordtypen, t.ex. "E7(b9)", och försvinner med den
+  if (ctx.simplify) return `${c.prefix}${rootStr}${simplifySuffix(c.suffix)}${c.postfix.slice(0, c.prefix.length)}`;
   return `${c.prefix}${rootStr}${c.suffix}${bassStr ? '/' + bassStr : ''}${c.postfix}`;
 }
 

@@ -27,6 +27,7 @@ describe('ackord', () => {
     // Med transponering och svensk notation
     expect(formatChord('Gmaj7/F#', { transpose: 2, notation: 'swedish', simplify: true })).toBe('A');
     expect(formatChord('Gmaj7/F#', { transpose: 0, notation: 'international' })).toBe('Gmaj7/F#');
+    expect(['Cø', 'Cø7', '(E7(b9))', '[Am7]'].map((c) => formatChord(c, ctx))).toEqual(['Cm', 'Cm', '(E)', '[Am]']);
   });
 
   it('känner igen ackord men inte vanliga ord', () => {
