@@ -26,7 +26,8 @@ import { AnnotationToolbar } from '../components/AnnotationToolbar';
 import { ChordDiagram, ChordSheet } from '../components/ChordDiagram';
 import { SongRenderer } from '../components/SongRenderer';
 import { Header, Sheet, toast, toastError } from '../components/ui';
-import { formatChord, normalizeTranspose } from '../lib/chords';
+import { formatChord, formatKey, normalizeTranspose } from '../lib/chords';
+import { songKey } from '../lib/search';
 import {
   capoOf,
   capoShapeShift,
@@ -106,6 +107,25 @@ export function SongPage() {
   // Låten som punkt i setlistan: kan ha en egen tonart där
   const setlistItem = setlistItems[setlistIndex]?.songId === id ? setlistItems[setlistIndex] : undefined;
   const transpose = song ? itemTranspose(setlistItem, song) : 0;
+
+  // Nästa punkt i setlistan: visas sist i låten (titel, tonart och de första ackorden)
+  const nextItem = setlist ? setlistItems[setlistIndex + 1] : undefined;
+  const nextUp = useMemo(() => {
+    if (!nextItem) return null;
+    const next = songs[nextItem.songId];
+    if (isCue(nextItem) || !next) return { title: itemTitle(nextItem, songs) };
+    const t = itemTranspose(nextItem, next);
+    const k = next.attachment ? null : songKey(next, t);
+    const p = parseChordPro(next.content);
+    const c = displayChordContext(p, t, settings.notation);
+    const chords = [...new Set(p.chords.filter((ch) => !ch.startsWith('*')).map((ch) => formatChord(ch, c)))].slice(0, 5);
+    return {
+      title: next.title,
+      key: k ? formatKey(k.key, 0, settings.notation) : undefined,
+      capo: capoOf(p) || undefined,
+      chords,
+    };
+  }, [nextItem, songs, settings.notation]);
   const preferFlats = songPrefersFlats(parsed, transpose);
   // Med {duration} och utan egen hastighet: scrolla genom hela låten på den tiden
   const duration = song?.scrollSpeed === undefined ? parseDuration(parsed.meta.duration) : undefined;
@@ -769,6 +789,21 @@ export function SongPage() {
               ) : null
             }
           />
+          )}
+          {nextUp && (
+            <button
+              className="next-up"
+              onClick={(e) => {
+                e.stopPropagation();
+                goSetlist(1);
+              }}
+            >
+              <span className="muted">Sedan:</span> <b>{nextUp.title}</b>
+              {nextUp.key && <span className="muted"> · {nextUp.key}</span>}
+              {nextUp.capo && <span className="muted"> · kapo {nextUp.capo}</span>}
+              <ChevronRight size={18} />
+              {nextUp.chords && nextUp.chords.length > 0 && <span className="next-chords">{nextUp.chords.join('  ')}</span>}
+            </button>
           )}
           </div>
         </div>
