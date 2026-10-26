@@ -199,12 +199,17 @@ export function SongPage() {
     let raf = 0;
     // Medan ett finger ligger på låten, och strax efter (så att svepets fart hinner klinga av),
     // väntar scrollningen och fortsätter sedan därifrån
+    // Ett vanligt tryck (t.ex. för att visa kontrollerna) ger ingen paus efteråt
     let held = false;
     let pauseUntil = 0;
-    const onDown = () => (held = true);
+    let downTop = 0;
+    const onDown = () => {
+      held = true;
+      downTop = el.scrollTop;
+    };
     const onUp = () => {
       held = false;
-      pauseUntil = performance.now() + 700;
+      if (Math.abs(el.scrollTop - downTop) > 2) pauseUntil = performance.now() + 700;
     };
     const onWheel = () => (pauseUntil = performance.now() + 400);
     el.addEventListener('touchstart', onDown, { passive: true });
