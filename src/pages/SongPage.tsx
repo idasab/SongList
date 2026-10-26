@@ -117,7 +117,7 @@ export function SongPage() {
     const t = itemTranspose(nextItem, next);
     const k = next.attachment ? null : songKey(next, t);
     const p = parseChordPro(next.content);
-    const c = displayChordContext(p, t, settings.notation);
+    const c = displayChordContext(p, t, settings.notation, settings.simplifyChords);
     const chords = [...new Set(p.chords.filter((ch) => !ch.startsWith('*')).map((ch) => formatChord(ch, c)))].slice(0, 5);
     return {
       title: next.title,
@@ -125,7 +125,7 @@ export function SongPage() {
       capo: capoOf(p) || undefined,
       chords,
     };
-  }, [nextItem, songs, settings.notation]);
+  }, [nextItem, songs, settings.notation, settings.simplifyChords]);
   const preferFlats = songPrefersFlats(parsed, transpose);
   // Med {duration} och utan egen hastighet: scrolla genom hela låten på den tiden
   const duration = song?.scrollSpeed === undefined ? parseDuration(parsed.meta.duration) : undefined;
@@ -138,8 +138,8 @@ export function SongPage() {
   const wantColumns = wide && settings.twoColumns !== false && !song?.attachment;
   const [columnsFit, setColumnsFit] = useState(true);
   const columns = wantColumns && columnsFit;
-  const fitKey = [song?.id, song?.content, showChords, settings.fontSize, transpose, stage, wantColumns].join('|');
-  const metrics = useLineMetrics(songRef, [parsed, showChords, settings.fontSize, transpose, stage, song?.id, columns]);
+  const fitKey = [song?.id, song?.content, showChords, settings.fontSize, transpose, stage, wantColumns, settings.simplifyChords].join('|');
+  const metrics = useLineMetrics(songRef, [parsed, showChords, settings.fontSize, transpose, stage, song?.id, columns, settings.simplifyChords]);
 
   const updateAnnotations = useCallback(
     (next: Annotations, commit: boolean) => {
@@ -410,7 +410,7 @@ export function SongPage() {
   // Låten visas som en bifogad fil (t.ex. noter) i stället för text och ackord
   const isFile = !!song.attachment;
   // Ackorden visas som grepp när låten har kapo
-  const ctx = displayChordContext(parsed, transpose, settings.notation);
+  const ctx = displayChordContext(parsed, transpose, settings.notation, settings.simplifyChords);
   const capo = capoOf(parsed);
   const displayChords = parsed.chords.filter((c) => !c.startsWith('*')).map((c) => formatChord(c, ctx));
   const uniqueChords = [...new Set(displayChords)];
@@ -763,6 +763,7 @@ export function SongPage() {
               showChords,
               fontSize: settings.fontSize,
               columns: columns ? 2 : 1,
+              simplify: settings.simplifyChords,
               onChordClick: annotating ? undefined : setChordSheet,
             }}
             containerRef={songRef}

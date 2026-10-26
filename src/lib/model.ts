@@ -92,6 +92,8 @@ export interface Settings {
   lastSyncAt?: number;
   lastBackupAt?: number;
   librarySort: 'title' | 'artist' | 'updated';
+  /** Förenklade ackord i låtvyn (Cmaj7 → C, G/B → G); låtarna ändras inte */
+  simplifyChords?: boolean;
   /** Två spalter på en bred skärm i liggande läge, när låten då får plats (förval: på) */
   twoColumns?: boolean;
   /** Om en tonartsändring i en setlista bara gäller där (förval) eller för låten överallt */

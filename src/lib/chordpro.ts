@@ -491,9 +491,14 @@ export function capoOf(song: ParsedSong): number {
  * Hur ackorden visas. Ackorden i låten är de som klingar; med kapo visas greppen, dvs.
  * ackorden flyttade ner så många halvtoner som kapot sitter (A med kapo 2 visas som G).
  */
-export function displayChordContext(song: ParsedSong, transpose: number, notation: ChordContext['notation']): ChordContext {
+export function displayChordContext(
+  song: ParsedSong,
+  transpose: number,
+  notation: ChordContext['notation'],
+  simplify = false,
+): ChordContext {
   const shift = transpose - capoOf(song);
-  return { transpose: shift, preferFlats: songPrefersFlats(song, shift), notation, hNotation: song.hNotation };
+  return { transpose: shift, preferFlats: songPrefersFlats(song, shift), notation, hNotation: song.hNotation, simplify };
 }
 
 type Quality = 'maj' | 'min' | 'dim' | 'any';

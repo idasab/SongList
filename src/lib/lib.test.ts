@@ -20,6 +20,15 @@ import { isValidEmail } from '../services/mail';
 import { filterSongs, groupLetter, keyId, keyIdLabel, keysInLibrary, songKey, sortSongs } from './search';
 
 describe('ackord', () => {
+  it('förenklade ackord: bara dur, moll och förminskat, utan bas', () => {
+    const ctx = { transpose: 0, notation: 'international' as const, simplify: true };
+    const out = ['Cmaj7', 'Dsus4', 'G/B', 'Am7', 'F#m7b5', 'E7(b9)', 'C#dim7', 'Bbadd9', 'D5', '(Em)', 'Hm', 'N.C.'].map((c) => formatChord(c, ctx));
+    expect(out).toEqual(['C', 'D', 'G', 'Am', 'F#m', 'E', 'C#dim', 'Bb', 'D', '(Em)', 'Bm', 'N.C.']);
+    // Med transponering och svensk notation
+    expect(formatChord('Gmaj7/F#', { transpose: 2, notation: 'swedish', simplify: true })).toBe('A');
+    expect(formatChord('Gmaj7/F#', { transpose: 0, notation: 'international' })).toBe('Gmaj7/F#');
+  });
+
   it('känner igen ackord men inte vanliga ord', () => {
     for (const c of ['C', 'Am', 'F#m7', 'Bb', 'Dsus4', 'G/B', 'Cmaj7', 'E7(b9)', 'Asus2', 'C#dim7', 'H7', 'D6/9', 'Gadd9', '(Em)']) {
       expect(isChord(c), c).toBe(true);

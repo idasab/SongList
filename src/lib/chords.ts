@@ -141,6 +141,14 @@ export interface ChordContext {
   preferFlats?: boolean;
   notation: Notation;
   hNotation?: boolean;
+  /** Förenklade ackord: bara dur, moll eller förminskat, utan basstämma (Cmaj7 → C, G/B → G) */
+  simplify?: boolean;
+}
+
+/** Ackordets typ i förenklad form: "m" för moll, "dim" för förminskat, annars dur. */
+export function simplifySuffix(suffix: string): string {
+  if (/^(dim|°|o$)/.test(suffix)) return 'dim';
+  return isMinorSuffix(suffix) ? 'm' : '';
 }
 
 /** Formaterar ett ackord för visning, transponerat och i vald notation. */
@@ -161,6 +169,8 @@ export function formatChord(raw: string, ctx: ChordContext): string {
     rootStr = pcName(c.root + t, flats, ctx.notation);
     if (c.bass !== undefined) bassStr = pcName(c.bass + t, flats, ctx.notation);
   }
+  // En slutparentes utan startparentes hör till ackordtypen, t.ex. "E7(b9)", och försvinner med den
+  if (ctx.simplify) return `${c.prefix}${rootStr}${simplifySuffix(c.suffix)}${c.prefix ? c.postfix : ''}`;
   return `${c.prefix}${rootStr}${c.suffix}${bassStr ? '/' + bassStr : ''}${c.postfix}`;
 }
 

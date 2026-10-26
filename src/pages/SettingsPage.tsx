@@ -89,6 +89,13 @@ export function SettingsPage() {
               <Switch label="Två spalter" checked={settings.twoColumns !== false} onChange={(v) => update({ twoColumns: v })} />
             </div>
             <div className="toggle-row">
+              <div>
+                <div>Förenklade ackord</div>
+                <div className="muted small-text">Visar t.ex. Cmaj7, Dsus4 och G/B som C, D och G. Låtarna ändras inte.</div>
+              </div>
+              <Switch label="Förenklade ackord" checked={!!settings.simplifyChords} onChange={(v) => update({ simplifyChords: v })} />
+            </div>
+            <div className="toggle-row">
               <span>Textstorlek</span>
               <div className="tool-group">
                 <button className="btn icon" onClick={() => update({ fontSize: Math.max(12, settings.fontSize - 2) })}>

@@ -12,6 +12,8 @@ export interface RenderOptions {
   showHeader?: boolean;
   /** Två spalter (t.ex. på iPad i liggande läge); titeln går över båda */
   columns?: 1 | 2;
+  /** Förenklade ackord (inställning) */
+  simplify?: boolean;
   onChordClick?: (chord: string) => void;
 }
 
@@ -154,7 +156,7 @@ export const SongRenderer = memo(function SongRenderer({
   /** Lager som ritas ovanpå låten, t.ex. anteckningar */
   overlay?: ReactNode;
 }) {
-  const ctx: ChordContext = displayChordContext(song, opts.transpose, opts.notation);
+  const ctx: ChordContext = displayChordContext(song, opts.transpose, opts.notation, opts.simplify);
   const { meta } = song;
   const key = parseKey(meta.key, { hNotation: song.hNotation });
   const capo = capoOf(song);
