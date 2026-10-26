@@ -661,8 +661,12 @@ function SharedSetlistSheet() {
   const setShared = useIncomingShare((s) => s.setShared);
   const songs = useStore((s) => s.songs);
   const [busy, setBusy] = useState(false);
+  // Spärr som slår till direkt: ett dubbeltryck ska inte lägga till setlistan två gånger
+  const busyRef = useRef(false);
   if (!shared) return null;
   const run = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     try {
       const sl = await importSharedSetlist(shared);
@@ -672,6 +676,7 @@ function SharedSetlistSheet() {
     } catch (e) {
       toastError(e, 'Setlistan kunde inte importeras');
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };

@@ -75,6 +75,18 @@ describe('dela setlista', () => {
     expect(songs.c.transpose).toBe(0);
   });
 
+  it('tonarter i filen blir heltal i rätt intervall', () => {
+    const file = {
+      format: 'songlist-setlist',
+      version: 1,
+      setlist: { name: 'x', items: [{ songId: 'a', transpose: 7 }, { songId: 'a', transpose: 1.5 }] },
+      songs: [{ id: 'a', title: 'a', artist: '', content: '', tags: [], transpose: -7 }],
+    };
+    const shared = parseSharedSetlist(JSON.stringify(file))!;
+    expect(shared.setlist.items.map((it) => it.transpose)).toEqual([-5, undefined]);
+    expect(shared.songs[0].transpose).toBe(5);
+  });
+
   it('läser inte andra filer', () => {
     expect(parseSharedSetlist('inte json')).toBeNull();
     expect(parseSharedSetlist(JSON.stringify({ format: 'annat' }))).toBeNull();

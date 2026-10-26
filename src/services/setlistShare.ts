@@ -4,8 +4,10 @@
 
 import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
+import { Filesystem } from '@capacitor/filesystem';
 import { create } from 'zustand';
 import { toast } from '../components/ui';
+import { normalizeTranspose } from '../lib/chords';
 import { findDuplicates } from '../lib/duplicates';
 import { newId, type Setlist, type Song, type SongAttachment } from '../lib/model';
 import { isCue } from '../lib/setlist';
@@ -87,14 +89,14 @@ export function parseSharedSetlist(text: string): SharedSetlist | null {
         .map((it) => ({
           songId: it.songId,
           cue: typeof it.cue === 'string' ? it.cue : undefined,
-          transpose: typeof it.transpose === 'number' ? it.transpose : undefined,
+          transpose: Number.isInteger(it.transpose) ? normalizeTranspose(it.transpose!) : undefined,
         })),
     },
     songs: songs.map((s) => ({
       ...s,
       artist: typeof s.artist === 'string' ? s.artist : '',
       tags: Array.isArray(s.tags) ? s.tags.filter((t) => typeof t === 'string') : [],
-      transpose: typeof s.transpose === 'number' ? s.transpose : 0,
+      transpose: Number.isInteger(s.transpose) ? normalizeTranspose(s.transpose) : 0,
       attachment: s.attachment && typeof s.attachment.dataUrl === 'string' && s.attachment.dataUrl ? s.attachment : undefined,
     })),
   };
@@ -168,15 +170,24 @@ export async function receiveSharedText(text: string): Promise<boolean> {
  */
 export function listenForSharedFiles() {
   if (!Capacitor.isNativePlatform()) return;
-  const open = async (url: string | undefined) => {
-    if (!url || !isSharedSetlistFile(decodeURIComponent(url.split('?')[0]))) return;
+  // iOS kommer ihåg filen appen startades med även när webbvyn laddas om. Filen tas därför bort
+  // ur appens inkorg när den lästs, och en startfil som inte finns längre hoppas över tyst.
+  const reading = new Set<string>();
+  const open = async (url: string | undefined, fromLaunch: boolean) => {
+    if (!url || reading.has(url) || !isSharedSetlistFile(decodeURIComponent(url.split('?')[0]))) return;
+    reading.add(url);
     try {
-      const text = await (await fetch(Capacitor.convertFileSrc(url))).text();
+      const res = await fetch(Capacitor.convertFileSrc(url));
+      if (!res.ok) throw new Error(String(res.status));
+      const text = await res.text();
+      if (url.includes('/Inbox/')) await Filesystem.deleteFile({ path: url }).catch(() => undefined);
       if (await receiveSharedText(text)) window.location.hash = '#/import';
     } catch {
-      toast('Filen kunde inte läsas', { error: true });
+      if (!fromLaunch) toast('Filen kunde inte läsas', { error: true });
+    } finally {
+      reading.delete(url);
     }
   };
-  void App.addListener('appUrlOpen', ({ url }) => void open(url));
-  void App.getLaunchUrl().then((r) => open(r?.url));
+  void App.addListener('appUrlOpen', ({ url }) => void open(url, false));
+  void App.getLaunchUrl().then((r) => open(r?.url, true));
 }
