@@ -1,6 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ChevronDown, ChevronUp, Image as ImageIcon, Wand2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Hand, Image as ImageIcon, Wand2 } from 'lucide-react';
+import { TAP_RESET_MS, tapTempo } from '../lib/metronome';
 import { SongRenderer } from '../components/SongRenderer';
 import { TagInput } from '../components/TagInput';
 import { Header, Segmented, toast } from '../components/ui';
@@ -308,10 +309,13 @@ export function EditorPage() {
                   ))}
                 </select>
               </label>
-              <label className="field">
-                <span>Tempo</span>
+              <div className="field">
+                <span className="field-label-row">
+                  Tempo
+                  <TapTempoButton onTempo={(bpm) => setMeta('tempo', String(bpm))} />
+                </span>
                 <DirectiveInput inputMode="numeric" value={meta.tempo ?? ''} onChange={(v) => setMeta('tempo', v)} />
-              </label>
+              </div>
               <label className="field">
                 <span>Takt</span>
                 <DirectiveInput value={meta.time ?? ''} onChange={(v) => setMeta('time', v)} placeholder="4/4" />
@@ -354,6 +358,35 @@ export function EditorPage() {
  * behåller fältet sitt eget värde, eftersom direktivets värde trimmas och ett mellanslag i
  * slutet annars försvinner innan nästa ord hunnit skrivas.
  */
+/** Knacka i takt: tempot räknas fram och fylls i medan man knackar. */
+function TapTempoButton({ onTempo }: { onTempo: (bpm: number) => void }) {
+  const taps = useRef<number[]>([]);
+  const [tapping, setTapping] = useState(false);
+  const idle = useRef(0);
+  useEffect(() => () => window.clearTimeout(idle.current), []);
+  const tap = () => {
+    const now = performance.now();
+    const last = taps.current[taps.current.length - 1];
+    taps.current = last !== undefined && now - last > TAP_RESET_MS ? [now] : [...taps.current, now];
+    setTapping(true);
+    window.clearTimeout(idle.current);
+    idle.current = window.setTimeout(() => setTapping(false), TAP_RESET_MS);
+    const bpm = tapTempo(taps.current);
+    if (bpm) onTempo(bpm);
+  };
+  return (
+    <button
+      type="button"
+      className={`btn ghost tap-tempo${tapping ? ' tapping' : ''}`}
+      aria-label="Knacka tempot"
+      title="Knacka i takt med låten, så fylls tempot i"
+      onClick={tap}
+    >
+      <Hand size={16} />
+    </button>
+  );
+}
+
 function DirectiveInput({
   value,
   onChange,

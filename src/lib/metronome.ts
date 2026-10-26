@@ -14,6 +14,21 @@ export function beatsPerBar(time: string | undefined): number {
   return n >= 1 && n <= 16 ? n : 4;
 }
 
+/** Längsta paus mellan två knackningar (ms) innan räkningen börjar om. */
+export const TAP_RESET_MS = 2000;
+
+/**
+ * Tempot från knackningar (tidpunkter i ms): medelvärdet av de senaste åtta mellanrummen,
+ * avrundat till helt slag per minut. Minst två knackningar behövs.
+ */
+export function tapTempo(times: number[]): number | undefined {
+  const recent = times.slice(-9);
+  if (recent.length < 2) return undefined;
+  const avg = (recent[recent.length - 1] - recent[0]) / (recent.length - 1);
+  const bpm = Math.round(60000 / avg);
+  return bpm >= 20 && bpm <= 400 ? bpm : undefined;
+}
+
 /** Hur långt fram klicken schemaläggs (s) och hur ofta det fylls på (ms). */
 const LOOKAHEAD = 0.12;
 const INTERVAL = 25;

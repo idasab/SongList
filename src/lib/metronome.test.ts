@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beatsPerBar, parseTempo } from './metronome';
+import { beatsPerBar, parseTempo, tapTempo } from './metronome';
 
 describe('metronom', () => {
   it('tempo från {tempo}', () => {
@@ -20,5 +20,19 @@ describe('metronom', () => {
     expect(beatsPerBar(undefined)).toBe(4);
     expect(beatsPerBar('C')).toBe(4);
     expect(beatsPerBar('0/4')).toBe(4);
+  });
+});
+
+describe('knacka tempo', () => {
+  it('medelvärdet av de senaste mellanrummen', () => {
+    expect(tapTempo([0])).toBeUndefined();
+    expect(tapTempo([0, 500])).toBe(120);
+    // Ett ojämnt slag jämnas ut
+    expect(tapTempo([0, 600, 1250, 1875, 2500])).toBe(96);
+    // Bara de senaste åtta mellanrummen räknas
+    const slow = [0, 1000, 2000];
+    const fast = Array.from({ length: 9 }, (_, i) => 3000 + i * 500);
+    expect(tapTempo([...slow, ...fast])).toBe(120);
+    expect(tapTempo([0, 10])).toBeUndefined();
   });
 });
