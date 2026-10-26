@@ -60,7 +60,7 @@ export interface SetlistItem {
   transpose?: number;
   /** Låtens anteckningar som de var när låten senast visades i setlistan (historik) */
   annotations?: Annotations;
-  /** När låten senast visades i setlistan (ms) */
+  /** När kopian av anteckningarna sparades (ms) */
   playedAt?: number;
 }
 

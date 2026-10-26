@@ -1,6 +1,7 @@
 // Historik för en låt: setlistorna den har ingått i, med datum, tonart och anteckningarna
 // som låten hade när den senast visades i setlistan.
 
+import { hasAnnotations } from './annotations';
 import type { Setlist, SetlistItem, Song } from './model';
 import { liveItems } from './setlist';
 
@@ -17,7 +18,9 @@ export function songHistory(songId: string, setlists: Record<string, Setlist>, s
   for (const sl of Object.values(setlists)) {
     if (sl.deletedAt) continue;
     const items = liveItems(sl.items, songs);
-    const index = items.findIndex((it) => it.songId === songId);
+    // Finns låten flera gånger: den som har sparade anteckningar, annars den första
+    const withNotes = items.findIndex((it) => it.songId === songId && hasAnnotations(it.annotations));
+    const index = withNotes >= 0 ? withNotes : items.findIndex((it) => it.songId === songId);
     if (index >= 0) out.push({ setlist: sl, item: items[index], index });
   }
   return out.sort((a, b) => {

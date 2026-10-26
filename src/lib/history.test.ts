@@ -22,11 +22,21 @@ describe('historik', () => {
     recent: sl('recent', ['gone', '', 'a'], { date: '2026-10-01' }),
     deleted: sl('deleted', ['a'], { date: '2026-10-20', deletedAt: 5 }),
     other: sl('other', ['b'], { date: '2026-10-22' }),
+    twice: {
+      ...sl('twice', ['a', 'b', 'a'], { date: '2026-02-01' }),
+      items: [
+        { id: 't0', songId: 'a' },
+        { id: 't1', songId: 'b' },
+        { id: 't2', songId: 'a', annotations: { strokes: [], notes: [{ id: 'n', anchor: { line: 0, dx: 0, dy: 0 }, w: 1, h: 1, rotation: 0, text: 'x', fontSize: 1, color: 'yellow' as const }] } },
+      ],
+    },
   };
 
   it('setlistor med låten: senaste datum först, odaterade sist', () => {
     const h = songHistory('a', setlists, songs);
-    expect(h.map((x) => x.setlist.id)).toEqual(['future', 'recent', 'old', 'nodate', 'nodateOld']);
+    expect(h.map((x) => x.setlist.id)).toEqual(['future', 'recent', 'old', 'twice', 'nodate', 'nodateOld']);
+    // Två gånger i samma setlista: den med sparade anteckningar
+    expect(h.find((x) => x.setlist.id === 'twice')!.item.id).toBe('t2');
     // Platsen bland punkterna som visas: den raderade låten räknas inte, mellanpunkten gör det
     expect(h.find((x) => x.setlist.id === 'recent')!.index).toBe(1);
     expect(h.find((x) => x.setlist.id === 'future')!.index).toBe(1);

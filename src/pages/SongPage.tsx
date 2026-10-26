@@ -52,7 +52,7 @@ import { AttachmentView } from '../components/AttachmentView';
 import { isCue, itemPath, itemTitle, itemTranspose, liveItems, songCount } from '../lib/setlist';
 import { useAnnotationGestures, type AnnotTool } from '../hooks/useAnnotationGestures';
 import { EMPTY_ANNOTATIONS, INK_WIDTHS, hasAnnotations, type Annotations, type InkColor, type StickyNote } from '../lib/annotations';
-import { lastPlayed, songHistory } from '../lib/history';
+import { lastPlayed, songHistory, todayIso } from '../lib/history';
 import { formatDate } from './SetlistsPage';
 
 const MIN_FONT = 12;
@@ -125,6 +125,8 @@ export function SongPage() {
       const sl = setlistId ? useStore.getState().setlists[setlistId] : undefined;
       const it = sl?.items.find((x) => x.id === itemId);
       if (!sl || !it) return;
+      // En setlista vars datum har varit är historik: att titta på den igen ska inte skriva över kopian
+      if (sl.date && sl.date < todayIso()) return;
       const next = hasAnnotations(a) ? a : undefined;
       if (JSON.stringify(next) === JSON.stringify(it.annotations)) return;
       void useStore.getState().saveSetlist({ ...sl, items: sl.items.map((x) => (x.id === itemId ? { ...x, annotations: next, playedAt: Date.now() } : x)) });
@@ -964,7 +966,14 @@ function HistorySheet({
               const k = song.attachment ? null : songKey(song, itemTranspose(h.item, song));
               return (
                 <div className="list-item" key={h.setlist.id}>
-                  <button className="main history-open" onClick={() => navigate(itemPath(h.setlist.id, h.item, h.index))}>
+                  <button
+                    className="main history-open"
+                    onClick={() => {
+                      // Samma låt öppnas igen (bara setlistan i adressen ändras): stäng rutan först
+                      onClose();
+                      navigate(itemPath(h.setlist.id, h.item, h.index));
+                    }}
+                  >
                     <div className="title">{h.setlist.name}</div>
                     <div className="sub">
                       {h.setlist.date ? formatDate(h.setlist.date) : 'Utan datum'}
