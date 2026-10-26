@@ -56,6 +56,8 @@ export interface SetlistItem {
   songId: string;
   /** Mellanpunkt i stället för en låt, t.ex. "Tal": texten som visas på skärmen */
   cue?: string;
+  /** Transponering som bara gäller i den här setlistan (annars låtens egen) */
+  transpose?: number;
 }
 
 export interface Setlist extends SyncRecord {
@@ -90,6 +92,8 @@ export interface Settings {
   lastSyncAt?: number;
   lastBackupAt?: number;
   librarySort: 'title' | 'artist' | 'updated';
+  /** Om en tonartsändring i en setlista bara gäller där (förval) eller för låten överallt */
+  transposeScope?: 'setlist' | 'global';
   /** Senast använda e-postadresser för export (sparas bara på enheten) */
   recentEmails?: string[];
 }
@@ -172,7 +176,11 @@ export function sanitizeLibrary<T extends LibraryData>(data: T): T {
     setlists: data.setlists.filter(isRecord).map((sl) => ({
       ...sl,
       name: typeof sl.name === 'string' ? sl.name : 'Setlista',
-      items: Array.isArray(sl.items) ? sl.items.filter((it) => it && typeof it.id === 'string') : [],
+      items: Array.isArray(sl.items)
+        ? sl.items
+            .filter((it) => it && typeof it.id === 'string')
+            .map((it) => (it.transpose === undefined || typeof it.transpose === 'number' ? it : { ...it, transpose: undefined }))
+        : [],
     })),
     categories: data.categories.filter(isRecord).map((c) => ({ ...c, name: typeof c.name === 'string' ? c.name : '' })),
     folders: data.folders.filter(isRecord).map((f) => ({ ...f, name: typeof f.name === 'string' ? f.name : '' })),

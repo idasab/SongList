@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CUE_ROUTE_ID, itemPath, itemTitle, liveItems, moveVisible, songCount } from './setlist';
+import { CUE_ROUTE_ID, itemPath, itemTitle, itemTranspose, liveItems, moveVisible, songCount } from './setlist';
 import { sanitizeLibrary, type BackupFile, type Setlist, type Song } from './model';
 import { pdfSafe } from './pdfText';
 import { attachmentFileName, contentHash, dataUrlBase64, markMissingAttachments, referencedFiles } from './backupFiles';
@@ -427,6 +427,17 @@ describe('tonartsfilter', () => {
     expect(keyId(am.key)).toBe('9m');
     expect(am.guessed).toBe(true);
     expect(songKey(songs[5])).toBeNull();
+  });
+
+  it('tonart med setlistans egen transponering', () => {
+    const s = songs[1];
+    expect(keyId(songKey(s, s.transpose + 2)!.key)).toBe('9');
+    // Låtens egen gäller fortfarande utan argument (och cachen blandar inte ihop dem)
+    expect(keyId(songKey(s)!.key)).toBe('7');
+    expect(itemTranspose({ id: 'a', songId: s.id, transpose: -1 }, s)).toBe(-1);
+    expect(itemTranspose({ id: 'a', songId: s.id, transpose: 0 }, s)).toBe(0);
+    expect(itemTranspose({ id: 'a', songId: s.id }, s)).toBe(s.transpose);
+    expect(itemTranspose(undefined, s)).toBe(s.transpose);
   });
 
   it('listar tonarter i tonskalans ordning, C# och Db som samma', () => {

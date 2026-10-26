@@ -46,7 +46,7 @@ import { Metronome, beatsPerBar, parseTempo } from '../lib/metronome';
 import { useWakeLock } from '../hooks/useWakeLock';
 import { useSwipeNavigation } from '../hooks/useSwipeNavigation';
 import { AttachmentView } from '../components/AttachmentView';
-import { isCue, itemPath, itemTitle, liveItems, songCount } from '../lib/setlist';
+import { isCue, itemPath, itemTitle, itemTranspose, liveItems, songCount } from '../lib/setlist';
 import { useAnnotationGestures, type AnnotTool } from '../hooks/useAnnotationGestures';
 import { EMPTY_ANNOTATIONS, INK_WIDTHS, type Annotations, type InkColor, type StickyNote } from '../lib/annotations';
 
@@ -66,6 +66,7 @@ export function SongPage() {
   const updateSettings = useStore((s) => s.updateSettings);
   const updateSongPrefs = useStore((s) => s.updateSongPrefs);
   const saveSong = useStore((s) => s.saveSong);
+  const saveSetlist = useStore((s) => s.saveSetlist);
   const deleteSong = useStore((s) => s.deleteSong);
   const setlist = useStore((s) => (params.get('setlist') ? s.setlists[params.get('setlist')!] : undefined));
   const songs = useStore((s) => s.songs);
@@ -95,7 +96,15 @@ export function SongPage() {
   useWakeLock(true);
 
   const parsed = useMemo(() => parseChordPro(song?.content ?? ''), [song?.content]);
-  const transpose = song?.transpose ?? 0;
+  // Position i setlistan
+  const setlistIndex = setlist ? Number(params.get('i') ?? 0) : -1;
+  const setlistItems = useMemo(
+    () => (setlist ? liveItems(setlist.items, songs) : []),
+    [setlist, songs],
+  );
+  // Låten som punkt i setlistan: kan ha en egen tonart där
+  const setlistItem = setlistItems[setlistIndex]?.songId === id ? setlistItems[setlistIndex] : undefined;
+  const transpose = song ? itemTranspose(setlistItem, song) : 0;
   const preferFlats = songPrefersFlats(parsed, transpose);
   // Med {duration} och utan egen hastighet: scrolla genom hela låten på den tiden
   const duration = song?.scrollSpeed === undefined ? parseDuration(parsed.meta.duration) : undefined;
@@ -158,13 +167,6 @@ export function SongPage() {
     setEditingId(null);
     history.current = [];
   }, [id]);
-
-  // Position i setlistan
-  const setlistIndex = setlist ? Number(params.get('i') ?? 0) : -1;
-  const setlistItems = useMemo(
-    () => (setlist ? liveItems(setlist.items, songs) : []),
-    [setlist, songs],
-  );
 
   const goSetlist = useCallback(
     (delta: number) => {
@@ -376,7 +378,17 @@ export function SongPage() {
   const displayChords = parsed.chords.filter((c) => !c.startsWith('*')).map((c) => formatChord(c, ctx));
   const uniqueChords = [...new Set(displayChords)];
 
-  const setTranspose = (n: number) => void updateSongPrefs(song.id, { transpose: normalizeTranspose(n) });
+  // I en setlista: ändringen gäller bara där, eller för låten överallt (valet sparas)
+  const transposeInSetlist = !!setlistItem && settings.transposeScope !== 'global';
+  const setItemTranspose = (t: number | undefined) =>
+    setlist && setlistItem && void saveSetlist({ ...setlist, items: setlist.items.map((x) => (x.id === setlistItem.id ? { ...x, transpose: t } : x)) });
+  const setTranspose = (n: number) => {
+    const t = normalizeTranspose(n);
+    if (transposeInSetlist) return setItemTranspose(t);
+    // Överallt: setlistan följer låtens tonart igen
+    if (setlistItem?.transpose !== undefined) setItemTranspose(undefined);
+    void updateSongPrefs(song.id, { transpose: t });
+  };
   // Kapot sparas i låten ({capo}), så att det följer med i synk, export och redigering
   const setCapo = (n: number) => {
     const next = Math.max(0, Math.min(11, n));
@@ -415,7 +427,17 @@ export function SongPage() {
       notation: parsed.hNotation ? 'swedish' : 'international',
     });
     await saveSong({ id: song.id, content });
-    await updateSongPrefs(song.id, { transpose: 0 });
+    // Låtens och setlistornas egna tonarter utgår från texten och flyttas lika mycket
+    await updateSongPrefs(song.id, { transpose: normalizeTranspose(song.transpose - transpose) });
+    for (const sl of Object.values(useStore.getState().setlists)) {
+      if (sl.deletedAt || !sl.items.some((x) => x.songId === song.id && x.transpose !== undefined)) continue;
+      await saveSetlist({
+        ...sl,
+        items: sl.items.map((x) =>
+          x.songId === song.id && x.transpose !== undefined ? { ...x, transpose: normalizeTranspose(x.transpose - transpose) } : x,
+        ),
+      });
+    }
     toast('Transponeringen är sparad i texten');
   };
 
@@ -536,6 +558,15 @@ export function SongPage() {
             <button className="btn icon" aria-label="Transponera upp" onClick={() => setTranspose(transpose + 1)}>
               <Plus size={18} />
             </button>
+            {setlistItem && (
+              <button
+                className={`btn small scope-btn${transposeInSetlist ? ' active' : ''}`}
+                title={transposeInSetlist ? 'Tonarten ändras bara i den här setlistan' : 'Tonarten ändras för låten överallt'}
+                onClick={() => void updateSettings({ transposeScope: transposeInSetlist ? 'global' : 'setlist' })}
+              >
+                {transposeInSetlist ? 'I setlistan' : 'Överallt'}
+              </button>
+            )}
           </div>
           )}
 

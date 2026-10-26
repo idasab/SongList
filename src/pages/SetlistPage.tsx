@@ -37,7 +37,7 @@ import { formatKey } from '../lib/chords';
 import { newId, type SetlistItem, type Song } from '../lib/model';
 import { allTags, liveSongs, useStore } from '../store/useStore';
 import { FolderSelect, formatDate } from './SetlistsPage';
-import { isCue, itemPath, liveItems, moveVisible, songCount } from '../lib/setlist';
+import { isCue, itemPath, itemTranspose, liveItems, moveVisible, songCount } from '../lib/setlist';
 
 export function SetlistPage() {
   const { id = '' } = useParams();
@@ -154,8 +154,8 @@ export function SetlistPage() {
                       keyLabel={(() => {
                         const s = songs[it.songId];
                         if (isCue(it) || !s || s.attachment) return '';
-                        // Samma tonart som i låtlistan (tar hänsyn till H-notation och transponering)
-                        const k = songKey(s);
+                        // Som i låtlistan (H-notation och transponering), med setlistans egen tonart
+                        const k = songKey(s, itemTranspose(it, s));
                         return k ? formatKey(k.key, 0, notation) : '';
                       })()}
                       onOpen={() => play(idx)}

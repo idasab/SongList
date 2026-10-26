@@ -22,6 +22,11 @@ export function itemPath(setlistId: string, it: SetlistItem, index: number): str
   return `/song/${isCue(it) ? CUE_ROUTE_ID : it.songId}?setlist=${setlistId}&i=${index}`;
 }
 
+/** Transponeringen för en låt i setlistan: setlistans egen om den har en, annars låtens. */
+export function itemTranspose(it: SetlistItem | undefined, song: Song): number {
+  return typeof it?.transpose === 'number' ? it.transpose : song.transpose;
+}
+
 export function songCount(items: SetlistItem[]): number {
   return items.filter((it) => !isCue(it)).length;
 }

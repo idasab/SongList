@@ -31,8 +31,17 @@ export interface SongKey {
 
 const keyCache = new Map<string, { at: number; key: SongKey | null }>();
 
-/** Låtens tonart som den visas: angiven tonart, annars första ackordet, plus transponering. */
-export function songKey(song: Song): SongKey | null {
+/**
+ * Låtens tonart som den visas: angiven tonart, annars första ackordet, plus transponering
+ * (låtens egen, eller t.ex. den som gäller i en setlista).
+ */
+export function songKey(song: Song, transpose = song.transpose): SongKey | null {
+  const base = baseKey(song);
+  return base ? { key: { pc: (((base.key.pc + transpose) % 12) + 12) % 12, minor: base.key.minor }, guessed: base.guessed } : null;
+}
+
+/** Tonarten i låttexten, utan transponering. */
+function baseKey(song: Song): SongKey | null {
   const c = keyCache.get(song.id);
   if (c && c.at === song.updatedAt) return c.key;
   const parsed = parseChordPro(song.content);
@@ -45,9 +54,7 @@ export function songKey(song: Song): SongKey | null {
       guessed = true;
     }
   }
-  const key = base
-    ? { key: { pc: (((base.pc + song.transpose) % 12) + 12) % 12, minor: base.minor }, guessed }
-    : null;
+  const key = base ? { key: base, guessed } : null;
   keyCache.set(song.id, { at: song.updatedAt, key });
   return key;
 }

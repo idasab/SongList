@@ -1957,3 +1957,11 @@ textarea.note-text {
     transform: scale(1.06);
   }
 }
+
+/* Om en tonartsändring i setlistläget gäller setlistan eller låten överallt */
+.btn.scope-btn {
+  margin-left: 2px;
+  padding: 0 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}

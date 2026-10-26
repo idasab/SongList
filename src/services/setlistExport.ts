@@ -30,7 +30,7 @@ import type { Setlist, Song, SongAttachment } from '../lib/model';
 import { safeFileName, saveBinaryFile, saveTextFile } from './files';
 import { loadPdfJs } from './fileImport';
 import { pdfSafe } from '../lib/pdfText';
-import { isCue, itemTitle, liveItems } from '../lib/setlist';
+import { isCue, itemTitle, itemTranspose, liveItems } from '../lib/setlist';
 
 export type SetlistExportFormat = 'text' | 'pdf-annotated' | 'pdf-clean' | 'chordpro';
 
@@ -43,25 +43,27 @@ export const EXPORT_FORMATS: { value: SetlistExportFormat; label: string; descri
 
 interface PreparedSong {
   song: Song;
+  /** Transponeringen i setlistan (setlistans egen, annars låtens) */
+  transpose: number;
   parsed: ParsedSong;
   ctx: ChordContext;
 }
 
 function prepare(setlist: Setlist, songs: Record<string, Song>, notation: Notation): PreparedSong[] {
   return setlist.items
-    .filter((it) => !isCue(it))
-    .map((it) => songs[it.songId])
-    .filter((s): s is Song => !!s && !s.deletedAt)
-    .map((song) => {
+    .filter((it) => !isCue(it) && songs[it.songId] && !songs[it.songId].deletedAt)
+    .map((it) => {
+      const song = songs[it.songId];
+      const transpose = itemTranspose(it, song);
       const parsed = parseChordPro(song.content);
       // Ackorden exporteras som de visas: som grepp när låten har kapo
-      return { song, parsed, ctx: displayChordContext(parsed, song.transpose, notation) };
+      return { song, transpose, parsed, ctx: displayChordContext(parsed, transpose, notation) };
     });
 }
 
 function keyLabel(p: PreparedSong): string {
   const k = parseKey(p.parsed.meta.key, { hNotation: p.parsed.hNotation });
-  return k ? formatKey(k, p.song.transpose, p.ctx.notation) : '';
+  return k ? formatKey(k, p.transpose, p.ctx.notation) : '';
 }
 
 function infoLine(p: PreparedSong): string {
@@ -71,7 +73,7 @@ function infoLine(p: PreparedSong): string {
   const capo = capoOf(p.parsed);
   if (capo > 0) {
     const k = parseKey(p.parsed.meta.key, { hNotation: p.parsed.hNotation });
-    parts.push(`Kapo ${capo}` + (k ? ` (grepp i ${formatKey(k, p.song.transpose - capo, p.ctx.notation)})` : ''));
+    parts.push(`Kapo ${capo}` + (k ? ` (grepp i ${formatKey(k, p.transpose - capo, p.ctx.notation)})` : ''));
   }
   if (p.parsed.meta.tempo) parts.push(`Tempo ${p.parsed.meta.tempo}`);
   if (p.parsed.meta.time) parts.push(`Takt ${p.parsed.meta.time}`);
@@ -166,11 +168,11 @@ export function buildTextExport(setlist: Setlist, songs: Record<string, Song>, n
 /** En låts ChordPro-källa med transponeringen inskriven. */
 function songChordPro(p: PreparedSong): string {
   if (p.song.attachment) return `${p.song.content.trim()}\n{comment: Bifogad fil: ${p.song.attachment.name}}\n`;
-  const src = p.song.transpose
+  const src = p.transpose
     ? transposeSource(p.song.content, {
-        transpose: p.song.transpose,
+        transpose: p.transpose,
         // ChordPro-filen behåller ackorden som de klingar, med {capo} kvar
-        preferFlats: songPrefersFlats(p.parsed, p.song.transpose),
+        preferFlats: songPrefersFlats(p.parsed, p.transpose),
         notation: p.parsed.hNotation ? 'swedish' : 'international',
       })
     : p.song.content;
