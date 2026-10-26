@@ -44,15 +44,27 @@ function useVisibleHeight() {
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
+    let frame = 0;
     const update = () => {
       document.documentElement.style.setProperty('--app-height', `${vv.height}px`);
       // iOS kan skjuta upp sidan när ett fält får fokus; håll den på plats
       if (window.scrollY) window.scrollTo(0, 0);
+      // Tangentbordet kommer upp efter att fältet fått fokus: hamnade fältet under det, scrolla fram det
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const el = document.activeElement;
+        if (!(el instanceof HTMLElement) || !el.matches('input, textarea, select, [contenteditable="true"]')) return;
+        const r = el.getBoundingClientRect();
+        // Stora fält (som editorns textruta) scrollar själva till markören
+        if (r.height > vv.height / 2) return;
+        if (r.bottom > vv.height || r.top < 0) el.scrollIntoView({ block: 'nearest' });
+      });
     };
     update();
     vv.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
     return () => {
+      cancelAnimationFrame(frame);
       vv.removeEventListener('resize', update);
       vv.removeEventListener('scroll', update);
     };

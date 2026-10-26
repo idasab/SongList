@@ -1402,7 +1402,8 @@ textarea.note-text {
   padding: 12px calc(14px + var(--safe-right)) 4px calc(14px + var(--safe-left));
   border-bottom: 1px solid var(--border);
   background: var(--surface);
-  max-height: 45vh;
+  /* Av den synliga höjden, så att textrutan får plats även när tangentbordet är uppe */
+  max-height: calc(var(--app-height, 100vh) * 0.45);
   overflow-y: auto;
 }
 
@@ -1472,7 +1473,8 @@ textarea.note-text {
 }
 
 .ref-image {
-  max-height: 40vh;
+  /* Av den synliga höjden, så att textrutan under syns även när tangentbordet är uppe */
+  max-height: calc(var(--app-height, 100vh) * 0.3);
   overflow: auto;
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
