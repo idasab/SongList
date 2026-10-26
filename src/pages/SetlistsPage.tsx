@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type TouchEvent as ReactTouchEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Folder, FolderPlus, GripVertical, ListMusic, Pencil, Plus, Trash } from 'lucide-react';
 import {
   DndContext,
@@ -15,7 +15,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { Header, Sheet, toast } from '../components/ui';
-import type { Setlist, Song } from '../lib/model';
+import { newId, type Setlist, type Song } from '../lib/model';
 import { liveFolders, liveSetlists, useStore } from '../store/useStore';
 import { useRememberScroll } from '../hooks/useRememberScroll';
 
@@ -44,7 +44,16 @@ export function SetlistsPage() {
   const saveSetlist = useStore((s) => s.saveSetlist);
   const saveFolder = useStore((s) => s.saveFolder);
   const deleteFolder = useStore((s) => s.deleteFolder);
-  const [creating, setCreating] = useState<{ folderId: string } | null>(null);
+  // Från låtlistan: ny setlista med de markerade låtarna
+  const location = useLocation();
+  const [creating, setCreating] = useState<{ folderId: string; songIds?: string[] } | null>(() => {
+    const ids = (location.state as { newSetlistSongs?: unknown } | null)?.newSetlistSongs;
+    return Array.isArray(ids) && ids.length ? { folderId: '', songIds: ids.map(String) } : null;
+  });
+  // Läs låtarna en gång, så att rutan inte öppnas igen när man går tillbaka hit
+  useEffect(() => {
+    if ((location.state as { newSetlistSongs?: unknown } | null)?.newSetlistSongs) navigate('/setlists', { replace: true, state: null });
+  }, [location.state, navigate]);
   const [folderSheet, setFolderSheet] = useState<{ id?: string; name: string } | null>(null);
   const [, rerender] = useState(0);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -235,9 +244,11 @@ export function SetlistsPage() {
       {creating && (
         <CreateSetlistSheet
           folderId={creating.folderId}
+          songCount={creating.songIds?.length}
           onClose={() => setCreating(null)}
           onCreate={async (v) => {
-            const sl = await saveSetlist({ ...v, items: [] });
+            const items = (creating.songIds ?? []).filter((id) => songs[id] && !songs[id].deletedAt).map((songId) => ({ id: newId(), songId }));
+            const sl = await saveSetlist({ ...v, items });
             setCreating(null);
             navigate(`/setlists/${sl.id}`);
           }}
@@ -354,10 +365,13 @@ export function FolderSelect({ value, onChange }: { value: string; onChange: (id
 
 function CreateSetlistSheet({
   folderId: initialFolder,
+  songCount,
   onClose,
   onCreate,
 }: {
   folderId: string;
+  /** Antal markerade låtar från låtlistan som läggs i setlistan */
+  songCount?: number;
   onClose: () => void;
   onCreate: (v: { name: string; date?: string; folderId?: string }) => void;
 }) {
@@ -399,6 +413,12 @@ function CreateSetlistSheet({
         <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </label>
       <FolderSelect value={folderId} onChange={setFolderId} />
+      {songCount ? (
+        <p className="muted small-text">
+          {songCount === 1 ? 'Den markerade låten läggs' : `De ${songCount} markerade låtarna läggs`} i setlistan, i den
+          ordning de valdes.
+        </p>
+      ) : null}
     </Sheet>
   );
 }

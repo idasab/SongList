@@ -6,12 +6,19 @@ export function TagInput({
   value,
   onChange,
   suggestions,
+  onTextChange,
 }: {
   value: string[];
   onChange: (tags: string[]) => void;
   suggestions: string[];
+  /** Det som skrivits i fältet men inte blivit en tagg än */
+  onTextChange?: (text: string) => void;
 }) {
-  const [text, setText] = useState('');
+  const [text, setTextState] = useState('');
+  const setText = (t: string) => {
+    setTextState(t);
+    onTextChange?.(t);
+  };
 
   const add = (t: string) => {
     const next = normalizeTags([...value, ...t.split(',')]);

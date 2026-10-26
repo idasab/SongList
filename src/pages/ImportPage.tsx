@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Camera, ChevronDown, ChevronUp, ClipboardPaste, FileUp, Image as ImageIcon, Lightbulb, Pencil, X } from 'lucide-react';
 import { SongRenderer } from '../components/SongRenderer';
 import { TagInput } from '../components/TagInput';
-import { askText, Header, Segmented, Sheet, toast, toastError } from '../components/ui';
+import { CategorySelect, SAME_AS_ALL } from '../components/CategorySelect';
+import { Header, Segmented, Sheet, toast, toastError } from '../components/ui';
 import { parseChordPro, shapesToSounding } from '../lib/chordpro';
 import {
   SOURCE_FONTS,
@@ -19,7 +20,7 @@ import { newId } from '../lib/model';
 import { canUseDocumentScanner, recognizeImageFile, scanDocument } from '../services/ocr';
 import { pickFiles } from '../services/files';
 import { attachmentToFile, expandFiles, interpretFile } from '../services/fileImport';
-import { allTags, categoryName, liveCategories, normalizeTags, useStore, type ImportQueueItem } from '../store/useStore';
+import { allTags, categoryName, normalizeTags, useStore, type ImportQueueItem } from '../store/useStore';
 
 type ImportItem = ImportQueueItem;
 
@@ -524,48 +525,5 @@ function ImportItemCard({
         </div>
       )}
     </div>
-  );
-}
-
-const SAME_AS_ALL = '__same__';
-const NEW_CATEGORY = '__new__';
-
-/** Väljare för kategori där man också kan skapa en ny kategori direkt. */
-function CategorySelect({
-  value,
-  onChange,
-  sameAsAllLabel,
-}: {
-  value: string;
-  onChange: (id: string) => void;
-  /** Visar valet "Som för alla" (värdet SAME_AS_ALL) */
-  sameAsAllLabel?: string;
-}) {
-  const categoriesRec = useStore((s) => s.categories);
-  const saveCategory = useStore((s) => s.saveCategory);
-  const categories = useMemo(() => liveCategories(categoriesRec), [categoriesRec]);
-
-  const choose = async (v: string) => {
-    if (v !== NEW_CATEGORY) {
-      onChange(v);
-      return;
-    }
-    const name = await askText({ title: 'Ny kategori', label: 'Namn', placeholder: 't.ex. Psalmer', confirmLabel: 'Skapa' });
-    if (!name) return;
-    const existing = categories.find((c) => c.name.toLowerCase() === name.toLowerCase());
-    onChange(existing ? existing.id : (await saveCategory({ name })).id);
-  };
-
-  return (
-    <select className="select" value={value} onChange={(e) => void choose(e.target.value)}>
-      {sameAsAllLabel && <option value={SAME_AS_ALL}>{sameAsAllLabel}</option>}
-      <option value="">Ingen</option>
-      {categories.map((c) => (
-        <option key={c.id} value={c.id}>
-          {c.name}
-        </option>
-      ))}
-      <option value={NEW_CATEGORY}>+ Ny kategori…</option>
-    </select>
   );
 }

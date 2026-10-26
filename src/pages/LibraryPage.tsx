@@ -1,10 +1,12 @@
-import { memo, useDeferredValue, useMemo, useState } from 'react';
+import { memo, useCallback, useDeferredValue, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Music, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
-import { Header } from '../components/ui';
+import { Check, ListMusic, Music, Plus, Search, SlidersHorizontal, Tag, Tags, X } from 'lucide-react';
+import { Header, Sheet, toast } from '../components/ui';
+import { TagInput } from '../components/TagInput';
+import { CategorySelect } from '../components/CategorySelect';
 import { NO_ARTIST_GROUP, filterSongs, groupLetter, keyIdLabel, keysInLibrary, songKey, sortSongs } from '../lib/search';
 import { formatKey } from '../lib/chords';
-import { allTags, categoryName, liveCategories, liveSongs, useStore } from '../store/useStore';
+import { allTags, categoryName, liveCategories, liveSongs, normalizeTags, useStore } from '../store/useStore';
 import type { Song } from '../lib/model';
 import { useRememberScroll } from '../hooks/useRememberScroll';
 import { ALPHABET, AlphabetIndex } from '../components/AlphabetIndex';
@@ -26,6 +28,7 @@ export function LibraryPage() {
   const categoriesRec = useStore((s) => s.categories);
   const settings = useStore((s) => s.settings);
   const updateSettings = useStore((s) => s.updateSettings);
+  const editSongs = useStore((s) => s.editSongs);
 
   const [query, setQuery] = useState(session.query);
   const [fullText, setFullText] = useState(session.fullText);
@@ -49,6 +52,26 @@ export function LibraryPage() {
     () => sortSongs(filterSongs(songs, { query: deferredQuery, fullText, tags, categoryId, keyId: key }), sort),
     [songs, deferredQuery, fullText, tags, categoryId, key, sort],
   );
+
+  // Markera låtar: i den ordning de valdes (blir ordningen i en ny setlista)
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [sheet, setSheet] = useState<'tags' | 'category' | null>(null);
+  const toggleSelected = useCallback(
+    (id: string) => setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id])),
+    [],
+  );
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const allVisibleSelected = visible.length > 0 && visible.every((s) => selectedSet.has(s.id));
+  const toggleAll = () => {
+    const ids = new Set(visible.map((s) => s.id));
+    setSelected(allVisibleSelected ? selected.filter((id) => !ids.has(id)) : [...selected, ...visible.filter((s) => !selectedSet.has(s.id)).map((s) => s.id)]);
+  };
+  const stopSelecting = () => {
+    setSelecting(false);
+    setSelected([]);
+    setSheet(null);
+  };
 
   // Filter i filterpanelen (taggarna ligger i en egen rad under sökfältet)
   const activeFilters = (categoryId ? 1 : 0) + (key ? 1 : 0);
@@ -97,11 +120,27 @@ export function LibraryPage() {
 
   return (
     <div className="screen">
-      <Header title="Låtar">
-        <button className="btn primary icon-mobile" aria-label="Ny låt" onClick={() => navigate('/new')}>
-          <Plus size={18} /> <span className="hide-mobile">Ny låt</span>
-        </button>
-      </Header>
+      {selecting ? (
+        <Header title={selected.length ? `${selected.length} valda` : 'Välj låtar'}>
+          <button className="btn ghost" onClick={toggleAll}>
+            {allVisibleSelected ? 'Avmarkera alla' : 'Markera alla'}
+          </button>
+          <button className="btn" onClick={stopSelecting}>
+            Klar
+          </button>
+        </Header>
+      ) : (
+        <Header title="Låtar">
+          {songs.length > 0 && (
+            <button className="btn ghost" onClick={() => setSelecting(true)}>
+              Välj
+            </button>
+          )}
+          <button className="btn primary icon-mobile" aria-label="Ny låt" onClick={() => navigate('/new')}>
+            <Plus size={18} /> <span className="hide-mobile">Ny låt</span>
+          </button>
+        </Header>
+      )}
       <div className="indexed-body">
       <div className={`content narrow${showIndex ? ' has-index' : ''}`} ref={scrollRef}>
         <div>
@@ -248,7 +287,13 @@ export function LibraryPage() {
                   {g.letter && <div className="letter-head">{g.letter}</div>}
                   <div className="list song-list">
                     {g.songs.map((s) => (
-                      <SongRow key={s.id} song={s} categoryName={categoryName(categoriesRec, s.categoryId)} />
+                      <SongRow
+                        key={s.id}
+                        song={s}
+                        categoryName={categoryName(categoriesRec, s.categoryId)}
+                        selected={selecting ? selectedSet.has(s.id) : undefined}
+                        onToggle={toggleSelected}
+                      />
                     ))}
                   </div>
                 </div>
@@ -259,16 +304,82 @@ export function LibraryPage() {
       </div>
       {showIndex && <AlphabetIndex available={available} onPick={jumpTo} />}
       </div>
+      {selecting && (
+        <div className="select-bar">
+          <button className="btn" disabled={!selected.length} onClick={() => setSheet('tags')}>
+            <Tags size={18} /> Tagg
+          </button>
+          <button className="btn" disabled={!selected.length} onClick={() => setSheet('category')}>
+            <Tag size={18} /> Kategori
+          </button>
+          <button
+            className="btn primary"
+            disabled={!selected.length}
+            onClick={() => navigate('/setlists', { state: { newSetlistSongs: selected } })}
+          >
+            <ListMusic size={18} /> Setlista
+          </button>
+        </div>
+      )}
+      {sheet === 'tags' && (
+        <AddTagsSheet
+          count={selected.length}
+          suggestions={tagList}
+          onClose={() => setSheet(null)}
+          onSave={async (add) => {
+            const n = await editSongs(selected, { addTags: add });
+            toast(n ? `${add.length === 1 ? 'Taggen' : 'Taggarna'} lades till på ${songCountText(n)}` : 'Låtarna hade redan taggarna');
+            stopSelecting();
+          }}
+        />
+      )}
+      {sheet === 'category' && (
+        <CategorySheet
+          count={selected.length}
+          onClose={() => setSheet(null)}
+          onSave={async (id) => {
+            const n = await editSongs(selected, { categoryId: id || null });
+            const name = categoryName(useStore.getState().categories, id);
+            toast(n ? `${songCountText(n)} ${name ? `fick kategorin ${name}` : 'har nu ingen kategori'}` : 'Låtarna hade redan den kategorin');
+            stopSelecting();
+          }}
+        />
+      )}
     </div>
   );
 }
 
 // Raden ritas bara om när låten själv ändras, inte vid varje ändring i listan
-const SongRow = memo(function SongRow({ song, categoryName }: { song: Song; categoryName?: string }) {
+const SongRow = memo(function SongRow({
+  song,
+  categoryName,
+  selected,
+  onToggle,
+}: {
+  song: Song;
+  categoryName?: string;
+  /** Satt i valläget: om låten är markerad */
+  selected?: boolean;
+  onToggle: (id: string) => void;
+}) {
   const notation = useStore((s) => s.settings.notation);
   const key = songKey(song);
+  const selecting = selected !== undefined;
   return (
-    <Link className="list-item" to={`/song/${song.id}`} data-song={song.id}>
+    <Link
+      className={`list-item${selected ? ' selected' : ''}`}
+      to={`/song/${song.id}`}
+      data-song={song.id}
+      aria-pressed={selecting ? selected : undefined}
+      onClick={(e) => {
+        if (!selecting) return;
+        e.preventDefault();
+        onToggle(song.id);
+      }}
+    >
+      {selecting && (
+        <span className={`select-mark${selected ? ' on' : ''}`}>{selected && <Check size={16} strokeWidth={3} />}</span>
+      )}
       <div className="main">
         <div className="title">
           {song.title}
@@ -306,3 +417,72 @@ const SongRow = memo(function SongRow({ song, categoryName }: { song: Song; cate
     </Link>
   );
 });
+
+function songCountText(n: number): string {
+  return `${n} ${n === 1 ? 'låt' : 'låtar'}`;
+}
+
+function AddTagsSheet({
+  count,
+  suggestions,
+  onClose,
+  onSave,
+}: {
+  count: number;
+  suggestions: string[];
+  onClose: () => void;
+  onSave: (tags: string[]) => void;
+}) {
+  const [tags, setTags] = useState<string[]>([]);
+  // Även en tagg som skrivits men inte bekräftats med Enter räknas
+  const [text, setText] = useState('');
+  const all = normalizeTags([...tags, ...text.split(',')]);
+  return (
+    <Sheet
+      title={`Tagga ${songCountText(count)}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Avbryt
+          </button>
+          <button className="btn primary" disabled={!all.length} onClick={() => onSave(all)}>
+            Lägg till
+          </button>
+        </>
+      }
+    >
+      <div className="field">
+        <span>Taggar att lägga till</span>
+        <TagInput value={tags} onChange={setTags} suggestions={suggestions} onTextChange={setText} />
+      </div>
+      <p className="muted small-text">Låtarnas andra taggar finns kvar.</p>
+    </Sheet>
+  );
+}
+
+function CategorySheet({ count, onClose, onSave }: { count: number; onClose: () => void; onSave: (id: string) => void }) {
+  const [id, setId] = useState('');
+  return (
+    <Sheet
+      title={`Kategori för ${songCountText(count)}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Avbryt
+          </button>
+          <button className="btn primary" onClick={() => onSave(id)}>
+            Spara
+          </button>
+        </>
+      }
+    >
+      <label className="field">
+        <span>Kategori</span>
+        <CategorySelect value={id} onChange={setId} />
+      </label>
+      <p className="muted small-text">Ersätter låtarnas nuvarande kategori. Välj Ingen för att ta bort den.</p>
+    </Sheet>
+  );
+}

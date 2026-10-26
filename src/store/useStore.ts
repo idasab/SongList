@@ -87,6 +87,8 @@ interface State {
   ): Promise<Song[]>;
   updateSongPrefs(id: string, prefs: Partial<Pick<Song, 'transpose' | 'scrollSpeed' | 'annotations'>>): Promise<void>;
   deleteSong(id: string): Promise<void>;
+  /** Ändrar flera låtar på en gång: lägger till taggar och/eller sätter kategori (null = ingen). */
+  editSongs(ids: string[], change: { addTags?: string[]; categoryId?: string | null }): Promise<number>;
   saveSetlist(input: Partial<Setlist> & { name: string }): Promise<Setlist>;
   deleteSetlist(id: string): Promise<void>;
   saveCategory(input: { id?: string; name: string }): Promise<Category>;
@@ -258,6 +260,26 @@ export const useStore = create<State>((set, get) => ({
     };
     set((s) => ({ songs: { ...s.songs, [id]: tomb }, revision: s.revision + 1 }));
     await db.songs.put(tomb);
+  },
+
+  async editSongs(ids, { addTags, categoryId }) {
+    const now = Date.now();
+    const songs = get().songs;
+    // Bara kategorier som finns kvar
+    const category = categoryId === undefined ? undefined : liveCategoryId(get().categories, categoryId ?? undefined);
+    const changed: Song[] = [];
+    for (const id of ids) {
+      const song = songs[id];
+      if (!song || song.deletedAt) continue;
+      const tags = addTags ? normalizeTags([...song.tags, ...addTags]) : song.tags;
+      const nextCategory = categoryId === undefined ? song.categoryId : category;
+      if (tags.length === song.tags.length && nextCategory === song.categoryId) continue;
+      changed.push({ ...song, tags, categoryId: nextCategory, updatedAt: now });
+    }
+    if (!changed.length) return 0;
+    set((s) => ({ songs: { ...s.songs, ...toRecord(changed) }, revision: s.revision + 1 }));
+    await db.songs.putMany(changed);
+    return changed.length;
   },
 
   async saveSetlist(input) {
