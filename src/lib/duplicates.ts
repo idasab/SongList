@@ -73,11 +73,13 @@ export function findDuplicates(candidates: DuplicateCandidate[], library: Song[]
       const r = compare(c, { title: s.title, artist: s.artist, content: s.content, fileData: s.attachment?.dataUrl || undefined });
       if (r && (!best || (r.identical && !best.identical))) best = { song: s, title: s.title, ...r };
     }
-    if (best) return best;
-    for (let j = 0; j < i; j++) {
+    if (best?.identical) return best;
+    // En likadan kopia tidigare i importen väger tyngre än en annan version i biblioteket
+    let earlier: Duplicate | undefined;
+    for (let j = 0; j < i && !earlier?.identical; j++) {
       const r = compare(c, candidates[j]);
-      if (r) return { title: candidates[j].title, ...r };
+      if (r && (!earlier || r.identical)) earlier = { title: candidates[j].title, ...r };
     }
-    return undefined;
+    return earlier?.identical ? earlier : (best ?? earlier);
   });
 }

@@ -52,4 +52,13 @@ describe('dubbletter', () => {
     expect(batchCopy).toMatchObject({ title: 'Raderad', identical: false });
     expect(batchCopy?.song).toBeUndefined();
   });
+
+  it('två likadana kopior av en ny version: den andra är en likadan dubblett', () => {
+    const lib = [song('a', 'Visa', '', '{title: Visa}\n[C]Gammal')];
+    const v2 = { title: 'Visa', artist: '', content: '{title: Visa}\n[G]Ny' };
+    const [first, second] = findDuplicates([v2, v2], lib);
+    expect(first).toMatchObject({ song: { id: 'a' }, identical: false });
+    expect(second).toMatchObject({ identical: true });
+    expect(second?.song).toBeUndefined();
+  });
 });
