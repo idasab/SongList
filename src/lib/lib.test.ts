@@ -277,6 +277,20 @@ describe('anteckningar', () => {
     expect(anchorToPx(m30, a)).toEqual({ x: 75, y: 120 });
   });
 
+  it('i två spalter: fäster vid raden i spalten och följer med till en spalt', () => {
+    // Rad 0–2 i vänster spalt, rad 3–4 i höger (som börjar 500 px in)
+    const two = { tops: [0, 40, 70, 0, 30], lefts: [0, 0, 0, 500, 500], fontPx: 20 };
+    const right = anchorAt(two, 540, 35);
+    expect(right).toEqual({ line: 4, dx: 2, dy: 0.25 });
+    expect(anchorToPx(two, right)).toEqual({ x: 540, y: 35 });
+    // Ovanför första raden i höger spalt: den raden
+    expect(anchorAt(two, 520, -5).line).toBe(3);
+    expect(anchorAt(two, 50, 80).line).toBe(2);
+    // Samma ankare i en spalt: samma avstånd från raden
+    const one = { tops: [0, 40, 70, 100, 130], fontPx: 20 };
+    expect(anchorToPx(one, right)).toEqual({ x: 40, y: 135 });
+  });
+
   it('skapar streck och hittar dem med suddet', () => {
     const s = strokeFromPx(m20, [10, 45, 50, 45, 90, 45], 'red', 0.1, 's1');
     expect(s.anchor.line).toBe(1);

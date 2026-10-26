@@ -67,29 +67,42 @@ export const INK_WIDTHS = [0.08, 0.14, 0.24];
 
 export const NOTE_LIMITS = { minW: 3, maxW: 40, minH: 2, maxH: 40, minFont: 0.4, maxFont: 3 };
 
-/** Mått på den renderade låten: varje rads överkant i px och textstorleken i px. */
+/**
+ * Mått på den renderade låten: varje rads överkant i px och textstorleken i px. Visas låten
+ * i spalter har varje rad även sin spalts vänsterkant (px från låtens vänsterkant); ankarets
+ * dx räknas från den, så att en anteckning följer med sin rad mellan en och två spalter.
+ */
 export interface LineMetrics {
   tops: number[];
   fontPx: number;
+  lefts?: number[];
+}
+
+function leftOf(m: LineMetrics, line: number): number {
+  return m.lefts?.[Math.min(line, m.lefts.length - 1)] ?? 0;
 }
 
 /** Hittar raden som en punkt (px relativt låten) hör till och räknar ut ankaret. */
 export function anchorAt(m: LineMetrics, x: number, y: number): Anchor {
-  let line = 0;
+  // Spalten som punkten ligger i: den närmaste vänsterkanten till vänster om punkten
+  let col = 0;
+  for (const l of m.lefts ?? []) if (l <= x && l > col) col = l;
+  let line = -1;
   for (let i = 0; i < m.tops.length; i++) {
     const t = m.tops[i];
-    if (t === undefined || Number.isNaN(t)) continue;
-    if (t <= y) line = i;
+    if (t === undefined || Number.isNaN(t) || leftOf(m, i) !== col) continue;
+    if (line < 0 || t <= y) line = i;
     else break;
   }
+  if (line < 0) line = 0;
   const top = m.tops[line] ?? 0;
-  return { line, dx: x / m.fontPx, dy: (y - top) / m.fontPx };
+  return { line, dx: (x - leftOf(m, line)) / m.fontPx, dy: (y - top) / m.fontPx };
 }
 
 /** Ankarets position i px relativt låten. */
 export function anchorToPx(m: LineMetrics, a: Anchor): { x: number; y: number } {
   const top = m.tops[Math.min(a.line, m.tops.length - 1)] ?? 0;
-  return { x: a.dx * m.fontPx, y: top + a.dy * m.fontPx };
+  return { x: leftOf(m, a.line) + a.dx * m.fontPx, y: top + a.dy * m.fontPx };
 }
 
 /** Skapar ett streck av punkter i px. */

@@ -2008,3 +2008,20 @@ textarea.note-text {
 .btn.tap-tempo.tapping {
   color: var(--accent);
 }
+
+/* --- Två spalter (bred skärm i liggande läge) --- */
+
+.song.wide-song {
+  max-width: 1500px;
+}
+
+.song-body.two-col {
+  column-count: 2;
+  column-gap: 2.5em;
+  column-rule: 1px solid var(--border);
+}
+
+.song-body.two-col .sec,
+.song-body.two-col [data-ln] {
+  break-inside: avoid;
+}

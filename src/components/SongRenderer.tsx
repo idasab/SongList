@@ -10,6 +10,8 @@ export interface RenderOptions {
   fontSize: number;
   /** Visa titel/artist/tonart överst */
   showHeader?: boolean;
+  /** Två spalter (t.ex. på iPad i liggande läge); titeln går över båda */
+  columns?: 1 | 2;
   onChordClick?: (chord: string) => void;
 }
 
@@ -160,7 +162,7 @@ export const SongRenderer = memo(function SongRenderer({
   const starts = sectionStarts(song.sections);
 
   return (
-    <div className={`song${opts.showChords ? '' : ' no-chords'}`} style={style} ref={containerRef}>
+    <div className={`song${opts.showChords ? '' : ' no-chords'}${opts.columns === 2 ? ' wide-song' : ''}`} style={style} ref={containerRef}>
       {opts.showHeader !== false && (
         <div className="song-head" data-ln={0}>
           <h2>{meta.title || 'Namnlös'}</h2>
@@ -198,9 +200,11 @@ export const SongRenderer = memo(function SongRenderer({
           </div>
         </div>
       )}
-      {song.sections.map((s, i) => (
-        <SectionView key={i} section={s} ctx={ctx} opts={opts} start={starts[i]} />
-      ))}
+      <div className={`song-body${opts.columns === 2 ? ' two-col' : ''}`}>
+        {song.sections.map((s, i) => (
+          <SectionView key={i} section={s} ctx={ctx} opts={opts} start={starts[i]} />
+        ))}
+      </div>
       {overlay}
     </div>
   );

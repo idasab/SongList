@@ -82,6 +82,13 @@ export function SettingsPage() {
               <Switch label="Visa ackorddiagram" checked={settings.showDiagrams} onChange={(v) => update({ showDiagrams: v })} />
             </div>
             <div className="toggle-row">
+              <div>
+                <div>Två spalter i liggande läge</div>
+                <div className="muted small-text">På en bred skärm, när hela låten då får plats utan att scrolla</div>
+              </div>
+              <Switch label="Två spalter" checked={settings.twoColumns !== false} onChange={(v) => update({ twoColumns: v })} />
+            </div>
+            <div className="toggle-row">
               <span>Textstorlek</span>
               <div className="tool-group">
                 <button className="btn icon" onClick={() => update({ fontSize: Math.max(12, settings.fontSize - 2) })}>

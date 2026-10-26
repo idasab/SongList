@@ -92,6 +92,8 @@ export interface Settings {
   lastSyncAt?: number;
   lastBackupAt?: number;
   librarySort: 'title' | 'artist' | 'updated';
+  /** Två spalter på en bred skärm i liggande läge, när låten då får plats (förval: på) */
+  twoColumns?: boolean;
   /** Om en tonartsändring i en setlista bara gäller där (förval) eller för låten överallt */
   transposeScope?: 'setlist' | 'global';
   /** Senast använda e-postadresser för export (sparas bara på enheten) */

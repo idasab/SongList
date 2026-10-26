@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ChevronLeft,
@@ -44,6 +44,7 @@ import { safeFileName, saveTextFile } from '../services/files';
 import { newId } from '../lib/model';
 import { Metronome, beatsPerBar, parseTempo } from '../lib/metronome';
 import { useWakeLock } from '../hooks/useWakeLock';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useSwipeNavigation } from '../hooks/useSwipeNavigation';
 import { AttachmentView } from '../components/AttachmentView';
 import { isCue, itemPath, itemTitle, itemTranspose, liveItems, songCount } from '../lib/setlist';
@@ -112,7 +113,13 @@ export function SongPage() {
 
   const saved = song?.annotations ?? EMPTY_ANNOTATIONS;
   const annotations = draft ?? saved;
-  const metrics = useLineMetrics(songRef, [parsed, showChords, settings.fontSize, transpose, stage, song?.id]);
+  // Två spalter på en bred skärm i liggande läge, men bara när hela låten då får plats
+  const wide = useMediaQuery('(min-width: 900px) and (orientation: landscape)');
+  const wantColumns = wide && settings.twoColumns !== false && !song?.attachment;
+  const [columnsFit, setColumnsFit] = useState(true);
+  const columns = wantColumns && columnsFit;
+  const fitKey = [song?.id, song?.content, showChords, settings.fontSize, transpose, stage, wantColumns].join('|');
+  const metrics = useLineMetrics(songRef, [parsed, showChords, settings.fontSize, transpose, stage, song?.id, columns]);
 
   const updateAnnotations = useCallback(
     (next: Annotations, commit: boolean) => {
@@ -218,6 +225,16 @@ export function SongPage() {
     setTicking(false);
   }, [id]);
   useEffect(() => () => metronome.current?.close(), []);
+
+  // Får låten inte plats i två spalter: en spalt som vanligt (prövas om när något ändras)
+  useLayoutEffect(() => setColumnsFit(true), [fitKey]);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const songEl = songRef.current;
+    if (!columns || !el || !songEl) return;
+    const pad = parseFloat(getComputedStyle(el).paddingTop) || 0;
+    if (songEl.offsetHeight + pad > el.clientHeight) setColumnsFit(false);
+  }, [columns, fitKey]);
 
   // Börja om från toppen när låten byts
   useEffect(() => {
@@ -725,6 +742,7 @@ export function SongPage() {
               notation: settings.notation,
               showChords,
               fontSize: settings.fontSize,
+              columns: columns ? 2 : 1,
               onChordClick: annotating ? undefined : setChordSheet,
             }}
             containerRef={songRef}

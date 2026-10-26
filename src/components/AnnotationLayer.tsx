@@ -18,17 +18,30 @@ export function useLineMetrics(ref: RefObject<HTMLDivElement | null>, deps: unkn
     const el = ref.current;
     if (!el) return;
     const measure = () => {
-      const base = el.getBoundingClientRect().top;
+      const box = el.getBoundingClientRect();
       const tops: number[] = [];
+      const lefts: number[] = [];
+      // Spalter: radens spalt räknas fram från var raden börjar
+      const body = el.querySelector<HTMLElement>('.song-body.two-col');
+      const bodyBox = body?.getBoundingClientRect();
+      const gap = body ? parseFloat(getComputedStyle(body).columnGap) || 0 : 0;
+      const step = body && bodyBox ? (bodyBox.width + gap) / 2 : 0;
       el.querySelectorAll<HTMLElement>('[data-ln]').forEach((n) => {
-        tops[Number(n.dataset.ln)] = n.getBoundingClientRect().top - base;
+        const r = n.getBoundingClientRect();
+        const i = Number(n.dataset.ln);
+        tops[i] = r.top - box.top;
+        lefts[i] = step && bodyBox ? (bodyBox.left - box.left) + Math.floor((r.left - bodyBox.left + 1) / step) * step : 0;
       });
-      for (let i = 0; i < tops.length; i++) if (tops[i] === undefined) tops[i] = i ? tops[i - 1] : 0;
+      for (let i = 0; i < tops.length; i++) {
+        if (tops[i] === undefined) tops[i] = i ? tops[i - 1] : 0;
+        if (lefts[i] === undefined) lefts[i] = i ? lefts[i - 1] : 0;
+      }
       const fontPx = parseFloat(getComputedStyle(el).fontSize) || 16;
+      const same = (a: number[] | undefined, b: number[]) => !!a && a.length === b.length && a.every((t, i) => Math.abs(t - b[i]) < 0.5);
       setMetrics((prev) =>
-        prev && prev.fontPx === fontPx && prev.tops.length === tops.length && prev.tops.every((t, i) => Math.abs(t - tops[i]) < 0.5)
+        prev && prev.fontPx === fontPx && same(prev.tops, tops) && same(prev.lefts ?? tops.map(() => 0), lefts)
           ? prev
-          : { tops, fontPx },
+          : { tops, fontPx, ...(step ? { lefts } : {}) },
       );
     };
     measure();
