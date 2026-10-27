@@ -76,6 +76,8 @@ export function useSwipeNavigation(opts: {
     handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: reset },
     /** Hur långt fingret dragit i sidled just nu (för innehåll som flyttas på annat sätt) */
     offset,
+    /** Släpper en påbörjad swipe (t.ex. när en annan gest tar över) */
+    cancel: reset,
     /** Stil för innehållet som följer fingret */
     style: offset
       ? { transform: `translateX(${offset}px)`, opacity: Math.max(0.5, 1 - Math.abs(offset) / 600) }

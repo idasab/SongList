@@ -35,6 +35,8 @@ export interface Song extends SyncRecord {
   attachment?: SongAttachment;
   /** Fler filer efter den första (t.ex. sida 2 av noterna), visas i tur och ordning */
   extraAttachments?: SongAttachment[];
+  /** Undertiteln som man svarat att den inte är artisten (appen frågar inte igen för den) */
+  subtitleNotArtist?: string;
 }
 
 /** Alla låtens filer i ordning. */

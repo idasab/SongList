@@ -2092,6 +2092,8 @@ textarea.note-text {
 
 .file-pager {
   overflow: hidden;
+  /* Svep, zoom med två fingrar och flytt sköter appen själv */
+  touch-action: none;
 }
 
 .file-strip {

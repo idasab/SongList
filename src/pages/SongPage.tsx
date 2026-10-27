@@ -55,12 +55,13 @@ import { Metronome, beatsPerBar, parseTempo } from '../lib/metronome';
 import { useWakeLock } from '../hooks/useWakeLock';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useSwipeNavigation } from '../hooks/useSwipeNavigation';
-import { AttachmentView, useFilePages } from '../components/AttachmentView';
+import { AttachmentView, NO_ZOOM, useFilePages, type PageZoom } from '../components/AttachmentView';
 import { fileToAttachment } from '../services/fileImport';
 import { isCue, itemPath, itemTitle, itemTranspose, liveItems, songCount, withItemCapo } from '../lib/setlist';
 import { useAnnotationGestures, type AnnotTool } from '../hooks/useAnnotationGestures';
 import { EMPTY_ANNOTATIONS, INK_WIDTHS, hasAnnotations, mergeAnnotations, type Annotations, type InkColor, type StickyNote } from '../lib/annotations';
 import { lastPlayed, songHistory, todayIso } from '../lib/history';
+import { askSubtitleArtist, subtitleToArtist } from '../lib/subtitleArtist';
 import { formatDate } from './SetlistsPage';
 
 const MIN_FONT = 12;
@@ -195,6 +196,10 @@ export function SongPage() {
   const paged = !!song?.attachment && settings.filePaging !== false;
   const [page, setPage] = useState(0);
   useEffect(() => setPage(0), [id]);
+  // Zoom med två fingrar (eller knapparna) på sidan som visas; ny sida visas hel
+  const [pageZoom, setPageZoom] = useState<PageZoom>(NO_ZOOM);
+  const [zoomStep, setZoomStep] = useState<{ id: number; factor: number }>();
+  useEffect(() => setPageZoom(NO_ZOOM), [id, page]);
   const lastPage = Math.max(0, pages.length - 1);
   const turnPage = (d: number) => {
     const n = Math.max(0, Math.min(lastPage, page + d));
@@ -583,6 +588,9 @@ export function SongPage() {
     </button>
   );
   const setFont = (n: number) => void updateSettings({ fontSize: Math.max(MIN_FONT, Math.min(MAX_FONT, n)) });
+  // En fil i sidled: knapparna zoomar sidan (som med två fingrar), annars textstorlek/bredd
+  const zoomOut = () => (paged ? setZoomStep({ id: Date.now(), factor: 0.8 }) : setFont(settings.fontSize - 2));
+  const zoomIn = () => (paged ? setZoomStep({ id: Date.now(), factor: 1.25 }) : setFont(settings.fontSize + 2));
   const setSpeed = (n: number) => void updateSongPrefs(song.id, { scrollSpeed: Math.max(1, Math.min(10, n)) });
   const hasDuration = parseDuration(parsed.meta.duration) !== undefined;
   // Från låtens längd till en egen hastighet: börja från den nivå som ligger närmast
@@ -765,10 +773,10 @@ export function SongPage() {
           )}
 
           <div className="tool-group" title={isFile ? 'Zooma' : 'Textstorlek'}>
-            <button className="btn icon" aria-label="Mindre text" onClick={() => setFont(settings.fontSize - 2)}>
+            <button className="btn icon" aria-label={isFile ? 'Zooma ut' : 'Mindre text'} onClick={zoomOut}>
               <span style={{ fontSize: 13, fontWeight: 700 }}>A</span>
             </button>
-            <button className="btn icon" aria-label="Större text" onClick={() => setFont(settings.fontSize + 2)}>
+            <button className="btn icon" aria-label={isFile ? 'Zooma in' : 'Större text'} onClick={zoomIn}>
               <span style={{ fontSize: 19, fontWeight: 700 }}>A</span>
             </button>
           </div>
@@ -917,6 +925,26 @@ export function SongPage() {
               </div>
             </div>
           )}
+          {!stage && !controlsHidden && !annotating && askSubtitleArtist(song) && (
+            <div className="tip small-text capo-tip" onClick={(e) => e.stopPropagation()}>
+              <div>
+                Är <span style={{ fontWeight: 600 }}>{song.subtitle}</span> artisten? Det står nu som undertitel.
+              </div>
+              <div className="btn-row">
+                <button className="btn small" onClick={() => void updateSongPrefs(song.id, { subtitleNotArtist: song.subtitle })}>
+                  Nej
+                </button>
+                <button
+                  className="btn small primary"
+                  onClick={() =>
+                    void saveSong({ id: song.id, content: subtitleToArtist(song.content, song.subtitle!) }).then(() => toast('Artisten är ändrad'))
+                  }
+                >
+                  Ja, gör till artist
+                </button>
+              </div>
+            </div>
+          )}
           {!isFile && !stage && !controlsHidden && !annotating && itemCapo === undefined && capoShapeShift(songParsed) > 0 && (
             <div className="tip small-text capo-tip" onClick={(e) => e.stopPropagation()}>
               <div>
@@ -950,6 +978,10 @@ export function SongPage() {
                         page,
                         drag: swipe.offset,
                         dragging: swipe.offset !== 0,
+                        pageZoom,
+                        onZoom: setPageZoom,
+                        onGestureStart: swipe.cancel,
+                        zoomStep,
                         // Låtytan minus luften ovanför och sidvisaren nedanför
                         viewHeight: (areaHeight || scrollRef.current?.clientHeight || 600) - (pages.length > 1 ? 76 : 36),
                       }

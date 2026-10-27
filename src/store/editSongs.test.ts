@@ -51,3 +51,13 @@ describe('ändra flera låtar', () => {
     expect(useStore.getState().songs[b.id].tags).toEqual([]);
   });
 });
+
+describe('svaret om undertiteln', () => {
+  it('står kvar när låten sparas igen', async () => {
+    const { a } = await setup();
+    const st = useStore.getState();
+    await st.updateSongPrefs(a.id, { subtitleNotArtist: 'X' });
+    await st.saveSong({ id: a.id, content: '{title: A2}' });
+    expect(useStore.getState().songs[a.id].subtitleNotArtist).toBe('X');
+  });
+});

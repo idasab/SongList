@@ -98,7 +98,7 @@ interface State {
   importSongs(
     contents: { content: string; tags?: string[]; categoryId?: string; files?: SongAttachment[] }[],
   ): Promise<Song[]>;
-  updateSongPrefs(id: string, prefs: Partial<Pick<Song, 'transpose' | 'scrollSpeed' | 'annotations'>>): Promise<void>;
+  updateSongPrefs(id: string, prefs: Partial<Pick<Song, 'transpose' | 'scrollSpeed' | 'annotations' | 'subtitleNotArtist'>>): Promise<void>;
   deleteSong(id: string): Promise<void>;
   /** Ändrar flera låtar på en gång: lägger till taggar och/eller sätter kategori (null = ingen). */
   editSongs(ids: string[], change: { addTags?: string[]; categoryId?: string | null }): Promise<number>;
@@ -217,6 +217,7 @@ export const useStore = create<State>((set, get) => ({
       updatedAt: now,
       transpose: existing?.transpose ?? 0,
       scrollSpeed: existing?.scrollSpeed,
+      subtitleNotArtist: existing?.subtitleNotArtist,
       annotations: existing?.annotations,
       ...filesFields(files ?? (attachment !== undefined ? (attachment ? [attachment] : []) : existing ? songFiles(existing) : [])),
       ...deriveSongMeta(content),

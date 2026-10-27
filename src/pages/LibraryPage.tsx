@@ -1,6 +1,6 @@
 import { memo, useCallback, useDeferredValue, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Check, Files, ListChecks, ListMusic, Music, Plus, Search, SlidersHorizontal, Tag, Tags, X } from 'lucide-react';
+import { Check, Files, ListChecks, User, ListMusic, Music, Plus, Search, SlidersHorizontal, Tag, Tags, X } from 'lucide-react';
 import { Header, Sheet, toast } from '../components/ui';
 import { TagInput } from '../components/TagInput';
 import { CategorySelect } from '../components/CategorySelect';
@@ -10,6 +10,7 @@ import { allTags, categoryName, liveCategories, liveSongs, normalizeTags, useSto
 import { songFiles, type Song } from '../lib/model';
 import { pieceGroups, pieceTitle } from '../lib/fileGroups';
 import { mergeSongs } from '../services/mergeSongs';
+import { askSubtitleArtist, subtitleToArtist } from '../lib/subtitleArtist';
 import { useRememberScroll } from '../hooks/useRememberScroll';
 import { ALPHABET, AlphabetIndex } from '../components/AlphabetIndex';
 
@@ -45,6 +46,9 @@ export function LibraryPage() {
   const songs = useMemo(() => liveSongs(songsRec), [songsRec]);
   // Låtar som ser ut att vara sidor av samma noter ("Låt (1)", "Låt (2)"): förslag att slå ihop
   const [showMerge, setShowMerge] = useState(false);
+  // Låtar där undertiteln ser ut att vara artisten
+  const [showArtists, setShowArtists] = useState(false);
+  const artistSuggestions = useMemo(() => songs.filter(askSubtitleArtist), [songs]);
   const mergeGroups = useMemo(() => {
     const dismissed = new Set(settings.dismissedMerges ?? []);
     return pieceGroups(songs.map((s) => ({ ...s, isFile: !!s.attachment }))).filter((g) => !dismissed.has(mergeKey(g)));
@@ -300,6 +304,19 @@ export function LibraryPage() {
                   </button>
                 </div>
               )}
+              {artistSuggestions.length > 0 && !selecting && (
+                <div className="tip small-text merge-tip">
+                  <User size={18} />
+                  <div style={{ flex: 1 }}>
+                    {artistSuggestions.length === 1
+                      ? `Undertiteln på ${artistSuggestions[0].title} ser ut att vara artisten (${artistSuggestions[0].subtitle}).`
+                      : `${artistSuggestions.length} låtar har en undertitel som ser ut att vara artisten.`}
+                  </div>
+                  <button className="btn small primary" onClick={() => setShowArtists(true)}>
+                    Visa…
+                  </button>
+                </div>
+              )}
               <div className="muted small-text" style={{ margin: '0 4px 6px' }}>
                 {visible.length} {visible.length === 1 ? 'låt' : 'låtar'}
               </div>
@@ -342,6 +359,7 @@ export function LibraryPage() {
           </button>
         </div>
       )}
+      {showArtists && <SubtitleArtistSheet songs={artistSuggestions} onClose={() => setShowArtists(false)} />}
       {showMerge && (
         <MergeSheet
           groups={mergeGroups}
@@ -578,6 +596,63 @@ function MergeSheet({ groups, onClose, onDismiss }: { groups: Song[][]; onClose:
         </button>
         <button className="btn primary" disabled={busy || !picked.length} onClick={() => void merge()}>
           {busy ? 'Slår ihop…' : picked.length === groups.length ? 'Slå ihop alla' : `Slå ihop ${picked.length}`}
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
+/** Undertitlar som ser ut att vara artisten: de valda flyttas, de andra frågas det inte om igen. */
+function SubtitleArtistSheet({ songs, onClose }: { songs: Song[]; onClose: () => void }) {
+  const saveSong = useStore((s) => s.saveSong);
+  const updateSongPrefs = useStore((s) => s.updateSongPrefs);
+  // Låtarna när rutan öppnades, så att listan inte krymper medan man sparar
+  const [list] = useState(songs);
+  const [chosen, setChosen] = useState(() => new Set(songs.map((s) => s.id)));
+  const [busy, setBusy] = useState(false);
+  const toggle = (id: string) =>
+    setChosen((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const apply = async () => {
+    setBusy(true);
+    try {
+      for (const s of list) {
+        if (chosen.has(s.id)) await saveSong({ id: s.id, content: subtitleToArtist(s.content, s.subtitle!) });
+        else await updateSongPrefs(s.id, { subtitleNotArtist: s.subtitle });
+      }
+      const n = list.filter((s) => chosen.has(s.id)).length;
+      toast(n ? `Artisten är ändrad på ${songCountText(n)}` : 'Undertitlarna står kvar');
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Sheet title="Undertitel eller artist?" onClose={onClose}>
+      <p className="muted small-text" style={{ marginTop: 0 }}>
+        De valda låtarna får undertiteln som artist. För de andra står undertiteln kvar, och appen frågar inte igen.
+      </p>
+      <div className="merge-groups">
+        {list.map((s) => (
+          <label key={s.id} className={`merge-group${chosen.has(s.id) ? ' on' : ''}`}>
+            <input type="checkbox" checked={chosen.has(s.id)} onChange={() => toggle(s.id)} />
+            <div>
+              <b>{s.title}</b>
+              <div className="muted small-text">Artist: {s.subtitle}</div>
+            </div>
+          </label>
+        ))}
+      </div>
+      <div className="btn-row" style={{ justifyContent: 'flex-end', marginTop: 14 }}>
+        <button className="btn" disabled={busy} onClick={onClose}>
+          Senare
+        </button>
+        <button className="btn primary" disabled={busy} onClick={() => void apply()}>
+          {busy ? 'Sparar…' : chosen.size ? `Gör ${chosen.size} till artist` : 'Inga är artister'}
         </button>
       </div>
     </Sheet>
