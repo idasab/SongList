@@ -193,7 +193,9 @@ export function SongPage() {
   const annotations = draft ?? saved;
   // Låtar som sparats som filer: alla sidor i tur och ordning, en i taget i sidled (förval)
   // Bara när filerna ändras (inte vid t.ex. transponering), så att sidorna inte ritas om
-  const files = useMemo(() => (song ? songFiles(song) : []), [song?.attachment, song?.extraAttachments]);
+  // Jämförs på innehållet: att låten sparas (t.ex. ny artist) ger nya objekt men samma filer
+  const filesKey = song ? songFiles(song).map((f) => `${f.name}:${f.dataUrl.length}:${f.dataUrl.slice(-24)}`).join('|') : '';
+  const files = useMemo(() => (song ? songFiles(song) : []), [filesKey]);
   const { pages, status: pagesStatus } = useFilePages(files);
   const paged = !!song?.attachment && settings.filePaging !== false;
   const [pageState, setPage] = useState(0);

@@ -32,6 +32,8 @@ export function useFilePages(files: SongAttachment[]): { pages: FilePage[]; stat
     (async () => {
       let failed = '';
       for (const [i, a] of files.entries()) {
+        // Bytt låt: sluta läsa in (och lämna inga dokument öppna)
+        if (cancelled) break;
         const of = files.length > 1 ? ` (fil ${i + 1} av ${files.length})` : '';
         try {
           if (a.kind === 'image') {
@@ -41,9 +43,14 @@ export function useFilePages(files: SongAttachment[]): { pages: FilePage[]; stat
           }
           const pdfjs = await loadPdfJs();
           const data = new Uint8Array(await (await fetch(a.dataUrl)).arrayBuffer());
+          if (cancelled) break;
           const task = pdfjs.getDocument({ data });
           destroy.push(() => void task.destroy());
           const doc = await task.promise;
+          if (cancelled) {
+            void task.destroy();
+            break;
+          }
           // Rita i skarp upplösning; storleken på skärmen styrs av CSS
           const dpr = window.devicePixelRatio || 1;
           const target = Math.min(2400, Math.max(1200, Math.max(window.innerWidth, window.innerHeight) * dpr));
