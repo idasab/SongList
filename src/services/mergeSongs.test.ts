@@ -11,7 +11,7 @@ vi.mock('../store/db', () => {
 });
 
 const { useStore } = await import('../store/useStore');
-const { mergeSongs } = await import('./mergeSongs');
+const { mergeSongs, splitSongFiles } = await import('./mergeSongs');
 const { songFiles } = await import('../lib/model');
 
 const file = (name: string): SongAttachment => ({ name, mime: 'application/pdf', dataUrl: `data:application/pdf;base64,${name}`, kind: 'pdf' });
@@ -39,5 +39,31 @@ describe('slå ihop låtar', () => {
     // Fanns låten redan i setlistan tas de andra bort; annars blir den första av dem låten
     expect(s.setlists[both.id].items.map((it) => it.songId)).toEqual([a1.id, other.id]);
     expect(s.setlists[onlySecond.id].items.map((it) => it.songId)).toEqual([a1.id]);
+  });
+});
+
+describe('dela upp en låt med flera filer', () => {
+  it('gör filerna till egna låtar och föreslår inte att slå ihop dem igen', async () => {
+    useStore.setState({ songs: {}, setlists: {} });
+    const st = useStore.getState();
+    const song = await st.saveSong({
+      content: '{title: Låt}\n{artist: Prov}\n',
+      files: [file('Låt (1).pdf'), file('Låt (2).pdf'), file('Låt (3).pdf')],
+      tags: ['jul'],
+    });
+    const made = await splitSongFiles(song.id, [1, 2]);
+    const s = useStore.getState();
+    expect(made.map((m) => m.title)).toEqual(['Låt (2)', 'Låt (3)']);
+    expect(made.every((m) => m.artist === 'Prov' && m.tags.includes('jul'))).toBe(true);
+    expect(songFiles(s.songs[song.id]).map((f) => f.name)).toEqual(['Låt (1).pdf']);
+    expect(s.settings.dismissedMerges?.length).toBe(1);
+  });
+
+  it('låten behåller alltid minst en fil', async () => {
+    useStore.setState({ songs: {}, setlists: {} });
+    const song = await useStore.getState().saveSong({ content: '{title: X}\n', files: [file('a'), file('b')] });
+    const made = await splitSongFiles(song.id, [0, 1]);
+    expect(made).toHaveLength(1);
+    expect(songFiles(useStore.getState().songs[song.id]).map((f) => f.name)).toEqual(['a']);
   });
 });

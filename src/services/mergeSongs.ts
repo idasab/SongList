@@ -1,9 +1,10 @@
-// Slår ihop låtar som är sidor av samma noter till en låt med flera filer.
+// Slår ihop låtar som är sidor av samma noter till en låt med flera filer, och delar upp dem igen.
 
 import { upsertDirective } from '../lib/chordpro';
-import { pieceTitle } from '../lib/fileGroups';
+import { mergeKey, pieceGroups, pieceTitle } from '../lib/fileGroups';
+import { titleFromFileName } from '../lib/textImport';
 import { songFiles, type Song } from '../lib/model';
-import { liveSetlists, useStore } from '../store/useStore';
+import { liveSetlists, liveSongs, useStore } from '../store/useStore';
 
 /**
  * Den första låten behålls och får de andras filer i tur och ordning (och deras taggar), utan
@@ -39,4 +40,33 @@ export async function mergeSongs(ids: string[]): Promise<Song | undefined> {
   }
   for (const s of rest) await st.deleteSong(s.id);
   return saved;
+}
+
+/**
+ * Gör låtens filer på de här platserna till egna låtar, med titeln efter filnamnet och samma
+ * artist, taggar och kategori. Låten behåller resten av filerna (minst en) och sin plats i
+ * setlistorna.
+ */
+export async function splitSongFiles(id: string, indexes: number[]): Promise<Song[]> {
+  const st = useStore.getState();
+  const song = st.songs[id];
+  if (!song || song.deletedAt) return [];
+  const files = songFiles(song);
+  const out = new Set(indexes.filter((i) => i >= 0 && i < files.length));
+  // Den första som stannar kvar: låten får aldrig bli utan filer
+  if (out.size >= files.length) out.delete(0);
+  if (!out.size) return [];
+  const artist = song.artist ? `{artist: ${song.artist}}\n` : '';
+  const created = await st.importSongs(
+    files
+      .filter((_, i) => out.has(i))
+      .map((f) => ({ content: `{title: ${titleFromFileName(f.name)}}\n${artist}`, files: [f], tags: song.tags, categoryId: song.categoryId })),
+  );
+  await st.saveSong({ id, content: song.content, files: files.filter((_, i) => !out.has(i)) });
+  // Uppdelat med flit: föreslå inte att slå ihop dem igen
+  const now = useStore.getState();
+  const involved = new Set([id, ...created.map((s) => s.id)]);
+  const groups = pieceGroups(liveSongs(now.songs).map((s) => ({ ...s, isFile: !!s.attachment }))).filter((g) => g.some((s) => involved.has(s.id)));
+  if (groups.length) await now.updateSettings({ dismissedMerges: [...(now.settings.dismissedMerges ?? []), ...groups.map(mergeKey)] });
+  return created;
 }

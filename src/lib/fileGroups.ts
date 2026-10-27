@@ -96,3 +96,11 @@ export function pieceGroups<T extends { id: string; title: string; artist: strin
   }
   return groups;
 }
+
+/** Ett förslag att slå ihop känns igen på låtarna i det. */
+export function mergeKey(group: { id: string }[]): string {
+  return group
+    .map((s) => s.id)
+    .sort()
+    .join('+');
+}

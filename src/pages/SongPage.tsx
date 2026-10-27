@@ -21,6 +21,7 @@ import {
   PenLine,
   Pause,
   Pencil,
+  Scissors,
   StickyNote as NoteIcon,
   StickyNoteOff as NoteOffIcon,
   Play,
@@ -49,7 +50,7 @@ import {
   upsertDirective,
 } from '../lib/chordpro';
 import { liveSetlists, liveSongs, useStore } from '../store/useStore';
-import { mergeSongs } from '../services/mergeSongs';
+import { mergeSongs, splitSongFiles } from '../services/mergeSongs';
 import { safeFileName, saveTextFile } from '../services/files';
 import { newId, songFiles, type Song, type SongAttachment } from '../lib/model';
 import { Metronome, beatsPerBar, parseTempo } from '../lib/metronome';
@@ -1169,6 +1170,18 @@ function FilesSheet({ song, onClose }: { song: Song; onClose: () => void }) {
     if (!confirm(`Ta bort ${files[i].name} från låten?`)) return;
     void save(files.filter((_, j) => j !== i));
   };
+  // Dela upp: filen (eller alla utom den första) blir egna låtar
+  const split = async (indexes: number[]) => {
+    setBusy(true);
+    try {
+      const made = await splitSongFiles(song.id, indexes);
+      toast(made.length === 1 ? `${made[0].title} är nu en egen låt` : `${made.length} filer är nu egna låtar`);
+    } catch (e) {
+      toastError(e, 'Filerna kunde inte delas upp');
+    } finally {
+      setBusy(false);
+    }
+  };
   const add = async (list: FileList | null) => {
     if (!list?.length) return;
     setBusy(true);
@@ -1195,6 +1208,15 @@ function FilesSheet({ song, onClose }: { song: Song; onClose: () => void }) {
             <span className="name">{a.name}</span>
             <button className="btn icon ghost" aria-label={`Flytta upp ${a.name}`} disabled={i === 0} onClick={() => move(i)}>
               <ArrowUp size={18} />
+            </button>
+            <button
+              className="btn icon ghost"
+              aria-label={`Gör ${a.name} till en egen låt`}
+              title="Gör till en egen låt"
+              disabled={files.length === 1 || busy}
+              onClick={() => void split([i])}
+            >
+              <Scissors size={18} />
             </button>
             {/* Den sista filen tas bort genom att radera låten */}
             <button className="btn icon ghost danger" aria-label={`Ta bort ${a.name}`} disabled={files.length === 1} onClick={() => remove(i)}>
@@ -1225,6 +1247,26 @@ function FilesSheet({ song, onClose }: { song: Song; onClose: () => void }) {
         <Files size={18} /> Befintlig låt
       </button>
       </div>
+      {files.length > 1 && (
+        <>
+          <div className="section-title" style={{ marginTop: 18 }}>
+            Dela upp
+          </div>
+          <button
+            className="choice-btn"
+            disabled={busy}
+            onClick={() => void split(files.map((_, i) => i).slice(1))}
+          >
+            <span className="choice-title">
+              <Scissors size={16} /> Dela upp i {files.length} låtar
+            </span>
+            <span className="muted small-text">
+              Varje fil blir en egen låt med filnamnet som titel. Den första filen stannar kvar i {song.title}. Du kan
+              också bryta ut en fil i taget med saxen.
+            </span>
+          </button>
+        </>
+      )}
       {picking && <PickFileSongSheet song={song} onClose={() => setPicking(false)} />}
     </Sheet>
   );

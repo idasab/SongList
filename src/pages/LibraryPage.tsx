@@ -8,7 +8,7 @@ import { NO_ARTIST_GROUP, filterSongs, groupLetter, keyIdLabel, keysInLibrary, s
 import { formatKey } from '../lib/chords';
 import { allTags, categoryName, liveCategories, liveSongs, normalizeTags, useStore } from '../store/useStore';
 import { songFiles, type Song } from '../lib/model';
-import { pieceGroups, pieceTitle } from '../lib/fileGroups';
+import { mergeKey, pieceGroups, pieceTitle } from '../lib/fileGroups';
 import { mergeSongs } from '../services/mergeSongs';
 import { askSubtitleArtist, subtitleToArtist } from '../lib/subtitleArtist';
 import { useRememberScroll } from '../hooks/useRememberScroll';
@@ -532,14 +532,6 @@ function CategorySheet({ count, onClose, onSave }: { count: number; onClose: () 
       <p className="muted small-text">Ersätter låtarnas nuvarande kategori. Välj Ingen för att ta bort den.</p>
     </Sheet>
   );
-}
-
-/** Samma förslag känns igen på låtarna i det. */
-function mergeKey(group: Song[]): string {
-  return group
-    .map((s) => s.id)
-    .sort()
-    .join('+');
 }
 
 /** Förslag att slå ihop sidor av samma noter: varje grupp kan väljas bort. */
