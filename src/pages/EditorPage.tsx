@@ -98,9 +98,8 @@ export function EditorPage() {
           x.id === importItemId
             ? {
                 ...x,
-                raw: content,
-                kind: 'chordpro',
-                edited: true,
+                // Visas som originalfil: ändringarna gäller filens låt, den tolkade texten är kvar
+                ...(x.display === 'file' && x.original ? { fileContent: content } : { raw: content, kind: 'chordpro' as const, edited: true }),
                 // Bara det som skiljer sig från det som gäller alla låtar i importen
                 tags: tags.filter((t) => !q.tags.includes(t)),
                 categoryId: categoryId === q.categoryId ? undefined : categoryId,

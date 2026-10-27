@@ -49,10 +49,26 @@ function convert(item: ImportItem): string {
   return textToChordPro(item.raw, { measure: canvasMeasure(item.font), fileName: item.fileName });
 }
 
+// Uppgifter som följer med från filens låt till text och ackord
+const FILE_META = ['title', 'subtitle', 'artist', 'composer', 'lyricist', 'album', 'year', 'key', 'capo', 'tempo', 'time', 'duration', 'copyright'];
+
+/** Titel, artist m.m. som ändrats i editorn medan filen visades som original, i texten. */
+function withFileMeta(content: string, fileContent: string | undefined): string {
+  if (!fileContent) return content;
+  let out = content;
+  for (const line of fileContent.split('\n')) {
+    const m = /^\s*\{(\w+)\s*:\s*(.*?)\s*\}\s*$/.exec(line);
+    if (m && FILE_META.includes(m[1]) && m[2]) out = upsertDirective(out, m[1], m[2]);
+  }
+  return out;
+}
+
 /** Låtens text vid import: bara titeln när filen ska visas som original. */
 function contentFor(item: ImportItem): string {
+  if (item.display !== 'file') return withFileMeta(convert(item), item.fileContent);
   // Ändrat i editorn: titel, artist m.m. som de skrevs där
-  if (item.display !== 'file' || item.edited) return convert(item);
+  if (item.fileContent) return item.fileContent;
+  if (item.edited) return convert(item);
   const title = parseChordPro(convert(item)).meta.title || titleFromFileName(item.fileName);
   return `{title: ${title}}\n`;
 }
@@ -611,7 +627,7 @@ function ImportItemCard({
   const [interpreting, setInterpreting] = useState('');
   const notation = useStore((s) => s.settings.notation);
   // Som den blir efter importen (ackord skrivna som grepp skrivs om)
-  const content = useMemo(() => shapesToSounding(convert(item)), [item]);
+  const content = useMemo(() => savedContent(item), [item]);
   const parsed = useMemo(() => parseChordPro(content), [content]);
   const asFile = item.display === 'file';
 
@@ -655,7 +671,7 @@ function ImportItemCard({
           </button>
         )}
         <div className="main">
-          <div style={{ fontWeight: 600 }}>{(asFile && !item.edited ? null : parsed.meta.title) || titleFromFileName(item.fileName)}</div>
+          <div style={{ fontWeight: 600 }}>{(asFile && !item.edited && !item.fileContent ? null : parsed.meta.title) || titleFromFileName(item.fileName)}</div>
           <div className="muted small-text">
             {parsed.meta.artist ? parsed.meta.artist + ' · ' : ''}
             {item.fileName}

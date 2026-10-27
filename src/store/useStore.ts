@@ -55,8 +55,13 @@ export interface ImportQueueItem {
   duplicate?: DuplicateAction;
   /** Filen hör till låten ovanför i listan och blir en sida till i den (undefined = förvalet) */
   joinPrev?: boolean;
-  /** Redigerad i editorn: raw är låtens ChordPro som den ska sparas (även för en fil) */
+  /** Redigerad i editorn som text och ackord: raw är låtens ChordPro som den ska sparas */
   edited?: boolean;
+  /**
+   * Redigerad i editorn medan filen visas som original: låtens text (titel, artist m.m.).
+   * Den tolkade texten i raw lämnas orörd, så att den finns kvar vid byte till text och ackord.
+   */
+  fileContent?: string;
 }
 
 /** merge: filerna läggs till i låten som redan finns (t.ex. sida 2 av noterna) */
