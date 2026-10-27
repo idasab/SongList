@@ -83,11 +83,17 @@ export function keysInLibrary(songs: Song[]): string[] {
   });
 }
 
+/** Filtret för låtar utan kategori */
+export const NO_CATEGORY = '-';
+
 export interface SongFilter {
   query: string;
   fullText: boolean;
   tags: string[];
+  /** En kategori, eller NO_CATEGORY för låtar utan */
   categoryId?: string;
+  /** Kategorierna som finns kvar: en låt med en raderad kategori räknas som utan */
+  liveCategories?: Set<string>;
   /** Tonart, se keyId() */
   keyId?: string;
 }
@@ -95,7 +101,9 @@ export interface SongFilter {
 export function filterSongs(songs: Song[], f: SongFilter): Song[] {
   const terms = normalizeForSearch(f.query).split(/\s+/).filter(Boolean);
   return songs.filter((s) => {
-    if (f.categoryId && s.categoryId !== f.categoryId) return false;
+    if (f.categoryId === NO_CATEGORY) {
+      if (s.categoryId && (!f.liveCategories || f.liveCategories.has(s.categoryId))) return false;
+    } else if (f.categoryId && s.categoryId !== f.categoryId) return false;
     if (f.tags.length && !f.tags.every((t) => s.tags.includes(t))) return false;
     if (f.keyId) {
       const k = songKey(s);

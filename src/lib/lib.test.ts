@@ -17,7 +17,7 @@ import { mergeRecords, restoreMerge } from './merge';
 import { anchorAt, anchorToPx, clampNoteCenter, hitStroke, mergeAnnotations, strokeFromPx, strokeToPx } from './annotations';
 import { buildChordProExport, buildPdfExport, buildSongFiles, buildTextExport, mailBody, mailSubject } from '../services/setlistExport';
 import { isValidEmail } from '../services/mail';
-import { filterSongs, groupLetter, keyId, keyIdLabel, keysInLibrary, songKey, sortSongs } from './search';
+import { NO_CATEGORY, filterSongs, groupLetter, keyId, keyIdLabel, keysInLibrary, songKey, sortSongs } from './search';
 
 describe('ackord', () => {
   it('förenklade ackord: bara dur, moll och förminskat, utan bas', () => {
@@ -494,6 +494,17 @@ describe('tonartsfilter', () => {
   it('filtrerar fram låtar i samma tonart', () => {
     expect(filterSongs(songs, { query: '', fullText: false, tags: [], keyId: '7' }).map((s) => s.id)).toEqual(['g', 'f-till-g']);
     expect(filterSongs(songs, { query: '', fullText: false, tags: [], keyId: '1' }).map((s) => s.id)).toEqual(['db', 'ciss']);
+  });
+
+  it('filtrerar fram låtar utan kategori, även med en raderad kategori', () => {
+    const list = [
+      { ...songs[0], id: 'utan', categoryId: undefined },
+      { ...songs[0], id: 'psalm', categoryId: 'p' },
+      { ...songs[0], id: 'raderad', categoryId: 'gammal' },
+    ];
+    const f = { query: '', fullText: false, tags: [], categoryId: NO_CATEGORY, liveCategories: new Set(['p']) };
+    expect(filterSongs(list, f).map((s) => s.id)).toEqual(['utan', 'raderad']);
+    expect(filterSongs(list, { ...f, categoryId: 'p' }).map((s) => s.id)).toEqual(['psalm']);
   });
 });
 

@@ -391,6 +391,14 @@ a {
   background: var(--surface-2);
 }
 
+/* Kategorin bland taggarna: med ram i stället för fyllning, så att den syns som något annat */
+.chip.tag.category-tag {
+  gap: 4px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
 .chips {
   display: flex;
   gap: 6px;

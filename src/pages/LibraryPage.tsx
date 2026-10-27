@@ -1,10 +1,10 @@
 import { memo, useCallback, useDeferredValue, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Check, Files, ListChecks, User, ListMusic, Music, Plus, Search, SlidersHorizontal, Tag, Tags, X } from 'lucide-react';
+import { Check, Files, Folder, ListChecks, ListMusic, Music, Plus, Search, SlidersHorizontal, Tag, Tags, User, X } from 'lucide-react';
 import { Header, Sheet, toast } from '../components/ui';
 import { TagInput } from '../components/TagInput';
 import { CategorySelect } from '../components/CategorySelect';
-import { NO_ARTIST_GROUP, filterSongs, groupLetter, keyIdLabel, keysInLibrary, songKey, sortSongs } from '../lib/search';
+import { NO_ARTIST_GROUP, NO_CATEGORY, filterSongs, groupLetter, keyIdLabel, keysInLibrary, songKey, sortSongs } from '../lib/search';
 import { formatKey } from '../lib/chords';
 import { allTags, categoryName, liveCategories, liveSongs, normalizeTags, useStore } from '../store/useStore';
 import { songFiles, type Song } from '../lib/model';
@@ -38,7 +38,7 @@ export function LibraryPage() {
   const [tags, setTags] = useState<string[]>(session.tags);
   const [chosenCategory, setCategoryId] = useState(session.categoryId);
   // Ett filter på en kategori som raderats gäller inte längre
-  const categoryId = categoryName(categoriesRec, chosenCategory) ? chosenCategory : undefined;
+  const categoryId = chosenCategory === NO_CATEGORY || categoryName(categoriesRec, chosenCategory) ? chosenCategory : undefined;
   const [key, setKey] = useState(session.keyId);
   const [showFilters, setShowFilters] = useState(session.showFilters || !!categoryId || !!key);
   Object.assign(session, { query, fullText, tags, categoryId, keyId: key, showFilters });
@@ -61,8 +61,19 @@ export function LibraryPage() {
   // Sökfältet svarar direkt; listan filtreras om när det finns tid över mellan tangenttrycken
   const deferredQuery = useDeferredValue(query);
   const visible = useMemo(
-    () => sortSongs(filterSongs(songs, { query: deferredQuery, fullText, tags, categoryId, keyId: key }), sort),
-    [songs, deferredQuery, fullText, tags, categoryId, key, sort],
+    () =>
+      sortSongs(
+        filterSongs(songs, {
+          query: deferredQuery,
+          fullText,
+          tags,
+          categoryId,
+          keyId: key,
+          liveCategories: new Set(categories.map((c) => c.id)),
+        }),
+        sort,
+      ),
+    [songs, deferredQuery, fullText, tags, categoryId, key, sort, categories],
   );
 
   // Markera låtar: i den ordning de valdes (blir ordningen i en ny setlista)
@@ -226,6 +237,12 @@ export function LibraryPage() {
                   <div className="chips">
                     <button className={`chip${!categoryId ? ' on' : ''}`} onClick={() => setCategoryId(undefined)}>
                       Alla
+                    </button>
+                    <button
+                      className={`chip${categoryId === NO_CATEGORY ? ' on' : ''}`}
+                      onClick={() => setCategoryId(categoryId === NO_CATEGORY ? undefined : NO_CATEGORY)}
+                    >
+                      Utan kategori
                     </button>
                     {categories.map((c) => (
                       <button
@@ -431,15 +448,15 @@ const SongRow = memo(function SongRow({
           {song.title}
           {song.subtitle && <span className="alt-title"> · {song.subtitle}</span>}
         </div>
-        {(song.artist || categoryName) && (
-          <div className="sub">
-            {song.artist}
-            {song.artist && categoryName ? ' · ' : ''}
-            {categoryName}
-          </div>
-        )}
-        {song.tags.length > 0 && (
+        {song.artist && <div className="sub">{song.artist}</div>}
+        {/* Kategorin på samma rad som taggarna */}
+        {(song.tags.length > 0 || categoryName) && (
           <div className="meta">
+            {categoryName && (
+              <span className="chip tag category-tag" title="Kategori">
+                <Folder size={12} /> {categoryName}
+              </span>
+            )}
             {song.tags.map((t) => (
               <span className="chip tag" key={t}>
                 {t}
