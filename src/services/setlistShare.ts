@@ -126,7 +126,10 @@ function sharedFiles(s: SharedSong): Pick<SharedSong, 'attachment' | 'extraAttac
 export function existingSongs(shared: SharedSetlist, library: Record<string, Song>): Map<string, string> {
   const live = liveSongs(library);
   const dups = findDuplicates(
-    shared.songs.map((s) => ({ title: s.title, artist: s.artist, content: s.content, fileData: s.attachment?.dataUrl })),
+    shared.songs.map((s) => {
+      const { attachment, extraAttachments } = sharedFiles(s);
+      return { title: s.title, artist: s.artist, content: s.content, files: [attachment, ...(extraAttachments ?? [])].filter(validFile).map((f) => f.dataUrl) };
+    }),
     live,
   );
   const found = new Map<string, string>();

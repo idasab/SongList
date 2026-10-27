@@ -111,7 +111,9 @@ export function EditorPage() {
       setSaved(true);
       leavingAfterSave.current = true;
       toast('Ändrat i importlistan');
-      navigate('/import', { replace: true });
+      // Tillbaka till importlistan, utan att den hamnar två gånger i historiken
+      if (window.history.state?.idx) navigate(-1);
+      else navigate('/import', { replace: true });
       return;
     }
     const song = await saveSong({ id: existing?.id, content, tags, categoryId, attachment: draftAttachment });

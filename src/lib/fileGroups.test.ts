@@ -48,7 +48,25 @@ describe('sidor av samma noter', () => {
 
   it('sorterar filer efter sidnummer när alla har ett', () => {
     expect(sortByPage([file('A (2).pdf'), file('A (1).pdf')]).map((f) => f.name)).toEqual(['A (1).pdf', 'A (2).pdf']);
-    expect(sortByPage([file('A (2).pdf'), file('A.pdf')]).map((f) => f.name)).toEqual(['A (2).pdf', 'A.pdf']);
+    // En fil utan nummer bland numrerade är första sidan (som appens egen export "A (sida 2).pdf")
+    expect(sortByPage([file('A (sida 2).pdf'), file('A.pdf')]).map((f) => f.name)).toEqual(['A.pdf', 'A (sida 2).pdf']);
+    expect(sortByPage([file('A.pdf'), file('B.pdf')]).map((f) => f.name)).toEqual(['A.pdf', 'B.pdf']);
+  });
+
+  it('räknar inte bildnummer, datum och namn med siffror som sidor', () => {
+    expect(filePageNumber('IMG_1234.jpg')).toBeUndefined();
+    expect(filePageNumber('Gudstjänst 2024-06-02.pdf')).toBeUndefined();
+    expect(filePageNumber('Blink-182.pdf')).toBeUndefined();
+    expect(filePageNumber('Låt (sida 2).pdf')).toBe(2);
+    expect(filePageNumber('Låt_2.pdf')).toBe(2);
+    expect(samePiece('IMG_1234.jpg', 'IMG_1235.jpg')).toBe(false);
+    expect(samePiece('Låt.pdf', 'Låt (sida 2).pdf')).toBe(true);
+  });
+
+  it('samma filer valda två gånger blir inte fler sidor', () => {
+    const f = (fileName: string) => ({ fileName, isFile: true });
+    expect(joinsPrevious([f('Låt (1).pdf'), f('Låt (2).pdf'), f('Låt (1).pdf'), f('Låt (2).pdf')])).toEqual([false, true, false, true]);
+    expect(joinsPrevious([f('Låt (2).pdf'), f('Låt (2).pdf')])).toEqual([false, false]);
   });
 
   it('hittar låtar i biblioteket som är sidor av samma noter', () => {

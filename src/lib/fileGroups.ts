@@ -4,8 +4,11 @@
 
 import { titleKey } from './duplicates';
 
-// "(2)", "sida 2", "s. 2", "del 2", "page 2", "p2" eller "_2"/"-2" sist i namnet
-const PAGE_MARK = /(?:\s*\((\d+)\)|\s*[-–,]?\s*\b(?:sida|sid|s\.|del|page|p\.?)\s*(\d+)|[_-](\d+))\s*$/i;
+// "(2)", "(sida 2)", "sida 2", "s. 2", "del 2", "page 2", "p2" eller "_2"/"-2" sist i namnet.
+// Högst två siffror och inte efter en annan siffra, så att "IMG_1234", "2024-06-02" och
+// "Blink-182" inte räknas som sidor.
+const PAGE_MARK =
+  /(?:\s*\((?:(?:sida|sid|s\.|del|page|p\.?)\s*)?(\d{1,2})\)|\s*[-–,]?\s*\b(?:sida|sid|s\.|del|page|p\.?)\s*(\d{1,2})|(?<!\d)[_-](\d{1,2}))\s*$/i;
 
 function withoutExtension(name: string): string {
   return name.replace(/\.[a-z0-9]{1,5}$/i, '');
@@ -29,7 +32,9 @@ function baseKey(name: string): string {
  */
 export function samePiece(prev: string, name: string): boolean {
   const k = baseKey(name);
-  return !!k && k === baseKey(prev) && (filePageNumber(name) !== undefined || filePageNumber(prev) !== undefined);
+  const [p, q] = [filePageNumber(prev), filePageNumber(name)];
+  // Samma sidnummer två gånger är en dubblett, inte nästa sida
+  return !!k && k === baseKey(prev) && (p !== undefined || q !== undefined) && p !== q;
 }
 
 export interface GroupItem {
@@ -42,11 +47,22 @@ export interface GroupItem {
 
 /** Om varje post hör till låten ovanför. */
 export function joinsPrevious(items: GroupItem[]): boolean[] {
-  return items.map((it, i) => {
+  const joins: boolean[] = [];
+  // Sidnumren i låten som posten skulle bli en del av
+  let pages = new Set<number | undefined>();
+  items.forEach((it, i) => {
     const prev = items[i - 1];
-    if (!prev || !it.isFile || !prev.isFile) return false;
-    return it.joinPrev ?? samePiece(prev.fileName, it.fileName);
+    const page = filePageNumber(it.fileName);
+    let join = false;
+    if (prev && it.isFile && prev.isFile) {
+      // Förval: samma noter, och sidan finns inte redan (samma filer valda två gånger)
+      join = it.joinPrev ?? (samePiece(prev.fileName, it.fileName) && !pages.has(page));
+    }
+    if (!join) pages = new Set();
+    pages.add(page);
+    joins.push(join);
   });
+  return joins;
 }
 
 /** Första posten i varje posts låt (posten själv om den inte hör till låten ovanför). */
@@ -59,9 +75,18 @@ export function groupHeads(items: GroupItem[]): number[] {
 
 /** Filer i sidordning när alla har ett sidnummer, annars i den ordning de kom. */
 export function sortByPage<T extends { name: string }>(files: T[]): T[] {
-  const nums = files.map((f) => filePageNumber(f.name));
+  // En fil utan nummer bland numrerade är första sidan ("Låt.pdf", "Låt (sida 2).pdf")
+  let nums = files.map((f) => filePageNumber(f.name));
+  if (nums.filter((n) => n === undefined).length === 1 && files.length > 1) nums = nums.map((n) => n ?? 1);
   if (nums.some((n) => n === undefined)) return files;
   return files.map((f, i) => ({ f, n: nums[i]!, i })).sort((a, b) => a.n - b.n || a.i - b.i).map((x) => x.f);
+}
+
+/** Sant om alla titlar är samma noter med olika sidnummer, t.ex. "Låt (1)" och "Låt (2)". */
+export function samePieceTitles(titles: string[]): boolean {
+  const k = baseKey(titles[0] ?? '');
+  const pages = titles.map(filePageNumber);
+  return !!k && titles.every((t) => baseKey(t) === k) && pages.some((p) => p !== undefined) && new Set(pages).size === pages.length;
 }
 
 /** Titeln utan sidnummer: "Låt (2)" → "Låt". */

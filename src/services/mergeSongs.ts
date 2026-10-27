@@ -1,7 +1,7 @@
 // Slår ihop låtar som är sidor av samma noter till en låt med flera filer, och delar upp dem igen.
 
 import { upsertDirective } from '../lib/chordpro';
-import { mergeKey, pieceGroups, pieceTitle } from '../lib/fileGroups';
+import { mergeKey, pieceGroups, pieceTitle, samePieceTitles } from '../lib/fileGroups';
 import { titleFromFileName } from '../lib/textImport';
 import { songFiles, type Song } from '../lib/model';
 import { liveSetlists, liveSongs, useStore } from '../store/useStore';
@@ -13,11 +13,12 @@ import { liveSetlists, liveSongs, useStore } from '../store/useStore';
  */
 export async function mergeSongs(ids: string[]): Promise<Song | undefined> {
   const st = useStore.getState();
-  const list = ids.map((id) => st.songs[id]).filter((s): s is Song => !!s && !s.deletedAt);
+  const list = [...new Set(ids)].map((id) => st.songs[id]).filter((s): s is Song => !!s && !s.deletedAt);
   const [keep, ...rest] = list;
   if (!keep || !rest.length) return keep;
   const others = new Set(rest.map((s) => s.id));
-  const title = pieceTitle(keep.title);
+  // Sidnumret tas bort bara när låtarna är sidor av samma noter ("Låt (1)", "Låt (2)")
+  const title = samePieceTitles(list.map((s) => s.title)) ? pieceTitle(keep.title) : keep.title;
   const saved = await st.saveSong({
     id: keep.id,
     content: title === keep.title ? keep.content : upsertDirective(keep.content, 'title', title),

@@ -2,7 +2,7 @@
 // samma import. Titlar jämförs utan skiftläge, skiljetecken och en avslutande siffra i parentes
 // ("Låt (2)"), eftersom kopior och sidor av samma PDF ofta heter så.
 
-import type { Song } from './model';
+import { songFiles, type Song } from './model';
 
 /** Titeln som den jämförs: "Allt som Herren gjort - D (2)" → "allt som herren gjort d". */
 export function titleKey(title: string): string {
@@ -26,6 +26,12 @@ export interface DuplicateCandidate {
   content: string;
   /** Originalfilens innehåll (data-URL) för låtar som sparas som fil */
   fileData?: string;
+  /** Alla filer i låten (data-URL), för låtar med flera filer; annars fileData */
+  files?: string[];
+}
+
+function filesOf(c: DuplicateCandidate): string[] {
+  return c.files?.length ? c.files : c.fileData ? [c.fileData] : [];
 }
 
 export interface Duplicate {
@@ -44,8 +50,10 @@ function sameArtist(a: string, b: string): boolean {
   return !a.trim() || !b.trim() || titleKey(a) === titleKey(b);
 }
 
+/** Samma innehåll: för filer att alla a:s filer redan finns i b (t.ex. en sida som redan är med). */
 function sameContent(a: DuplicateCandidate, b: DuplicateCandidate): boolean {
-  if (a.fileData || b.fileData) return !!a.fileData && a.fileData === b.fileData;
+  const [fa, fb] = [filesOf(a), filesOf(b)];
+  if (fa.length || fb.length) return !!fa.length && fa.every((f) => fb.includes(f));
   return a.content.trim() === b.content.trim();
 }
 
@@ -70,7 +78,7 @@ export function findDuplicates(candidates: DuplicateCandidate[], library: Song[]
   return candidates.map((c, i) => {
     let best: Duplicate | undefined;
     for (const s of byTitle.get(titleKey(c.title)) ?? []) {
-      const r = compare(c, { title: s.title, artist: s.artist, content: s.content, fileData: s.attachment?.dataUrl || undefined });
+      const r = compare(c, { title: s.title, artist: s.artist, content: s.content, files: songFiles(s).map((f) => f.dataUrl) });
       if (r && (!best || (r.identical && !best.identical))) best = { song: s, title: s.title, ...r };
     }
     if (best?.identical) return best;

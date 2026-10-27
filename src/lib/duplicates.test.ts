@@ -22,6 +22,16 @@ describe('dubbletter', () => {
     expect(pageNumber('Låt')).toBeUndefined();
   });
 
+  it('en sida som redan finns som fil nummer två i en låt är likadan', () => {
+    const f = (n: string) => ({ kind: 'pdf' as const, mime: 'application/pdf', name: `${n}.pdf`, dataUrl: `data:${n}` });
+    const lib = [song('a', 'Låt', '', '{title: Låt}\n', { attachment: f('p1'), extraAttachments: [f('p2')] })];
+    const [d] = findDuplicates([{ title: 'Låt (2)', artist: '', content: '', fileData: 'data:p2' }], lib);
+    expect(d?.identical).toBe(true);
+    // Hela gruppen jämförs: en ny sida gör den olik
+    const [e] = findDuplicates([{ title: 'Låt (1)', artist: '', content: '', files: ['data:p1', 'data:p3'] }], lib);
+    expect(e?.identical).toBe(false);
+  });
+
   it('hittar likadana låtar, olika versioner och andra sidor', () => {
     const lib = [
       song('a', 'Påhittad visa', 'Någon'),

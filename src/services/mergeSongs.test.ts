@@ -42,6 +42,20 @@ describe('slå ihop låtar', () => {
   });
 });
 
+describe('slå ihop olika låtar', () => {
+  it('behåller titeln när låtarna inte är sidor av samma noter, och samma id två gånger raderar inget', async () => {
+    useStore.setState({ songs: {}, setlists: {} });
+    const st = useStore.getState();
+    const a = await st.saveSong({ content: '{title: Gudstjänst 2024-06-02}\n', attachment: file('a') });
+    const b = await st.saveSong({ content: '{title: Extra}\n', attachment: file('b') });
+    await mergeSongs([a.id, b.id]);
+    expect(useStore.getState().songs[a.id].title).toBe('Gudstjänst 2024-06-02');
+    await mergeSongs([a.id, a.id]);
+    expect(useStore.getState().songs[a.id].deletedAt).toBeUndefined();
+    expect(songFiles(useStore.getState().songs[a.id])).toHaveLength(2);
+  });
+});
+
 describe('dela upp en låt med flera filer', () => {
   it('gör filerna till egna låtar och föreslår inte att slå ihop dem igen', async () => {
     useStore.setState({ songs: {}, setlists: {} });

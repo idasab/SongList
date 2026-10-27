@@ -18,7 +18,7 @@ import {
   type SourceFont,
 } from '../lib/textImport';
 import { newId, songFiles, type Song, type SongAttachment } from '../lib/model';
-import { groupHeads, joinsPrevious, pieceTitle, sortByPage } from '../lib/fileGroups';
+import { groupHeads, joinsPrevious, pieceTitle, samePieceTitles, sortByPage } from '../lib/fileGroups';
 import { canUseDocumentScanner, recognizeImageFile, scanDocument } from '../services/ocr';
 import { pickFiles } from '../services/files';
 import { attachmentToFile, expandFiles, interpretFile } from '../services/fileImport';
@@ -77,9 +77,10 @@ function canMerge(item: ImportItem, dup: Duplicate | undefined): boolean {
  * Förval för en dubblett: en likadan låt hoppas över, en annan sida av samma noter läggs till
  * i låten som finns, annars läggs den till som en ny låt.
  */
-function duplicateAction(item: ImportItem, dup: Duplicate | undefined): DuplicateAction {
+function duplicateAction(item: ImportItem, dup: Duplicate | undefined, overlap = false): DuplicateAction {
   if (!dup) return 'add';
-  const chosen = item.duplicate ?? (dup.identical ? 'skip' : dup.otherPage && canMerge(item, dup) ? 'merge' : 'add');
+  // overlap: några av sidorna finns redan i låten, de andra är nya
+  const chosen = item.duplicate ?? (dup.identical ? 'skip' : (dup.otherPage || overlap) && canMerge(item, dup) ? 'merge' : 'add');
   // Ersätta och slå ihop går bara när dubbletten finns i biblioteket
   if (chosen === 'merge' && !canMerge(item, dup)) return 'add';
   return chosen === 'replace' && !dup.song ? 'add' : chosen;
@@ -214,14 +215,14 @@ export function ImportPage() {
   const joins = joinsPrevious(groupInput);
   const heads = groupHeads(groupInput);
   const groupFiles = (head: number): SongAttachment[] =>
-    items.flatMap((it, i) => (heads[i] === head && it.original ? [it.original] : []));
+    sortByPage(items.flatMap((it, i) => (heads[i] === head && it.original ? [it.original] : [])));
   const groupSize = (head: number) => heads.filter((h) => h === head).length;
 
   // Låtar som redan finns i biblioteket eller tidigare i importen
   const allDuplicates = useMemo(
     () =>
       findDuplicates(
-        items.map((it) => {
+        items.map((it, i) => {
           const content = savedContent(it);
           const meta = parseChordPro(content).meta;
           return {
@@ -229,6 +230,8 @@ export function ImportPage() {
             artist: meta.artist ?? '',
             content,
             fileData: it.display === 'file' ? it.original?.dataUrl : undefined,
+            // Låtens alla sidor: likadan bara om alla redan finns
+            files: isFileItem(it) && !joins[i] ? groupFiles(i).map((f) => f.dataUrl) : undefined,
           };
         }),
         liveSongs(songsRec),
@@ -237,7 +240,11 @@ export function ImportPage() {
   );
   // En sida som hör till låten ovanför är ingen dubblett i sig; låtens första post avgör
   const duplicates = allDuplicates.map((d, i) => (joins[i] ? undefined : d));
-  const headActions = items.map((it, i) => duplicateAction(it, duplicates[i]));
+  const headActions = items.map((it, i) => {
+    const song = duplicates[i]?.song;
+    const have = song ? songFiles(song).map((f) => f.dataUrl) : [];
+    return duplicateAction(it, duplicates[i], groupFiles(i).some((f) => have.includes(f.dataUrl)));
+  });
   const actions = heads.map((h) => headActions[h]);
   const dupCount = duplicates.filter(Boolean).length;
   const toImport = actions.filter((a, i) => a !== 'skip' && !joins[i]).length;
@@ -276,29 +283,42 @@ export function ImportPage() {
         files: isFileItem(it) ? groupFiles(i) : [],
         ...resolveMeta(it, { tags, categoryId }),
       }));
-    let songs: Awaited<ReturnType<typeof importSongs>>;
+    let songs: Awaited<ReturnType<typeof importSongs>> = [];
     let replaced = 0;
     let merged = 0;
+    // Låtar (första posten) som redan är importerade, om något går fel halvvägs
+    const done = new Set<number>();
     try {
       songs = await importSongs(list);
+      actions.forEach((a, i) => !joins[i] && a === 'add' && done.add(i));
       for (const [i, it] of items.entries()) {
-        const old = duplicates[i]?.song;
-        if (joins[i] || !old) continue;
+        const found = duplicates[i]?.song;
+        if (joins[i] || !found) continue;
+        // Som låten är nu: två poster kan ändra samma låt
+        const old = useStore.getState().songs[found.id] ?? found;
         const meta = resolveMeta(it, { tags, categoryId });
         const keep = { tags: [...old.tags, ...meta.tags], categoryId: meta.categoryId || old.categoryId };
         // Ersätt: låtens text eller fil byts, taggar läggs till och kategorin behålls om ingen valts
         if (actions[i] === 'replace') {
-          await saveSong({ id: old.id, content: savedContent(it), files: isFileItem(it) ? groupFiles(i) : [], ...keep });
+          const content = groupSize(i) > 1 ? retitle(savedContent(it), pieceTitle) : savedContent(it);
+          await saveSong({ id: old.id, content, files: isFileItem(it) ? groupFiles(i) : [], ...keep });
           replaced++;
         } else if (actions[i] === 'merge') {
-          // Fler sidor i låten som finns, i sidordning när filnamnen har sidnummer
-          await saveSong({ id: old.id, content: old.content, files: sortByPage([...songFiles(old), ...groupFiles(i)]), ...keep });
+          // Fler sidor i låten som finns (inte de som redan är med), i sidordning
+          const have = songFiles(old);
+          const added = groupFiles(i).filter((f) => !have.some((h) => h.dataUrl === f.dataUrl));
+          const title = parseChordPro(savedContent(it)).meta.title ?? titleFromFileName(it.fileName);
+          const content = samePieceTitles([old.title, title]) ? retitle(old.content, pieceTitle) : old.content;
+          await saveSong({ id: old.id, content, files: sortByPage([...have, ...added]), ...keep });
           merged++;
         }
+        done.add(i);
       }
     } catch (e) {
       importingRef.current = false;
       setImporting(false);
+      // Det som hann importeras tas bort ur listan, så att det inte importeras igen
+      if (done.size) setItems((cur) => cur.filter((x) => !items.some((it, i) => it.id === x.id && done.has(heads[i]))));
       toastError(e, 'Importen misslyckades');
       return;
     }
@@ -474,7 +494,13 @@ export function ImportPage() {
                   pages={joins[i] ? 0 : groupSize(i)}
                   onChange={(next) => setItems((cur) => cur.map((x) => (x.id === it.id ? next : x)))}
                   onPatch={(patch) => setItems((cur) => cur.map((x) => (x.id === it.id ? { ...x, ...patch } : x)))}
-                  onRemove={() => setItems((cur) => cur.filter((x) => x.id !== it.id))}
+                  onRemove={() =>
+                    setItems((cur) => {
+                      const at = cur.findIndex((x) => x.id === it.id);
+                      // Posten under hörde ihop med den här, inte med den ovanför: förvalet gäller igen
+                      return cur.filter((x) => x.id !== it.id).map((x, k) => (k === at ? { ...x, joinPrev: undefined } : x));
+                    })
+                  }
                   onEdit={() => openInEditor(it)}
                   commonCategoryName={categoryName(categoriesRec, categoryId)}
                   tagSuggestions={tagSuggestions}
