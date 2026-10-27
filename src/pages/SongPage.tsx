@@ -533,6 +533,16 @@ export function SongPage() {
     if (setlistItem?.capo !== undefined) setItem({ capo: undefined });
     if (next !== songCapo) void saveSong({ id: song.id, content: upsertDirective(song.content, 'capo', next ? String(next) : '') });
   };
+  // Samma val för tonart och kapo; knappen visas vid båda så att det syns vad som gäller
+  const scopeButton = setlistItem && (
+    <button
+      className={`btn small scope-btn${inSetlist ? ' active' : ''}`}
+      title={inSetlist ? 'Tonart, kapo och anteckningar ändras bara i den här setlistan' : 'Tonart, kapo och anteckningar ändras för låten överallt'}
+      onClick={() => void updateSettings({ transposeScope: inSetlist ? 'global' : 'setlist' })}
+    >
+      {inSetlist ? 'I setlistan' : 'Överallt'}
+    </button>
+  );
   const setFont = (n: number) => void updateSettings({ fontSize: Math.max(MIN_FONT, Math.min(MAX_FONT, n)) });
   const setSpeed = (n: number) => void updateSongPrefs(song.id, { scrollSpeed: Math.max(1, Math.min(10, n)) });
   const hasDuration = parseDuration(parsed.meta.duration) !== undefined;
@@ -696,15 +706,7 @@ export function SongPage() {
             <button className="btn icon" aria-label="Transponera upp" onClick={() => setTranspose(transpose + 1)}>
               <Plus size={18} />
             </button>
-            {setlistItem && (
-              <button
-                className={`btn small scope-btn${inSetlist ? ' active' : ''}`}
-                title={inSetlist ? 'Tonart, kapo och anteckningar ändras bara i den här setlistan' : 'Tonart, kapo och anteckningar ändras för låten överallt'}
-                onClick={() => void updateSettings({ transposeScope: inSetlist ? 'global' : 'setlist' })}
-              >
-                {inSetlist ? 'I setlistan' : 'Överallt'}
-              </button>
-            )}
+            {scopeButton}
           </div>
           )}
 
@@ -719,6 +721,7 @@ export function SongPage() {
             <button className="btn icon" aria-label="Kapo upp" disabled={capo >= 11} onClick={() => setCapo(capo + 1)}>
               <Plus size={18} />
             </button>
+            {scopeButton}
           </div>
           )}
 
