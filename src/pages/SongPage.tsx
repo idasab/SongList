@@ -1222,7 +1222,7 @@ function FilesSheet({ song, onClose }: { song: Song; onClose: () => void }) {
         />
       </label>
       <button className="btn" disabled={busy} onClick={() => setPicking(true)}>
-        <Files size={18} /> Finns i appen
+        <Files size={18} /> Befintlig låt
       </button>
       </div>
       {picking && <PickFileSongSheet song={song} onClose={() => setPicking(false)} />}
