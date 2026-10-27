@@ -196,13 +196,15 @@ export function SongPage() {
   const files = useMemo(() => (song ? songFiles(song) : []), [song?.attachment, song?.extraAttachments]);
   const { pages, status: pagesStatus } = useFilePages(files);
   const paged = !!song?.attachment && settings.filePaging !== false;
-  const [page, setPage] = useState(0);
+  const [pageState, setPage] = useState(0);
   useEffect(() => setPage(0), [id]);
+  const lastPage = Math.max(0, pages.length - 1);
+  // Tas en fil bort när man står på den sista sidan visas den nya sista sidan
+  const page = Math.min(pageState, lastPage);
   // Zoom med två fingrar (eller knapparna) på sidan som visas; ny sida visas hel
   const [pageZoom, setPageZoom] = useState<PageZoom>(NO_ZOOM);
   const [zoomStep, setZoomStep] = useState<{ id: number; factor: number }>();
   useEffect(() => setPageZoom(NO_ZOOM), [id, page]);
-  const lastPage = Math.max(0, pages.length - 1);
   const turnPage = (d: number) => {
     const n = Math.max(0, Math.min(lastPage, page + d));
     if (n === page) return false;
