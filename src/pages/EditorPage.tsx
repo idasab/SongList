@@ -357,7 +357,7 @@ export function EditorPage() {
           </>
         )}
         <div style={{ textAlign: 'center' }}>
-          <button className="btn ghost small" onClick={() => setShowMeta((v) => !v)}>
+          <button className="btn small" onClick={() => setShowMeta((v) => !v)}>
             {showMeta ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             {showMeta ? 'Dölj uppgifter' : `${meta.title || 'Namnlös'} – visa uppgifter`}
           </button>

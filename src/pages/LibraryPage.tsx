@@ -134,7 +134,7 @@ export function LibraryPage() {
     <div className="screen">
       {selecting ? (
         <Header title={selected.length ? `${selected.length} valda` : 'Välj låtar'}>
-          <button className="btn ghost" onClick={toggleAll}>
+          <button className="btn" onClick={toggleAll}>
             {allVisibleSelected ? 'Avmarkera alla' : 'Markera alla'}
           </button>
           <button className="btn" onClick={stopSelecting}>

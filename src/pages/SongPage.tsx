@@ -1275,7 +1275,7 @@ function PickFileSongSheet({ song, onClose }: { song: Song; onClose: () => void 
               <span className="choice-title">Kopiera bara filerna</span>
               <span className="muted small-text">{other.title} finns kvar som egen låt.</span>
             </button>
-            <button className="btn ghost" disabled={busy} onClick={() => setOther(null)}>
+            <button className="btn" disabled={busy} onClick={() => setOther(null)}>
               Välj en annan
             </button>
           </div>
