@@ -314,8 +314,8 @@ describe('ackordscheman och sidfot i PDF', () => {
         line(word('GG', 64, 512, 14)),
         fingers(60, 560, 'X 3 2 0 1 0'),
         fingers(140, 560, 'X 0 2 0 1 0'),
-        line(word('Förlaget', 420, 700, 60)),
-        line(word('www.exempel.se', 420, 715, 90)),
+        line(word('Förlaget', 420, 700, 60, 7)),
+        line(word('www.exempel.se', 420, 715, 90, 7)),
       ],
     };
     const out = ocrToChordPro([page]);

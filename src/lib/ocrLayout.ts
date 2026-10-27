@@ -68,8 +68,10 @@ export function groupVisualLines(page: OcrPage): VisualLine[] {
     const all = src
       .filter((w) => w.text.trim())
       .map((w) => ({ text: w.text.trim(), x: w.x * sx, y: w.y * sy, w: w.w * sx, h: w.h * sy }));
-    // Linjer och ramar läses som "ord" som är alldeles för breda för sina tecken
-    const isRule = (w: OcrWord) => w.w > w.h * (1.5 * w.text.length + 1);
+    // Linjer och ramar läses som "ord" som är alldeles för breda för sina tecken (jämfört med
+    // radens texthöjd, så att bindestreck, som är låga, inte räknas)
+    const lineH = Math.max(...all.map((w) => w.h), 0);
+    const isRule = (w: OcrWord) => w.w > Math.max(w.h, lineH) * (1.5 * w.text.length + 1);
     const ruleWidth = all.filter(isRule).reduce((n, w) => n + w.w, 0);
     const span = all.length ? Math.max(...all.map((w) => w.x + w.w)) - Math.min(...all.map((w) => w.x)) : 0;
     // Mest linje: hela raden är brus
@@ -169,7 +171,7 @@ const LOOKALIKE: Record<string, string> = { '6': 'G', '4': 'A', ö: 'D', Ö: 'D'
  * "Di" för D¹¹ (upphöjda tecken), "GB" för G/B och två ackord som lästs som ett ("CG").
  * Returnerar null om biten inte går att tolka som ackord.
  */
-export function fixOcrChord(t: Token, charW: number, raised = false): Token[] | null {
+export function fixOcrChord(t: Token, charW: number, raised = false, multi = true): Token[] | null {
   if (isChordToken(t.text)) return [t];
   let s = t.text;
   // Upphöjd siffra som lästs som ett tecken högt upp: "Bm?" och "D'" för Bm⁷ och D⁷, "DI" för D¹¹
@@ -182,11 +184,15 @@ export function fixOcrChord(t: Token, charW: number, raised = false): Token[] | 
     // Smuts före ackordet, t.ex. "oD", och efter, t.ex. "D'"
     .replace(/^[o°•·.,'’]+(?=[A-H])/, '')
     .replace(/(?<=\S)[°•·.,'’`]+$/, '');
-  if (s in LOOKALIKE) s = LOOKALIKE[s];
-  // Liten bokstav för ett ackord, t.ex. "c"
-  if (/^[a-h]$/.test(s)) s = s.toUpperCase();
-  // A med ring eller prickar ("ÅA", "ÅSuUS")
-  s = s.replace(/^[ÅÄåä](?=[A-Za-z#]|$)/, 'A');
+  // Tecken som bara liknar ackord rättas bara på rader med flera ackord (inte t.ex. ett
+  // sidnummer "6" eller ett ensamt "Å" på en egen rad)
+  if (multi) {
+    if (s in LOOKALIKE) s = LOOKALIKE[s];
+    // Liten bokstav för ett ackord, t.ex. "c"
+    if (/^[a-h]$/.test(s)) s = s.toUpperCase();
+    // A med ring eller prickar ("ÅA", "ÅSuUS")
+    s = s.replace(/^[ÅÄåä](?=[A-Za-z#]|$)/, 'A');
+  }
   // Versaler i hela ackordet, t.ex. "ASUS" för Asus
   const caps = /^([A-H][#b]?)([A-Za-z]{2,})(\d*)$/.exec(s);
   if (caps && !isChord(s)) {
@@ -198,7 +204,7 @@ export function fixOcrChord(t: Token, charW: number, raised = false): Token[] | 
   }
   // Korsförtecknet läst som en bokstav: "Fam", "FAtm" och "FAm7" för F#m
   const sharp = /^([A-H])(?:a|A|At|At|H)(m.*|7.*|sus.*)$/.exec(s);
-  if (sharp && !isChord(s) && isChord(`${sharp[1]}#${sharp[2]}`)) s = `${sharp[1]}#${sharp[2]}`;
+  if (multi && sharp && !isChord(s) && isChord(`${sharp[1]}#${sharp[2]}`)) s = `${sharp[1]}#${sharp[2]}`;
   const doubled = /^([A-G])\1$/i.exec(s);
   if (doubled) s = doubled[1].toUpperCase();
   // Upphöjt 11 läses ofta som i, l eller |
@@ -239,7 +245,7 @@ function fixChordRow(row: Row): Row {
   const raised = (t: Token) => sized.length >= 2 && t.top! < midTop - midH * 0.15 && t.h! > midH * 1.15;
   let fixed: Token[] = [];
   for (const t of row.tokens) {
-    const f = fixOcrChord(t, charW, raised(t));
+    const f = fixOcrChord(t, charW, raised(t), row.tokens.length > 1);
     if (f) fixed.push(...f);
     else fixed.push(t);
   }
@@ -261,7 +267,9 @@ function headerRow(label: string, x: number): Row {
  */
 function rowsWithMarginLabels(lines: VisualLine[], measure?: (t: string) => number): { rows: Row[]; gapsBefore: number[] } {
   const mh = median(lines.map((l) => l.bottom - l.top)) || 1;
-  const mainLeft = median(lines.map((l) => l.words[0].x));
+  // Textens vänsterkant: från textraderna (ackordrader börjar ofta längre till höger)
+  const textLines = lines.filter((l) => !isChordLine(l.words.map((w) => w.text), CHORD_TOLERANCE));
+  const mainLeft = median((textLines.length ? textLines : lines).map((l) => l.words[0].x));
   const rows: Row[] = [];
   const gapsBefore: number[] = [];
   const lineIndexOfRow: number[] = [];
@@ -274,7 +282,8 @@ function rowsWithMarginLabels(lines: VisualLine[], measure?: (t: string) => numb
     }
     // Rubrik som går nästan ända fram till texten, t.ex. "Refräng" tätt intill första ordet
     const [first, second] = l.words;
-    if (!labelWords.length && second && first.x < mainLeft - mh && second.x > mainLeft - mh * 0.5 && parseHeader(first.text)) {
+    const tight = !labelWords.length && second && parseHeader(first.text);
+    if (tight && tight.kind !== 'comment' && first.x < mainLeft - mh && second.x > mainLeft - mh * 0.5) {
       labelWords.push(first);
     }
     const label = labelWords.map((w) => w.text).join(' ');
@@ -347,21 +356,36 @@ export function dropChordDiagrams(lines: VisualLine[]): VisualLine[] {
     flush();
     for (const r of runs) {
       const count = r.reduce((n, w) => n + w.text.length, 0);
-      if (count < 4) continue;
+      // Sex strängar per schema, med siffror (inte t.ex. "O o o o" eller "1 2 3 4")
+      if (count < 6 || count % 6 || !r.some((w) => /\d/.test(w.text))) continue;
       const x0 = r[0].x;
       const x1 = r[r.length - 1].x + r[r.length - 1].w;
       // Flera scheman bredvid varandra kan ha lästs som en följd
-      const dw = (x1 - x0) / Math.max(1, Math.round(count / 6));
+      const dw = (x1 - x0) / (count / 6);
       const top = Math.min(...r.map((w) => w.y));
-      for (const w of r) drop.add(w);
+      const inDiagram: OcrWord[] = [];
       for (const o of lines) {
+        if (o === l) continue;
         for (const w of o.words) {
           const cx = w.x + w.w / 2;
           const cy = w.y + w.h / 2;
           if (cx < x0 - dw * 0.5 || cx > x1 + dw * 0.5 || cy >= top || cy < top - dw * 2.2) continue;
-          if (isChord(w.text) || /^[A-H]{1,3}$/.test(w.text) || FINGER.test(w.text)) drop.add(w);
+          if (isChord(w.text) || /^[A-H]{1,3}$/.test(w.text) || FINGER.test(w.text)) inDiagram.push(w);
         }
       }
+      // Ett schema har ackordets namn (eller brus från rutnätet) närmast ovanför, utan text
+      // emellan; annars är det något annat, t.ex. ett nummer under en textrad
+      let nearest: OcrWord | undefined;
+      for (const o of lines) {
+        if (o === l) continue;
+        for (const w of o.words) {
+          const cy = w.y + w.h / 2;
+          if (cy >= top || w.x + w.w < x0 - dw * 0.25 || w.x > x1 + dw * 0.25) continue;
+          if (!nearest || cy > nearest.y + nearest.h / 2) nearest = w;
+        }
+      }
+      if (!nearest || !(isChord(nearest.text) || /^[A-H]{1,3}$/.test(nearest.text)) || !inDiagram.some((w) => isChord(w.text))) continue;
+      for (const w of [...r, ...inDiagram]) drop.add(w);
     }
   }
   if (!drop.size) return lines;
@@ -378,10 +402,12 @@ export function dropChordDiagrams(lines: VisualLine[]): VisualLine[] {
 export function splitFooter(lines: VisualLine[], page: OcrPage, footer: string[]): VisualLine[] {
   const w = page.width || 1;
   const h = page.height || 1;
+  // Sidfoten har mindre text än låten (annars kan det vara en högerspalt som är längre)
+  const mh = median(lines.map((l) => l.bottom - l.top));
   let i = lines.length;
   while (i > 0) {
     const l = lines[i - 1];
-    if (l.top < h * 0.8 || Math.min(...l.words.map((x) => x.x)) < w * 0.5) break;
+    if (l.top < h * 0.8 || Math.min(...l.words.map((x) => x.x)) < w * 0.5 || l.bottom - l.top > mh * 0.9) break;
     i--;
   }
   // Allt på sidan kan inte vara sidfot

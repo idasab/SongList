@@ -114,7 +114,9 @@ export function parseHeader(line: string): Header | null {
   if (m) {
     const [, prefix, word, num] = m;
     const kind = HEADER_WORDS.find(([re]) => re.test(word))?.[1];
-    if (kind) {
+    // "Kör två" och "Last chorus" kan vara sångtext: med nummer i ord eller förled krävs kolon
+    const wordy = !!prefix || (!!num && !/^\d+$/.test(num));
+    if (kind && (!wordy || /:\s*$/.test(trimmed))) {
       const rest = m[4].trim();
       const n = num && (NUMBER_WORDS[num.toLowerCase()] ?? num);
       // "VERSE" i versaler visas som "Verse"

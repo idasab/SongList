@@ -55,7 +55,7 @@ export function chordProHeader(line: string): Header | null {
   const h = parseHeader(line);
   if (!h) return null;
   if (h.kind !== 'comment') return h;
-  return /^\s*[\[(]?\s*[A-Za-zÅÄÖåäö-]+\.?\s*\d*\s*[\])]?\s*:/.test(line) ? h : null;
+  return /^\s*[\[(]?\s*(?:(?:final|last|sista)\s+)?[A-Za-zÅÄÖåäö-]+\.?\s*(?:\d+|one|two|three|four|five|six|två|tre|fyra|fem)?\s*[\])]?\s*:/i.test(line) ? h : null;
 }
 
 /** Ackorden efter en rubrik ("G C D" eller "[G] [C]") som en ChordPro-rad. */
@@ -216,6 +216,31 @@ export function parseChordPro(source: string): ParsedSong {
   };
 
   const lines = source.replace(/\r\n?/g, '\n').split('\n');
+  const nextFilled = (from: number) => {
+    let j = from;
+    while (j < lines.length && !lines[j].trim()) j++;
+    return j;
+  };
+  // "Refräng" eller {chorus} som upprepar refrängen (ingen egen text efter)
+  const isChorusRepeat = (j: number) => {
+    const t = lines[j]?.trim() ?? '';
+    if (/^\{chorus\b/i.test(t)) return true;
+    const h = chordProHeader(t);
+    const after = lines[j + 1]?.trim();
+    return !!h && h.kind === 'chorus' && !h.trailing && (after === undefined || after === '' || after.startsWith('{'));
+  };
+  const isHeaderOrDirective = (j: number) => {
+    const t = lines[j]?.trim() ?? '';
+    return t.startsWith('{') || !!chordProHeader(t);
+  };
+  // Stycket som börjar på rad j följs av en upprepad refräng: då är stycket en vers
+  const stanzaBeforeRepeat = (j: number) => {
+    let k = j;
+    while (k < lines.length && lines[k].trim()) k++;
+    return isChorusRepeat(nextFilled(k));
+  };
+  // Har låten rubriker på verserna? Annars är stycken utan rubrik verser (bara refrängen har rubrik)
+  const versesLabeled = lines.some((l) => chordProHeader(l)?.kind === 'verse');
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li].replace(/\s+$/, '');
     const inPre = current.type === 'tab' || current.type === 'grid';
@@ -282,7 +307,13 @@ export function parseChordPro(source: string): ParsedSong {
         // Två tomrader i rad, eller tomrad sist i filen, avslutar delen. En enstaka tomrad
         // följd av mer text är ett radbyte i delen (t.ex. en lång refräng i två stycken).
         const next = lines[li + 1];
-        if (next === undefined || !next.trim() || next.trim().startsWith('{')) closeSection();
+        const ends =
+          next === undefined ||
+          !next.trim() ||
+          next.trim().startsWith('{') ||
+          // En refräng följd av ett stycke som i sin tur följs av "Refräng": stycket är en vers
+          (current.type === 'chorus' && (!versesLabeled || stanzaBeforeRepeat(li + 1)));
+        if (ends) closeSection();
         else current.lines.push({ type: 'empty' });
       } else if (current.type === 'none') {
         // Tomrad utanför en sektion: avsluta stycket
@@ -309,7 +340,9 @@ export function parseChordPro(source: string): ParsedSong {
       } else {
         const next = lines[li + 1]?.trim();
         // "Refräng:" med kolon följd av tomrad och text är en refräng med tomrad efter rubriken
-        const textAfter = /:\s*$/.test(line) && next === '' && lines.slice(li + 1).find((l) => l.trim())?.trim().startsWith('{') === false;
+        const body = nextFilled(li + 1);
+        const textAfter =
+          /:\s*$/.test(line) && next === '' && body < lines.length && !isHeaderOrDirective(body) && versesLabeled && !stanzaBeforeRepeat(body);
         if (header.kind === 'chorus' && !header.trailing && !textAfter && (next === undefined || next === '' || next.startsWith('{'))) {
           // "Refräng" ensamt på en rad = upprepa refrängen, som {chorus}
           closeSection();
