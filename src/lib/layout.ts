@@ -94,7 +94,11 @@ const HEADER_WORDS: [RegExp, HeaderKind][] = [
   ],
 ];
 
-const HEADER_RE = /^\s*[\[(]?\s*([A-Za-zÅÄÖåäö-]+)\.?\s*(\d+)?\s*[\])]?\s*:?\s*(.*)$/;
+// Nummer med bokstäver, t.ex. "VERSE ONE:"
+const NUMBER_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, två: 2, tre: 3, fyra: 4, fem: 5 };
+
+const HEADER_RE =
+  /^\s*[\[(]?\s*(?:(final|last|sista)\s+)?([A-Za-zÅÄÖåäö-]+)\.?\s*(\d+|one|two|three|four|five|six|två|tre|fyra|fem)?\s*[\])]?\s*:?\s*(.*)$/i;
 
 /** Delar som "A:", "B2:" eller "Del A:" – en versal följd av kolon (annars vore det ett ackord). */
 const PART_RE = /^(del\s+)?([A-ZÅÄÖ]\d*)\s*:$/i;
@@ -108,11 +112,15 @@ export function parseHeader(line: string): Header | null {
   }
   const m = HEADER_RE.exec(trimmed);
   if (m) {
-    const word = m[1];
+    const [, prefix, word, num] = m;
     const kind = HEADER_WORDS.find(([re]) => re.test(word))?.[1];
     if (kind) {
-      const rest = m[3].trim();
-      const label = (word.charAt(0).toUpperCase() + word.slice(1) + (m[2] ? ' ' + m[2] : '')).trim();
+      const rest = m[4].trim();
+      const n = num && (NUMBER_WORDS[num.toLowerCase()] ?? num);
+      // "VERSE" i versaler visas som "Verse"
+      const name = word === word.toUpperCase() ? word.charAt(0) + word.slice(1).toLowerCase() : word.charAt(0).toUpperCase() + word.slice(1);
+      const first = prefix ? `${prefix.charAt(0).toUpperCase()}${prefix.slice(1).toLowerCase()} ${name.toLowerCase()}` : name;
+      const label = (first + (n ? ' ' + n : '')).trim();
       if (!rest) return { kind, label };
       if (isChordLine(rest.split(/\s+/))) return { kind, label, trailing: rest };
       return null;

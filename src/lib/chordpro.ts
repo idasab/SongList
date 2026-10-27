@@ -31,7 +31,10 @@ export interface Section {
   lines: Line[];
   /** Sant om sektionen är en upprepning av en tidigare refräng ({chorus}) */
   isRepeat?: boolean;
-  /** Startad av en rubrikrad som "Vers 1:" i stället för ett direktiv; slutar vid tomrad */
+  /**
+   * Startad av en rubrikrad som "Vers 1:" i stället för ett direktiv. Slutar vid nästa rubrik,
+   * direktiv eller vid två tomrader i rad; en enstaka tomrad är ett radbyte inom delen.
+   */
   implicit?: boolean;
 }
 
@@ -274,8 +277,13 @@ export function parseChordPro(source: string): ParsedSong {
 
     if (line.trim() === '') {
       if (current.implicit) {
-        // Sektion som startats med en rubrikrad slutar vid tomrad
-        closeSection();
+        // Tomrad direkt efter rubriken hör inte till delen
+        if (!current.lines.length) continue;
+        // Två tomrader i rad, eller tomrad sist i filen, avslutar delen. En enstaka tomrad
+        // följd av mer text är ett radbyte i delen (t.ex. en lång refräng i två stycken).
+        const next = lines[li + 1];
+        if (next === undefined || !next.trim() || next.trim().startsWith('{')) closeSection();
+        else current.lines.push({ type: 'empty' });
       } else if (current.type === 'none') {
         // Tomrad utanför en sektion: avsluta stycket
         if (current.lines.length) closeSection();
@@ -295,10 +303,14 @@ export function parseChordPro(source: string): ParsedSong {
     const header = chordProHeader(line);
     if (header) {
       if (header.kind === 'comment') {
+        // "Outro:" efter en tomrad hör inte till delen ovanför
+        if (current.implicit && current.lines[current.lines.length - 1]?.type === 'empty') closeSection();
         current.lines.push({ type: 'comment', text: header.label, style: 'normal' });
       } else {
         const next = lines[li + 1]?.trim();
-        if (header.kind === 'chorus' && !header.trailing && (next === undefined || next === '' || next.startsWith('{'))) {
+        // "Refräng:" med kolon följd av tomrad och text är en refräng med tomrad efter rubriken
+        const textAfter = /:\s*$/.test(line) && next === '' && lines.slice(li + 1).find((l) => l.trim())?.trim().startsWith('{') === false;
+        if (header.kind === 'chorus' && !header.trailing && !textAfter && (next === undefined || next === '' || next.startsWith('{'))) {
           // "Refräng" ensamt på en rad = upprepa refrängen, som {chorus}
           closeSection();
           const ref = lastChorus as Section | null;

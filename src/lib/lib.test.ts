@@ -630,6 +630,35 @@ describe('igenkänning av ChordPro', () => {
   });
 });
 
+describe('delar med rubrikrad', () => {
+  it('en tomrad inom delen är ett radbyte, två tomrader avslutar den', () => {
+    const song = parseChordPro(
+      ['Vers:', '[C]Solen går upp', '', '[G]över ån', '', '', 'Refräng:', '[F]Sjung nu', '', '[C]med oss', '', 'Vers 2:', '[C]Månen'].join('\n'),
+    );
+    expect(song.sections.map((s) => [s.type, s.label, s.lines.map((l) => l.type).join(',')])).toEqual([
+      ['verse', 'Vers', 'lyrics,empty,lyrics'],
+      ['chorus', 'Refräng', 'lyrics,empty,lyrics'],
+      ['verse', 'Vers 2', 'lyrics'],
+    ]);
+  });
+
+  it('"Outro:" efter en tomrad avslutar delen', () => {
+    const song = parseChordPro('Refräng:\n[F]Sjung nu\n\nOutro:\n[C] [G]');
+    expect(song.sections.map((s) => [s.type, s.lines.map((l) => l.type).join(',')])).toEqual([
+      ['chorus', 'lyrics'],
+      ['none', 'comment,lyrics'],
+    ]);
+  });
+
+  it('tomrad direkt efter rubriken', () => {
+    const song = parseChordPro('VERSE ONE:\n\n[C]Solen går upp\n\n\nCHORUS:\n\n[F]Sjung nu');
+    expect(song.sections.map((s) => [s.type, s.lines.length])).toEqual([
+      ['verse', 1],
+      ['chorus', 1],
+    ]);
+  });
+});
+
 describe('ackord mellan ord', () => {
   it('flyttar ett ackord från mellanslaget till nästa ord', () => {
     const segs = splitWords(parseLyricsLine('Ett [E]två, tre [E/G#]fem,[A/C#] sex sju'));
