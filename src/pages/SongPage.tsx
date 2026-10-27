@@ -57,6 +57,8 @@ import { formatDate } from './SetlistsPage';
 
 const MIN_FONT = 12;
 const MAX_FONT = 44;
+/** Minsta textstorlek när texten krymps för att låten ska rymmas i två spalter */
+const FIT_MIN_FONT = 14;
 
 function scrollPxPerSecond(level: number): number {
   return 4 + level * level * 1.2;
@@ -180,11 +182,14 @@ export function SongPage() {
   // Två spalter på en bred skärm i liggande läge, men bara när hela låten då får plats
   const wide = useMediaQuery('(min-width: 900px) and (orientation: landscape)');
   const wantColumns = wide && settings.twoColumns !== false && !song?.attachment;
-  const [columnsFit, setColumnsFit] = useState(true);
-  const columns = wantColumns && columnsFit;
+  // Ryms låten inte i två spalter krymps texten (ner till FIT_MIN_FONT) tills den gör det;
+  // annars en spalt i vald textstorlek. Inställningen för textstorlek ändras inte.
+  const [fit, setFit] = useState({ font: settings.fontSize, ok: true });
+  const columns = wantColumns && fit.ok;
+  const fontSize = columns ? Math.min(fit.font, settings.fontSize) : settings.fontSize;
   // Ökar när låtytans höjd ändras (t.ex. när kontrollerna eller ackorddiagrammen visas)
   const [areaHeight, setAreaHeight] = useState(0);
-  const metrics = useLineMetrics(songRef, [parsed, showChords, settings.fontSize, transpose, stage, song?.id, columns, settings.simplifyChords]);
+  const metrics = useLineMetrics(songRef, [parsed, showChords, fontSize, transpose, stage, song?.id, columns, settings.simplifyChords]);
 
   const writeLayer = useCallback(
     (next: Annotations) => {
@@ -311,8 +316,8 @@ export function SongPage() {
   }, [id]);
   useEffect(() => () => metronome.current?.close(), []);
 
-  // Får låten inte plats i två spalter: en spalt som vanligt (prövas om när något ändras,
-  // även sådant ovanför låten som tipset om kapo och höjden på ytan)
+  // Får låten inte plats i två spalter: mindre text, och till sist en spalt som vanligt (prövas
+  // om när något ändras, även sådant ovanför låten som tipset om kapo och höjden på ytan)
   const fitKey = [
     song?.id,
     song?.content,
@@ -334,14 +339,17 @@ export function SongPage() {
     ro.observe(el);
     return () => ro.disconnect();
   }, [wantColumns, id]);
-  useLayoutEffect(() => setColumnsFit(true), [fitKey]);
+  useLayoutEffect(() => setFit({ font: settings.fontSize, ok: true }), [fitKey]);
+  // Mäts före ritningen: en mindre storlek i taget tills låten ryms (syns inte som flimmer)
   useLayoutEffect(() => {
     const el = scrollRef.current;
     const songEl = songRef.current;
     if (!columns || !el || !songEl) return;
     const bottom = songEl.getBoundingClientRect().bottom - el.getBoundingClientRect().top + el.scrollTop;
-    if (bottom > el.clientHeight) setColumnsFit(false);
-  }, [columns, fitKey]);
+    if (bottom <= el.clientHeight) return;
+    const min = Math.min(FIT_MIN_FONT, settings.fontSize);
+    setFit(fontSize - 1 >= min ? { font: fontSize - 1, ok: true } : { font: settings.fontSize, ok: false });
+  }, [columns, fitKey, fontSize]);
 
   // Börja om från toppen när låten byts
   useEffect(() => {
@@ -878,7 +886,7 @@ export function SongPage() {
               transpose,
               notation: settings.notation,
               showChords,
-              fontSize: settings.fontSize,
+              fontSize,
               columns: columns ? 2 : 1,
               simplify: settings.simplifyChords,
               onChordClick: annotating ? undefined : setChordSheet,

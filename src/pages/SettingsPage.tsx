@@ -84,7 +84,7 @@ export function SettingsPage() {
             <div className="toggle-row">
               <div>
                 <div>Två spalter i liggande läge</div>
-                <div className="muted small-text">På en bred skärm, när hela låten då får plats utan att scrolla</div>
+                <div className="muted small-text">På en bred skärm, när låten då får plats utan att scrolla (texten görs mindre vid behov)</div>
               </div>
               <Switch label="Två spalter" checked={settings.twoColumns !== false} onChange={(v) => update({ twoColumns: v })} />
             </div>
