@@ -140,6 +140,11 @@ describe('textimport', () => {
     expect(parseHeader('Vers som inte är rubrik')).toBeNull();
   });
 
+  it('"-7" efter ett ackord lägger till 7', () => {
+    const out = textToChordPro('Am       -7\nSolen går upp\n');
+    expect(out).toMatch(/^\[Am\]Solen går ?\[Am7\] ?upp$/m);
+  });
+
   it('konverterar ackord ovanför text (monospace)', () => {
     const text = `Morgonvisa
 Test
@@ -250,11 +255,15 @@ describe('ovanliga typsnitt i OCR', () => {
         line(word('Solen', 50, 160, 100), word('går', 170, 160, 60), word('upp', 300, 160, 60), word('över', 400, 160, 80), word('ån', 500, 160, 40)),
         line(word('ASUS', 50, 260, 80), word("D'", 300, 260, 25)),
         line(word('S', 50, 320, 20), word('olen', 74, 320, 80), word('lyser', 300, 320, 100)),
+        line(word('FAtm', 50, 420, 60), word('-7', 300, 420, 30), word('ÅSuUS', 400, 420, 80), word('ÅA', 520, 420, 30)),
+        line(word('Månen', 50, 480, 100), word('går', 170, 480, 60), word('ner', 300, 480, 60), word('över', 400, 480, 80), word('ån', 520, 480, 40)),
       ],
     };
     const out = ocrToChordPro([page]);
     expect(out).toContain('[F#m]Solen går [G]upp [A]över [D]ån');
     expect(out).toContain('[Asus]Solen [D]lyser');
+    // "-7" lägger till 7 i ackordet före
+    expect(out).toContain('[F#m]Månen går [F#m7]ner [Asus]över [A]ån');
   });
 
   it('behåller ord med låg säkerhet om de har bokstäver', () => {

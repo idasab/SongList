@@ -1,7 +1,7 @@
 // Omvandlar OCR-resultat (ord med positioner) till ChordPro.
 
 import { isChord } from './chords';
-import { assembleChordPro, isChordLine, isChordToken, parseHeader, type Row, type SourceRow, type Token } from './layout';
+import { assembleChordPro, expandChordSuffixes, isChordLine, isChordToken, parseHeader, type Row, type SourceRow, type Token } from './layout';
 
 /** Normaliserade koordinater 0..1 med origo uppe till vänster. */
 export interface OcrBox {
@@ -170,9 +170,17 @@ export function fixOcrChord(t: Token, charW: number): Token[] | null {
     .replace(/^[o°•·.,'’]+(?=[A-H])/, '')
     .replace(/(?<=\S)[°•·.,'’`]+$/, '');
   if (s in LOOKALIKE) s = LOOKALIKE[s];
+  // A med ring eller prickar ("ÅA", "ÅSuUS")
+  s = s.replace(/^[ÅÄåä](?=[A-Za-z#]|$)/, 'A');
   // Versaler i hela ackordet, t.ex. "ASUS" för Asus
-  const caps = /^([A-H][#b]?)(SUS|MAJ|DIM|ADD|AUG|M)(\d*)$/.exec(s);
-  if (caps) s = `${caps[1]}${caps[2].toLowerCase()}${caps[3]}`;
+  const caps = /^([A-H][#b]?)([A-Za-z]{2,})(\d*)$/.exec(s);
+  if (caps && !isChord(s)) {
+    const lower = caps[2].toLowerCase();
+    // Bokstäver som lästs två gånger, t.ex. "SuUS" för sus
+    const single = lower.replace(/(.)\1/g, '$1');
+    const fixed = [lower, single].map((x) => `${caps[1]}${x}${caps[3]}`).find((c) => isChord(c));
+    if (fixed) s = fixed;
+  }
   // Korsförtecknet läst som en bokstav: "Fam", "FAtm" och "FAm7" för F#m
   const sharp = /^([A-H])(?:a|A|At|At|H)(m.*|7.*|sus.*)$/.exec(s);
   if (sharp && !isChord(s) && isChord(`${sharp[1]}#${sharp[2]}`)) s = `${sharp[1]}#${sharp[2]}`;
@@ -201,16 +209,18 @@ export function fixOcrChord(t: Token, charW: number): Token[] | null {
 
 /** Rättar en rad som ser ut att vara en ackordrad men har felästa ackord. */
 function fixChordRow(row: Row): Row {
+  row = { ...row, tokens: expandChordSuffixes(row.tokens) };
   const texts = row.tokens.map((t) => t.text);
   if (isChordLine(texts)) return row;
   const widths = row.tokens.filter((t) => t.w).map((t) => t.w! / Math.max(1, t.text.length));
   const charW = median(widths) || row.spaceWidth;
-  const fixed: Token[] = [];
+  let fixed: Token[] = [];
   for (const t of row.tokens) {
     const f = fixOcrChord(t, charW);
     if (f) fixed.push(...f);
     else fixed.push(t);
   }
+  fixed = expandChordSuffixes(fixed);
   if (!isChordLine(fixed.map((t) => t.text), CHORD_TOLERANCE)) return row;
   return { ...row, tokens: fixed };
 }

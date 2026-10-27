@@ -43,6 +43,25 @@ export function isChordToken(t: string): boolean {
   return isChord(stripParens(t));
 }
 
+/**
+ * "-7" efter ett ackord betyder att 7 läggs till: "F#m -7" = F#m och sedan F#m7. Biten blir
+ * det fullständiga ackordet.
+ */
+export function expandChordSuffixes(tokens: Token[]): Token[] {
+  let prev: string | undefined;
+  return tokens.map((t) => {
+    const m = /^[-–]((?:maj|sus|add|m)?\d+)$/.exec(t.text);
+    if (m && prev && isChord(prev + m[1])) {
+      return { ...t, text: prev + m[1] };
+    }
+    const base = stripParens(t.text);
+    // Bara ackordets grund ändras, inte ett tidigare tillägg: "G -7 -6" = G7, G6
+    if (isChord(base)) prev = m ? prev : base;
+    else if (!NOISE_TOKEN.test(t.text)) prev = undefined;
+    return t;
+  });
+}
+
 /** En rad räknas som ackordrad om (nästan) alla ord är ackord. */
 export function isChordLine(tokens: string[], tolerance = 0): boolean {
   const meaningful = tokens.filter((t) => !NOISE_TOKEN.test(t));
@@ -195,6 +214,7 @@ export function assembleChordPro(rows: SourceRow[], opts: AssembleOptions = {}):
   while (end > start && rows[end - 1] === null) end--;
   rows = rows.slice(start, end);
 
+  rows = rows.map((r) => (r ? { ...r, tokens: expandChordSuffixes(r.tokens) } : r));
   const chordFlags = rows.map((r) => (r ? isChordLine(r.tokens.map((t) => t.text), tol) : false));
 
   // Titel och artist: ett kort inledande stycke (högst två rader) utan ackord, följt av tomrad.
