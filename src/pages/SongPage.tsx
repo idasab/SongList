@@ -1264,18 +1264,17 @@ function PickFileSongSheet({ song, onClose }: { song: Song; onClose: () => void 
             {song.title}.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <button className="btn primary" disabled={busy} onClick={() => void run(true)}>
-              Slå ihop till en låt
+            {/* Varje val med sin förklaring i samma knapp */}
+            <button className="choice-btn" disabled={busy} onClick={() => void run(true)}>
+              <span className="choice-title">Slå ihop till en låt</span>
+              <span className="muted small-text">
+                {other.title} tas bort, och setlistor som har den får {song.title} i stället.
+              </span>
             </button>
-            <p className="muted small-text" style={{ margin: '0 0 6px' }}>
-              {other.title} tas bort, och setlistor som har den får {song.title} i stället.
-            </p>
-            <button className="btn" disabled={busy} onClick={() => void run(false)}>
-              Kopiera bara filerna
+            <button className="choice-btn" disabled={busy} onClick={() => void run(false)}>
+              <span className="choice-title">Kopiera bara filerna</span>
+              <span className="muted small-text">{other.title} finns kvar som egen låt.</span>
             </button>
-            <p className="muted small-text" style={{ margin: '0 0 6px' }}>
-              {other.title} finns kvar som egen låt.
-            </p>
             <button className="btn ghost" disabled={busy} onClick={() => setOther(null)}>
               Välj en annan
             </button>

@@ -2231,3 +2231,32 @@ label.btn.disabled {
   text-align: left;
   cursor: pointer;
 }
+
+/* Ett val med rubrik och förklaring i samma knapp */
+.choice-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.choice-btn:active {
+  border-color: var(--accent);
+}
+
+.choice-btn:disabled {
+  opacity: 0.5;
+}
+
+.choice-title {
+  font-weight: 600;
+}
