@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 130 130">
+  <!-- Appikonen: fyrkantig utan rundade hörn (iOS rundar själv) och helt utan genomskinlighet -->
+  <rect width="130" height="130" fill="#458268"/>
+  <path d="M65 112 C44 92 28 70 28 50 C28 30 46 22 65 22 C84 22 102 30 102 50 C102 70 86 92 65 112 Z" fill="#ffffff"/>
+  <rect x="46" y="46" width="12" height="9" rx="3" fill="#a45f66"/>
+  <rect x="46" y="61" width="38" height="7" rx="3.5" fill="#458268"/>
+</svg>
