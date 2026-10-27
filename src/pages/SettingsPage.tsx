@@ -90,6 +90,13 @@ export function SettingsPage() {
             </div>
             <div className="toggle-row">
               <div>
+                <div>Bläddra PDF:er i sidled</div>
+                <div className="muted small-text">En sida i taget som man sveper mellan, i stället för att scrolla nedåt</div>
+              </div>
+              <Switch label="Bläddra PDF:er i sidled" checked={settings.filePaging !== false} onChange={(v) => update({ filePaging: v })} />
+            </div>
+            <div className="toggle-row">
+              <div>
                 <div>Förenklade ackord</div>
                 <div className="muted small-text">Visar t.ex. Cmaj7, Dsus4 och G/B som C, D och G. Låtarna ändras inte.</div>
               </div>

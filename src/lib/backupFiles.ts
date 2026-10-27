@@ -1,7 +1,7 @@
 // Originalfiler (PDF:er och bilder) i säkerhetskopior i iCloud. Varje fil sparas en gång i
 // Säkerhetskopior/Filer med ett namn efter innehållet; säkerhetskopiorna pekar på filen.
 
-import type { BackupFile, SongAttachment } from './model';
+import { filesFields, songFiles, type BackupFile, type SongAttachment } from './model';
 
 /** Innehållet i en data-URL som base64, eller null om den inte är base64-kodad. */
 export function dataUrlBase64(dataUrl: string): string | null {
@@ -33,7 +33,7 @@ export function attachmentFileName(hash: string, a: SongAttachment): string {
 
 /** Filerna som en säkerhetskopia pekar på. */
 export function referencedFiles(backup: BackupFile): string[] {
-  return backup.songs.flatMap((s) => (s.attachment?.file ? [s.attachment.file] : []));
+  return backup.songs.flatMap((s) => songFiles(s).flatMap((a) => (a.file ? [a.file] : [])));
 }
 
 /**
@@ -41,17 +41,20 @@ export function referencedFiles(backup: BackupFile): string[] {
  * webbläsaren) behålls som vanliga låtar, med en anteckning om vad som saknas.
  */
 export function markMissingAttachments(backup: BackupFile): BackupFile {
-  if (!backup.songs.some((s) => s.attachment && !s.attachment.dataUrl)) return backup;
+  const missing = (a: SongAttachment) => !a.dataUrl;
+  if (!backup.songs.some((s) => songFiles(s).some(missing))) return backup;
   return {
     ...backup,
-    songs: backup.songs.map((s) =>
-      s.attachment && !s.attachment.dataUrl
-        ? {
-            ...s,
-            attachment: undefined,
-            content: `${s.content.trim()}\n{comment: Originalfilen ${s.attachment.name} saknas – återställ i iOS-appen för att få med den}\n`,
-          }
-        : s,
-    ),
+    songs: backup.songs.map((s) => {
+      const files = songFiles(s);
+      const gone = files.filter(missing);
+      if (!gone.length) return s;
+      const names = gone.map((a) => a.name).join(', ');
+      return {
+        ...s,
+        ...filesFields(files.filter((a) => !missing(a))),
+        content: `${s.content.trim()}\n{comment: ${gone.length === 1 ? `Originalfilen ${names} saknas` : `Originalfilerna ${names} saknas`} – återställ i iOS-appen för att få med ${gone.length === 1 ? 'den' : 'dem'}}\n`,
+      };
+    }),
   };
 }

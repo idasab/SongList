@@ -138,13 +138,7 @@ export async function expandFiles(
         if (f.size > 2_000_000) throw new Error('filen är för stor');
         result.items.push({ fileName: f.name, raw: decodeText(await f.arrayBuffer()), kind: type === 'chordpro' ? 'chordpro' : undefined });
       } else if (type === 'pdf' || type === 'image') {
-        if (f.size > MAX_ORIGINAL_BYTES) throw new Error('filen är för stor (högst 25 MB)');
-        const original: SongAttachment = {
-          name: f.name,
-          mime: f.type || mimeFromName(f.name) || (type === 'pdf' ? 'application/pdf' : 'image/jpeg'),
-          dataUrl: await readFileAsDataUrl(f),
-          kind: type,
-        };
+        const original = await fileToAttachment(f);
         progress('Skapar förhandsbild…');
         const previewDataUrl = await makePreview(f, type).catch(() => undefined);
         const asFile: ImportCandidate = {
@@ -179,6 +173,19 @@ export async function expandFiles(
 }
 
 /** Tolkar en PDF eller bild till text och ackord (PDF-text eller textigenkänning). */
+/** En PDF eller bild som fil till en låt. */
+export async function fileToAttachment(f: File): Promise<SongAttachment> {
+  const type = fileType(f.name, f.type);
+  if (type !== 'pdf' && type !== 'image') throw new Error('bara PDF:er och bilder');
+  if (f.size > MAX_ORIGINAL_BYTES) throw new Error('filen är för stor (högst 25 MB)');
+  return {
+    name: f.name,
+    mime: f.type || mimeFromName(f.name) || (type === 'pdf' ? 'application/pdf' : 'image/jpeg'),
+    dataUrl: await readFileAsDataUrl(f),
+    kind: type,
+  };
+}
+
 export async function interpretFile(
   f: File,
   type: 'pdf' | 'image',

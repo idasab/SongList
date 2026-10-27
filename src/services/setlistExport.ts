@@ -28,7 +28,7 @@ import {
   type InkColor,
   type LineMetrics,
 } from '../lib/annotations';
-import type { Setlist, Song, SongAttachment } from '../lib/model';
+import { songFiles, type Setlist, type Song, type SongAttachment } from '../lib/model';
 import { safeFileName, saveBinaryFile, saveTextFile } from './files';
 import { loadPdfJs } from './fileImport';
 import { pdfSafe } from '../lib/pdfText';
@@ -107,6 +107,13 @@ function fileBase(setlist: Setlist): string {
 
 // --- Text ---
 
+/** Namnen på låtens filer. */
+function fileNames(song: Song): string {
+  return songFiles(song)
+    .map((a) => a.name)
+    .join(', ');
+}
+
 /** En låts text utan ackord. */
 function songText(p: PreparedSong, number?: number): string {
   const out: string[] = [number ? `${number}. ${p.song.title}` : p.song.title];
@@ -114,7 +121,7 @@ function songText(p: PreparedSong, number?: number): string {
   if (p.song.artist) out.push(p.song.artist);
   out.push('');
   if (p.song.attachment) {
-    out.push(`(Bifogad fil: ${p.song.attachment.name})`);
+    out.push(`(Bifogad fil: ${fileNames(p.song)})`);
     return tidy(out.join('\n'));
   }
   for (const sec of p.parsed.sections) {
@@ -182,7 +189,7 @@ export function buildTextExport(setlist: Setlist, songs: Record<string, Song>, n
 
 /** En låts ChordPro-källa med transponeringen inskriven. */
 function songChordPro(p: PreparedSong): string {
-  if (p.song.attachment) return `${p.song.content.trim()}\n{comment: Bifogad fil: ${p.song.attachment.name}}\n`;
+  if (p.song.attachment) return `${p.song.content.trim()}\n{comment: Bifogad fil: ${fileNames(p.song)}}\n`;
   const src = p.transpose
     ? transposeSource(p.song.content, {
         transpose: p.transpose,
@@ -607,8 +614,14 @@ function drawFooters(doc: JsPdf, footer: string) {
 }
 
 /** Ritar in en bifogad bild eller PDF (som bilder av sidorna) i exporten. */
-async function drawAttachment(c: PdfCtx, a: SongAttachment) {
+/** Låtens filer i tur och ordning, varje sida på en egen sida i PDF:en. */
+async function drawAttachments(c: PdfCtx, files: SongAttachment[]) {
   const images: { data: string; w: number; h: number }[] = [];
+  for (const a of files) await renderAttachment(a, images);
+  drawImages(c, images);
+}
+
+async function renderAttachment(a: SongAttachment, images: { data: string; w: number; h: number }[]) {
   if (a.kind === 'image') {
     const size = await imageSize(a.dataUrl);
     images.push({ data: await toJpeg(a.dataUrl, size), w: size.w, h: size.h });
@@ -634,6 +647,9 @@ async function drawAttachment(c: PdfCtx, a: SongAttachment) {
       void task.destroy();
     }
   }
+}
+
+function drawImages(c: PdfCtx, images: { data: string; w: number; h: number }[]) {
   const maxW = PAGE_W - 2 * MARGIN_X;
   images.forEach((img, i) => {
     if (i > 0) {
@@ -710,7 +726,7 @@ async function renderPdf(
     const tops: number[] = [];
     drawSongHeader(c, p, number, tops);
     if (p.song.attachment) {
-      await drawAttachment(c, p.song.attachment);
+      await drawAttachments(c, songFiles(p.song));
       continue;
     }
     let n = 1;
@@ -764,10 +780,11 @@ export async function buildSongFiles(
     const p = list[i];
     const base = `${String(i + 1).padStart(width, '0')} ${safeFileName(p.song.title)}`;
     if (p.song.attachment) {
-      // Låtar som sparats som fil (t.ex. noter) bifogas som originalfilen
-      const a = p.song.attachment;
-      const ext = /\.[^.]+$/.exec(a.name)?.[0] ?? (a.kind === 'pdf' ? '.pdf' : '.jpg');
-      files.push({ name: `${base}${ext}`, mime: a.mime, blob: await (await fetch(a.dataUrl)).blob() });
+      // Låtar som sparats som fil (t.ex. noter) bifogas som originalfilen (eller filerna)
+      for (const [n, a] of songFiles(p.song).entries()) {
+        const ext = /\.[^.]+$/.exec(a.name)?.[0] ?? (a.kind === 'pdf' ? '.pdf' : '.jpg');
+        files.push({ name: `${base}${n ? ` (sida ${n + 1})` : ''}${ext}`, mime: a.mime, blob: await (await fetch(a.dataUrl)).blob() });
+      }
       continue;
     }
     if (format === 'text') {

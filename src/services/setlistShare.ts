@@ -9,7 +9,7 @@ import { create } from 'zustand';
 import { toast } from '../components/ui';
 import { normalizeTranspose } from '../lib/chords';
 import { findDuplicates } from '../lib/duplicates';
-import { newId, type Setlist, type Song, type SongAttachment } from '../lib/model';
+import { newId, songFiles, type Setlist, type Song, type SongAttachment } from '../lib/model';
 import { isCue } from '../lib/setlist';
 import { liveSongs, useStore } from '../store/useStore';
 
@@ -24,6 +24,7 @@ interface SharedSong {
   tags: string[];
   transpose: number;
   attachment?: SongAttachment;
+  extraAttachments?: SongAttachment[];
 }
 
 export interface SharedSetlist {
@@ -53,7 +54,16 @@ export function buildSharedSetlist(setlist: Setlist, songs: Record<string, Song>
     },
     songs: ids.map((id) => {
       const s = songs[id];
-      return { id: s.id, title: s.title, artist: s.artist, content: s.content, tags: s.tags, transpose: s.transpose, attachment: s.attachment };
+      return {
+        id: s.id,
+        title: s.title,
+        artist: s.artist,
+        content: s.content,
+        tags: s.tags,
+        transpose: s.transpose,
+        attachment: s.attachment,
+        extraAttachments: s.extraAttachments,
+      };
     }),
   };
 }
@@ -98,9 +108,18 @@ export function parseSharedSetlist(text: string): SharedSetlist | null {
       artist: typeof s.artist === 'string' ? s.artist : '',
       tags: Array.isArray(s.tags) ? s.tags.filter((t) => typeof t === 'string') : [],
       transpose: Number.isInteger(s.transpose) ? normalizeTranspose(s.transpose) : 0,
-      attachment: s.attachment && typeof s.attachment.dataUrl === 'string' && s.attachment.dataUrl ? s.attachment : undefined,
+      ...sharedFiles(s),
     })),
   };
+}
+
+const validFile = (a: unknown): a is SongAttachment =>
+  !!a && typeof a === 'object' && typeof (a as SongAttachment).dataUrl === 'string' && !!(a as SongAttachment).dataUrl;
+
+/** Låtens filer i en delad fil, bara de som har innehåll. */
+function sharedFiles(s: SharedSong): Pick<SharedSong, 'attachment' | 'extraAttachments'> {
+  const files = [s.attachment, ...(Array.isArray(s.extraAttachments) ? s.extraAttachments : [])].filter(validFile);
+  return { attachment: files[0], extraAttachments: files.length > 1 ? files.slice(1) : undefined };
 }
 
 /** Hur många av låtarna mottagaren redan har (används i stället för att läggas till). */
@@ -124,7 +143,7 @@ export async function importSharedSetlist(shared: SharedSetlist): Promise<Setlis
   const ids = existingSongs(shared, st.songs);
   for (const s of shared.songs) {
     if (ids.has(s.id)) continue;
-    const saved = await st.saveSong({ content: s.content, tags: s.tags, attachment: s.attachment });
+    const saved = await st.saveSong({ content: s.content, tags: s.tags, files: songFiles(s) });
     if (s.transpose) await st.updateSongPrefs(saved.id, { transpose: s.transpose });
     ids.set(s.id, saved.id);
   }

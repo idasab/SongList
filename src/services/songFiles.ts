@@ -2,7 +2,7 @@
 // (PDF eller bild) för låtar som sparats som fil. Används som läsbar backup i iCloud Drive och
 // för att flytta låtarna till en annan app.
 
-import type { Song } from '../lib/model';
+import { songFiles, type Song, type SongAttachment } from '../lib/model';
 import { hasNativePlugin, SongListNative } from '../native/songlistNative';
 import { liveSongs, useStore } from '../store/useStore';
 import { safeFileName, saveBinaryFile } from './files';
@@ -13,36 +13,49 @@ export const SONG_FILES_DIR = 'Låtar';
 export interface SongFile {
   song: Song;
   name: string;
+  /** Låtens fil (PDF eller bild); saknas för låtar med text och ackord */
+  file?: SongAttachment;
+  /** Vilken av låtens filer (0 = den första) */
+  index: number;
 }
 
 const FILE_EXT = /\.(cho|chopro|pdf|jpe?g|png|gif|webp|heic)$/i;
 
-function extension(song: Song): string {
-  const a = song.attachment;
+function extension(a: SongAttachment | undefined): string {
   if (!a) return '.cho';
   return /\.[^.]+$/.exec(a.name)?.[0].toLowerCase() ?? (a.kind === 'pdf' ? '.pdf' : '.jpg');
 }
 
-/** Ett unikt filnamn per låt: "Titel – Artist.cho". */
+/**
+ * Ett unikt filnamn per låt: "Titel – Artist.cho". En låt med flera filer får en fil var:
+ * "Titel.pdf", "Titel (sida 2).pdf" …
+ */
 export function songFileNames(songs: Song[]): SongFile[] {
   const used = new Set<string>();
   const sorted = [...songs].sort((a, b) => a.title.localeCompare(b.title, 'sv') || a.createdAt - b.createdAt);
-  return sorted.map((song) => {
-    const base = safeFileName(song.artist ? `${song.title} – ${song.artist}` : song.title);
-    const ext = extension(song);
-    let name = base + ext;
-    for (let n = 2; used.has(name.toLowerCase()); n++) name = `${base} (${n})${ext}`;
-    used.add(name.toLowerCase());
-    return { song, name };
+  return sorted.flatMap((song) => {
+    const title = safeFileName(song.artist ? `${song.title} – ${song.artist}` : song.title);
+    const files: (SongAttachment | undefined)[] = song.attachment ? songFiles(song) : [undefined];
+    return files.map((file, index) => {
+      const base = index ? `${title} (sida ${index + 1})` : title;
+      const ext = extension(file);
+      let name = base + ext;
+      for (let n = 2; used.has(name.toLowerCase()); n++) name = `${base} (${n})${ext}`;
+      used.add(name.toLowerCase());
+      return { song, name, file, index };
+    });
   });
 }
+
+/** Id i förteckningen: låtens id, med filens nummer för låtens andra fil och framåt */
+const manifestId = (f: SongFile) => (f.index ? `${f.song.id}#${f.index + 1}` : f.song.id);
 
 function textBytes(text: string): Uint8Array {
   return new TextEncoder().encode(text.endsWith('\n') ? text : text + '\n');
 }
 
 async function fileBytes(f: SongFile): Promise<Uint8Array> {
-  if (f.song.attachment) return new Uint8Array(await (await fetch(f.song.attachment.dataUrl)).arrayBuffer());
+  if (f.file) return new Uint8Array(await (await fetch(f.file.dataUrl)).arrayBuffer());
   return textBytes(f.song.content);
 }
 
@@ -80,17 +93,17 @@ export async function mirrorSongsToICloud(): Promise<number> {
   const next: Manifest = {};
   for (const f of files) {
     // En annan enhet har redan skrivit en nyare version (den här enheten har inte synkat än)
-    const ahead = byId.get(f.song.id);
+    const ahead = byId.get(manifestId(f));
     if (ahead && ahead.updatedAt > f.song.updatedAt && present.has(ahead.name)) {
       next[ahead.name] = { id: ahead.id, updatedAt: ahead.updatedAt };
       continue;
     }
     const known = manifest[f.name];
-    next[f.name] = { id: f.song.id, updatedAt: f.song.updatedAt };
-    if (present.has(f.name) && known?.id === f.song.id && known.updatedAt === f.song.updatedAt) continue;
+    next[f.name] = { id: manifestId(f), updatedAt: f.song.updatedAt };
+    if (present.has(f.name) && known?.id === manifestId(f) && known.updatedAt === f.song.updatedAt) continue;
     const path = `${SONG_FILES_DIR}/${f.name}`;
-    if (f.song.attachment) {
-      const data = f.song.attachment.dataUrl.replace(/^data:[^,]*,/, '');
+    if (f.file) {
+      const data = f.file.dataUrl.replace(/^data:[^,]*,/, '');
       await SongListNative.writeFile({ scope: 'documents', path, data, base64: true });
     } else {
       await SongListNative.writeFile({ scope: 'documents', path, data: f.song.content.replace(/\n?$/, '\n') });
@@ -99,7 +112,7 @@ export async function mirrorSongsToICloud(): Promise<number> {
   // Låtar som den här enheten inte känner till än (från en annan enhet) får vara kvar;
   // låtar som raderats här tas bort
   for (const [name, e] of Object.entries(manifest)) {
-    if (!next[name] && !allSongs[e.id] && present.has(name)) next[name] = e;
+    if (!next[name] && !allSongs[e.id.replace(/#\d+$/, '')] && present.has(name)) next[name] = e;
   }
   for (const e of existing) {
     if (next[e.name] || !FILE_EXT.test(e.name)) continue;
@@ -110,7 +123,7 @@ export async function mirrorSongsToICloud(): Promise<number> {
     }
   }
   await SongListNative.writeFile({ scope: 'documents', path: MANIFEST, data: JSON.stringify(next) });
-  return files.length;
+  return new Set(files.map((f) => f.song.id)).size;
 }
 
 /** Alla låtar som filer i en zip-fil. */
@@ -119,7 +132,7 @@ export async function buildSongsZip(): Promise<{ zip: Uint8Array; count: number 
   const { zipSync } = await import('fflate');
   const entries: Record<string, Uint8Array> = {};
   for (const f of files) entries[f.name] = await fileBytes(f);
-  return { zip: zipSync(entries, { level: 6 }), count: files.length };
+  return { zip: zipSync(entries, { level: 6 }), count: new Set(files.map((f) => f.song.id)).size };
 }
 
 /** Sparar alla låtar som filer i en zip-fil. */

@@ -1,13 +1,15 @@
 import { memo, useCallback, useDeferredValue, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Check, ListChecks, ListMusic, Music, Plus, Search, SlidersHorizontal, Tag, Tags, X } from 'lucide-react';
+import { Check, Files, ListChecks, ListMusic, Music, Plus, Search, SlidersHorizontal, Tag, Tags, X } from 'lucide-react';
 import { Header, Sheet, toast } from '../components/ui';
 import { TagInput } from '../components/TagInput';
 import { CategorySelect } from '../components/CategorySelect';
 import { NO_ARTIST_GROUP, filterSongs, groupLetter, keyIdLabel, keysInLibrary, songKey, sortSongs } from '../lib/search';
 import { formatKey } from '../lib/chords';
 import { allTags, categoryName, liveCategories, liveSongs, normalizeTags, useStore } from '../store/useStore';
-import type { Song } from '../lib/model';
+import { songFiles, type Song } from '../lib/model';
+import { pieceGroups, pieceTitle } from '../lib/fileGroups';
+import { mergeSongs } from '../services/mergeSongs';
 import { useRememberScroll } from '../hooks/useRememberScroll';
 import { ALPHABET, AlphabetIndex } from '../components/AlphabetIndex';
 
@@ -41,6 +43,12 @@ export function LibraryPage() {
   Object.assign(session, { query, fullText, tags, categoryId, keyId: key, showFilters });
 
   const songs = useMemo(() => liveSongs(songsRec), [songsRec]);
+  // Låtar som ser ut att vara sidor av samma noter ("Låt (1)", "Låt (2)"): förslag att slå ihop
+  const [showMerge, setShowMerge] = useState(false);
+  const mergeGroups = useMemo(() => {
+    const dismissed = new Set(settings.dismissedMerges ?? []);
+    return pieceGroups(songs.map((s) => ({ ...s, isFile: !!s.attachment }))).filter((g) => !dismissed.has(mergeKey(g)));
+  }, [songs, settings.dismissedMerges]);
   const tagList = useMemo(() => allTags(songsRec), [songsRec]);
   const categories = useMemo(() => liveCategories(categoriesRec), [categoriesRec]);
   const keys = useMemo(() => keysInLibrary(songs), [songs]);
@@ -279,6 +287,19 @@ export function LibraryPage() {
             </div>
           ) : (
             <>
+              {mergeGroups.length > 0 && !selecting && (
+                <div className="tip small-text merge-tip">
+                  <Files size={18} />
+                  <div style={{ flex: 1 }}>
+                    {mergeGroups.length === 1
+                      ? `${mergeGroups[0].length} låtar ser ut att vara sidor av samma noter (${pieceTitle(mergeGroups[0][0].title)}).`
+                      : `${mergeGroups.length} låtar ser ut att bestå av flera sidor, t.ex. ${pieceTitle(mergeGroups[0][0].title)}.`}
+                  </div>
+                  <button className="btn small primary" onClick={() => setShowMerge(true)}>
+                    Slå ihop…
+                  </button>
+                </div>
+              )}
               <div className="muted small-text" style={{ margin: '0 4px 6px' }}>
                 {visible.length} {visible.length === 1 ? 'låt' : 'låtar'}
               </div>
@@ -320,6 +341,13 @@ export function LibraryPage() {
             <ListMusic size={18} /> Setlista
           </button>
         </div>
+      )}
+      {showMerge && (
+        <MergeSheet
+          groups={mergeGroups}
+          onClose={() => setShowMerge(false)}
+          onDismiss={(gs) => void updateSettings({ dismissedMerges: [...(settings.dismissedMerges ?? []), ...gs.map(mergeKey)] })}
+        />
       )}
       {sheet === 'tags' && (
         <AddTagsSheet
@@ -403,8 +431,9 @@ const SongRow = memo(function SongRow({
         )}
       </div>
       {song.attachment ? (
-        <span className="badge" title={song.attachment.name}>
+        <span className="badge" title={songFiles(song).map((a) => a.name).join(', ')}>
           {song.attachment.kind === 'pdf' ? 'PDF' : 'Bild'}
+          {song.extraAttachments?.length ? ` · ${song.extraAttachments.length + 1}` : ''}
         </span>
       ) : key && (
         <div
@@ -483,6 +512,74 @@ function CategorySheet({ count, onClose, onSave }: { count: number; onClose: () 
         <CategorySelect value={id} onChange={setId} />
       </label>
       <p className="muted small-text">Ersätter låtarnas nuvarande kategori. Välj Ingen för att ta bort den.</p>
+    </Sheet>
+  );
+}
+
+/** Samma förslag känns igen på låtarna i det. */
+function mergeKey(group: Song[]): string {
+  return group
+    .map((s) => s.id)
+    .sort()
+    .join('+');
+}
+
+/** Förslag att slå ihop sidor av samma noter: varje grupp kan väljas bort. */
+function MergeSheet({ groups, onClose, onDismiss }: { groups: Song[][]; onClose: () => void; onDismiss: (groups: Song[][]) => void }) {
+  const [chosen, setChosen] = useState(() => new Set(groups.map(mergeKey)));
+  const [busy, setBusy] = useState(false);
+  const picked = groups.filter((g) => chosen.has(mergeKey(g)));
+  const toggle = (g: Song[]) =>
+    setChosen((cur) => {
+      const next = new Set(cur);
+      if (next.has(mergeKey(g))) next.delete(mergeKey(g));
+      else next.add(mergeKey(g));
+      return next;
+    });
+  const merge = async () => {
+    setBusy(true);
+    try {
+      for (const g of picked) await mergeSongs(g.map((s) => s.id));
+      // De som valdes bort föreslås inte igen
+      onDismiss(groups.filter((g) => !chosen.has(mergeKey(g))));
+      toast(picked.length === 1 ? 'Låtarna är ihopslagna' : `${picked.length} låtar är ihopslagna`);
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Sheet title="Slå ihop sidor" onClose={onClose}>
+      <p className="muted small-text" style={{ marginTop: 0 }}>
+        Varje grupp blir en låt med filerna i tur och ordning. Setlistor som har låtarna får den ihopslagna låten.
+      </p>
+      <div className="merge-groups">
+        {groups.map((g) => (
+          <label key={mergeKey(g)} className={`merge-group${chosen.has(mergeKey(g)) ? ' on' : ''}`}>
+            <input type="checkbox" checked={chosen.has(mergeKey(g))} onChange={() => toggle(g)} />
+            <div>
+              <b>{pieceTitle(g[0].title)}</b>
+              {g[0].artist && <span className="muted"> – {g[0].artist}</span>}
+              <div className="muted small-text">{g.map((s) => s.title).join(' + ')}</div>
+            </div>
+          </label>
+        ))}
+      </div>
+      <div className="btn-row" style={{ justifyContent: 'flex-end', marginTop: 14 }}>
+        <button
+          className="btn"
+          disabled={busy}
+          onClick={() => {
+            onDismiss(groups);
+            onClose();
+          }}
+        >
+          Föreslå inte igen
+        </button>
+        <button className="btn primary" disabled={busy || !picked.length} onClick={() => void merge()}>
+          {busy ? 'Slår ihop…' : picked.length === groups.length ? 'Slå ihop alla' : `Slå ihop ${picked.length}`}
+        </button>
+      </div>
     </Sheet>
   );
 }

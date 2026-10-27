@@ -2,7 +2,7 @@
 
 import { attachmentFileName, contentHash, dataUrlBase64, markMissingAttachments, referencedFiles } from '../lib/backupFiles';
 import { restoreMerge } from '../lib/merge';
-import { isBackupFile, sanitizeLibrary, type BackupFile, type SyncRecord } from '../lib/model';
+import { filesFields, isBackupFile, sanitizeLibrary, songFiles, type BackupFile, type SongAttachment, type SyncRecord } from '../lib/model';
 import { hasNativePlugin, SongListNative } from '../native/songlistNative';
 import { useStore } from '../store/useStore';
 import { saveTextFile } from './files';
@@ -88,7 +88,7 @@ export async function restoreBackup(file: BackupFile, mode: RestoreMode): Promis
           folders: restoreMerge(local.folders, data.folders ?? [], now),
         }
       : {
-          songs: replaceList(local.songs, data.songs, (s) => ({ ...s, content: '', tags: [], attachment: undefined, annotations: undefined })),
+          songs: replaceList(local.songs, data.songs, (s) => ({ ...s, content: '', tags: [], attachment: undefined, extraAttachments: undefined, annotations: undefined })),
           setlists: replaceList(local.setlists, data.setlists, (s) => ({ ...s, items: [] })),
           categories: replaceList(local.categories, data.categories, (c) => c),
           folders: replaceList(local.folders, data.folders ?? [], (f) => f),
@@ -138,44 +138,56 @@ export async function createICloudBackup(auto = false): Promise<string> {
  * finns där) och låter säkerhetskopian peka på dem i stället för att innehålla dem.
  */
 async function storeAttachments(data: BackupFile): Promise<BackupFile> {
-  if (!data.songs.some((s) => s.attachment?.dataUrl)) return data;
+  if (!data.songs.some((s) => songFiles(s).some((a) => a.dataUrl))) return data;
   const { files } = await SongListNative.listFiles({ scope: 'documents', path: FILES_DIR });
   const have = new Set(files.map((f) => f.name));
-  const songs = [];
-  for (const s of data.songs) {
-    const a = s.attachment;
-    const base64 = a ? dataUrlBase64(a.dataUrl) : null;
-    if (!a || !base64) {
-      songs.push(s);
-      continue;
-    }
+  const store = async (a: SongAttachment): Promise<SongAttachment> => {
+    const base64 = dataUrlBase64(a.dataUrl);
+    if (!base64) return a;
     const file = attachmentFileName(await contentHash(base64), a);
     if (!have.has(file)) {
       await SongListNative.writeFile({ scope: 'documents', path: `${FILES_DIR}/${file}`, data: base64, base64: true });
       have.add(file);
     }
-    songs.push({ ...s, attachment: { ...a, dataUrl: '', file } });
+    return { ...a, dataUrl: '', file };
+  };
+  const songs = [];
+  for (const s of data.songs) {
+    const own = songFiles(s);
+    if (!own.length) {
+      songs.push(s);
+      continue;
+    }
+    const stored = [];
+    for (const a of own) stored.push(await store(a));
+    songs.push({ ...s, ...filesFields(stored) });
   }
   return { ...data, songs };
 }
 
 /** Hämtar originalfilerna som en säkerhetskopia pekar på. */
 async function loadAttachments(data: BackupFile): Promise<BackupFile> {
-  const songs = [];
-  for (const s of data.songs) {
-    const a = s.attachment;
-    if (!a?.file || a.dataUrl) {
-      songs.push(s);
-      continue;
-    }
+  const load = async (a: SongAttachment): Promise<SongAttachment> => {
+    if (!a.file || a.dataUrl) return a;
     try {
       const { data: base64 } = await SongListNative.readFile({ scope: 'documents', path: `${FILES_DIR}/${a.file}`, base64: true });
       const { file: _file, ...rest } = a;
-      songs.push({ ...s, attachment: { ...rest, dataUrl: `data:${a.mime};base64,${base64}` } });
+      return { ...rest, dataUrl: `data:${a.mime};base64,${base64}` };
     } catch {
       // Filen saknas; tas om hand av markMissingAttachments
-      songs.push(s);
+      return a;
     }
+  };
+  const songs = [];
+  for (const s of data.songs) {
+    const own = songFiles(s);
+    if (!own.some((a) => a.file && !a.dataUrl)) {
+      songs.push(s);
+      continue;
+    }
+    const loaded = [];
+    for (const a of own) loaded.push(await load(a));
+    songs.push({ ...s, ...filesFields(loaded) });
   }
   return { ...data, songs };
 }

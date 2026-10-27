@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
+  ArrowUp,
   ChevronLeft,
   ChevronRight,
   Download,
+  FilePlus,
+  Files,
+  FileText,
+  Image as ImageIcon,
   Eye,
   EyeOff,
   Guitar,
@@ -45,12 +50,13 @@ import {
 } from '../lib/chordpro';
 import { liveSetlists, useStore } from '../store/useStore';
 import { safeFileName, saveTextFile } from '../services/files';
-import { newId, type Song } from '../lib/model';
+import { newId, songFiles, type Song, type SongAttachment } from '../lib/model';
 import { Metronome, beatsPerBar, parseTempo } from '../lib/metronome';
 import { useWakeLock } from '../hooks/useWakeLock';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useSwipeNavigation } from '../hooks/useSwipeNavigation';
-import { AttachmentView } from '../components/AttachmentView';
+import { AttachmentView, useFilePages } from '../components/AttachmentView';
+import { fileToAttachment } from '../services/fileImport';
 import { isCue, itemPath, itemTitle, itemTranspose, liveItems, songCount, withItemCapo } from '../lib/setlist';
 import { useAnnotationGestures, type AnnotTool } from '../hooks/useAnnotationGestures';
 import { EMPTY_ANNOTATIONS, INK_WIDTHS, hasAnnotations, mergeAnnotations, type Annotations, type InkColor, type StickyNote } from '../lib/annotations';
@@ -147,6 +153,7 @@ export function SongPage() {
     return save;
   }, [setlistItem?.id, setlist?.id]);
   const [showHistory, setShowHistory] = useState(false);
+  const [showFiles, setShowFiles] = useState(false);
   /** Anteckningar från ett tidigare tillfälle som visas i stället för de nuvarande */
   const [pastNotes, setPastNotes] = useState<{ annotations: Annotations; label: string } | null>(null);
   useEffect(() => setPastNotes(null), [id]);
@@ -181,6 +188,29 @@ export function SongPage() {
   const saved = (layer === 'setlist' ? setlistItem?.ownAnnotations : song?.annotations) ?? EMPTY_ANNOTATIONS;
   const otherLayer = layer === 'setlist' ? song?.annotations : setlistItem?.ownAnnotations;
   const annotations = draft ?? saved;
+  // Låtar som sparats som filer: alla sidor i tur och ordning, en i taget i sidled (förval)
+  // Bara när filerna ändras (inte vid t.ex. transponering), så att sidorna inte ritas om
+  const files = useMemo(() => (song ? songFiles(song) : []), [song?.attachment, song?.extraAttachments]);
+  const { pages, status: pagesStatus } = useFilePages(files);
+  const paged = !!song?.attachment && settings.filePaging !== false;
+  const [page, setPage] = useState(0);
+  useEffect(() => setPage(0), [id]);
+  const lastPage = Math.max(0, pages.length - 1);
+  const turnPage = (d: number) => {
+    const n = Math.max(0, Math.min(lastPage, page + d));
+    if (n === page) return false;
+    setPage(n);
+    scrollRef.current?.scrollTo({ top: 0 });
+    return true;
+  };
+  // För tangentbordet (som lyssnar en gång per låt)
+  const turnPageRef = useRef(turnPage);
+  const pagedRef = useRef(paged);
+  useEffect(() => {
+    turnPageRef.current = paged ? turnPage : () => false;
+    pagedRef.current = paged;
+  });
+
   // Två spalter på en bred skärm i liggande läge, men bara när hela låten då får plats
   const wide = useMediaQuery('(min-width: 900px) and (orientation: landscape)');
   const wantColumns = wide && settings.twoColumns !== false && !song?.attachment;
@@ -278,13 +308,15 @@ export function SongPage() {
     [setlist, setlistIndex, setlistItems, navigate],
   );
 
-  // Stor swipe åt vänster/höger byter låt i setlistan
+  // Stor swipe åt vänster/höger byter låt i setlistan; i en fil först sida, sedan låt
+  const canPrevSong = !!setlist && setlistIndex > 0;
+  const canNextSong = !!setlist && setlistIndex >= 0 && setlistIndex < setlistItems.length - 1;
   const swipe = useSwipeNavigation({
-    enabled: !!setlist && !annotating,
-    canPrev: setlistIndex > 0,
-    canNext: setlistIndex >= 0 && setlistIndex < setlistItems.length - 1,
-    onPrev: () => goSetlist(-1),
-    onNext: () => goSetlist(1),
+    enabled: (!!setlist || paged) && !annotating,
+    canPrev: (paged && page > 0) || canPrevSong,
+    canNext: (paged && page < lastPage) || canNextSong,
+    onPrev: () => turnPageRef.current(-1) || goSetlist(-1),
+    onNext: () => turnPageRef.current(1) || goSetlist(1),
   });
 
   // Metronom i låtens tempo, med takten från {time}
@@ -336,11 +368,11 @@ export function SongPage() {
   ].join('|');
   useEffect(() => {
     const el = scrollRef.current;
-    if (!wantColumns || !el) return;
+    if ((!wantColumns && !paged) || !el) return;
     const ro = new ResizeObserver(() => setAreaHeight(Math.round(el.clientHeight)));
     ro.observe(el);
     return () => ro.disconnect();
-  }, [wantColumns, id]);
+  }, [wantColumns, paged, id]);
   useLayoutEffect(() => setFit({ font: settings.fontSize, ok: true }), [fitKey]);
   // Mäts före ritningen: en mindre storlek i taget tills låten ryms (syns inte som flimmer)
   useLayoutEffect(() => {
@@ -420,6 +452,13 @@ export function SongPage() {
       // Inte medan en meny eller ruta är öppen, eller i anteckningsläget
       if (annotatingRef.current || document.querySelector('[role="dialog"]')) return;
       const el = scrollRef.current;
+      // En fil i sidled: nästa/föregående sida, och efter sista sidan nästa låt i setlistan
+      const step = { ArrowRight: 1, PageDown: 1, ArrowDown: 1, ' ': 1, ArrowLeft: -1, PageUp: -1, ArrowUp: -1 }[e.key];
+      if (step && pagedRef.current) {
+        e.preventDefault();
+        if (!turnPageRef.current(step) && setlist) goSetlist(step);
+        return;
+      }
       if (e.key === ' ') {
         e.preventDefault();
         setScrolling((v) => !v);
@@ -734,6 +773,8 @@ export function SongPage() {
             </button>
           </div>
 
+          {/* En sida i taget: inget att scrolla */}
+          {!paged && (
           <div className="tool-group" title="Automatisk scroll">
             <button
               className={`btn icon${scrolling ? ' active' : ''}`}
@@ -756,6 +797,7 @@ export function SongPage() {
               <Plus size={16} />
             </button>
           </div>
+          )}
 
           {bpm && (
             <div className="tool-group" title={`Metronom, ${bpm} slag per minut${parsed.meta.time ? ` i ${parsed.meta.time}` : ''}`}>
@@ -838,8 +880,10 @@ export function SongPage() {
           onPointerCancel={annotating ? gestures.onPointerCancel : swipe.handlers.onPointerCancel}
           style={{
             ...(controlsHidden && !stage ? { paddingTop: 'calc(18px + var(--safe-top))' } : {}),
+            // Luften nedanför behövs bara för att kunna scrolla låtens slut upp på skärmen
+            ...(paged ? { paddingBottom: 80 } : {}),
             // Webbläsaren sköter vertikal scroll; swipe i sidled hanteras av appen
-            ...(setlist && !annotating ? { touchAction: 'pan-y' } : {}),
+            ...((setlist || paged) && !annotating ? { touchAction: 'pan-y' } : {}),
           }}
           onClick={(e) => {
             if (swipe.justSwiped()) return;
@@ -847,7 +891,8 @@ export function SongPage() {
             if (tapToHide && !(e.target as HTMLElement).closest('.ch')) setControlsHidden((v) => !v);
           }}
         >
-          <div style={swipe.style}>
+          {/* En fil i sidled flyttar sidorna själv; annars följer hela låten fingret */}
+          <div style={paged ? undefined : swipe.style}>
           {pastNotes && (
             <div className="tip small-text past-notes" onClick={(e) => e.stopPropagation()}>
               <div>
@@ -887,12 +932,30 @@ export function SongPage() {
             </div>
           )}
           {isFile ? (
-            <div className="song file-song" style={{ fontSize: settings.fontSize }}>
-              <div className="song-head">
-                <h2>{song.title}</h2>
-                {song.artist && <div className="artist">{song.artist}</div>}
-              </div>
-              <AttachmentView attachment={song.attachment!} zoom={settings.fontSize / 20} />
+            <div className={`song file-song${paged ? ' paged' : ''}`} style={{ fontSize: settings.fontSize }}>
+              {/* I sidled syns titeln redan överst; sidan får hela höjden */}
+              {!paged && (
+                <div className="song-head">
+                  <h2>{song.title}</h2>
+                  {song.artist && <div className="artist">{song.artist}</div>}
+                </div>
+              )}
+              <AttachmentView
+                pages={pages}
+                status={pagesStatus}
+                zoom={settings.fontSize / 20}
+                paged={
+                  paged
+                    ? {
+                        page,
+                        drag: swipe.offset,
+                        dragging: swipe.offset !== 0,
+                        // Låtytan minus luften ovanför och sidvisaren nedanför
+                        viewHeight: (areaHeight || scrollRef.current?.clientHeight || 600) - (pages.length > 1 ? 76 : 36),
+                      }
+                    : undefined
+                }
+              />
             </div>
           ) : (
           <SongRenderer
@@ -946,7 +1009,7 @@ export function SongPage() {
             }
           />
           )}
-          {nextUp && !annotating && (
+          {nextUp && !annotating && (!paged || page >= lastPage) && (
             <button
               className="next-up"
               onClick={(e) => {
@@ -963,6 +1026,20 @@ export function SongPage() {
           )}
           </div>
         </div>
+        {paged && pages.length > 1 && (
+          <div className="page-turner">
+            <button className="btn icon ghost" aria-label="Föregående sida" disabled={page <= 0} onClick={() => turnPage(-1)}>
+              <ChevronLeft size={18} />
+            </button>
+            <span>
+              {page + 1} / {pages.length}
+            </span>
+            <button className="btn icon ghost" aria-label="Nästa sida" disabled={page >= lastPage} onClick={() => turnPage(1)}>
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        )}
+        {!paged && (
         <button
           className={`scroll-fab${scrolling ? ' on' : ''}`}
           aria-label={scrolling ? 'Pausa scroll' : 'Starta scroll'}
@@ -970,6 +1047,7 @@ export function SongPage() {
         >
           {scrolling ? <Pause size={24} /> : <Play size={24} />}
         </button>
+        )}
       </div>
 
       {setlistNav}
@@ -1000,12 +1078,26 @@ export function SongPage() {
             >
               <History size={18} /> Historik
             </button>
-            <button className="btn" disabled={!transpose} onClick={applyTranspose}>
-              <Wand2 size={18} /> Skriv in transponeringen i texten
-            </button>
-            <button className="btn" onClick={exportCho}>
-              <Download size={18} /> Exportera som ChordPro (.cho)
-            </button>
+            {isFile ? (
+              <button
+                className="btn"
+                onClick={() => {
+                  setMenu(false);
+                  setShowFiles(true);
+                }}
+              >
+                <Files size={18} /> Filer ({files.length})
+              </button>
+            ) : (
+              <>
+                <button className="btn" disabled={!transpose} onClick={applyTranspose}>
+                  <Wand2 size={18} /> Skriv in transponeringen i texten
+                </button>
+                <button className="btn" onClick={exportCho}>
+                  <Download size={18} /> Exportera som ChordPro (.cho)
+                </button>
+              </>
+            )}
             <button className="btn danger" onClick={remove}>
               <Trash size={18} /> Radera låten
             </button>
@@ -1014,6 +1106,8 @@ export function SongPage() {
       )}
 
       {addToSetlist && <AddToSetlistSheet songId={song.id} onClose={() => setAddToSetlist(false)} />}
+
+      {showFiles && <FilesSheet song={song} onClose={() => setShowFiles(false)} />}
 
       {showHistory && (
         <HistorySheet
@@ -1027,6 +1121,69 @@ export function SongPage() {
         />
       )}
     </div>
+  );
+}
+
+/** Låtens filer: fler sidor (PDF:er eller bilder) läggs till, flyttas och tas bort. */
+function FilesSheet({ song, onClose }: { song: Song; onClose: () => void }) {
+  const saveSong = useStore((s) => s.saveSong);
+  const files = songFiles(song);
+  const [busy, setBusy] = useState(false);
+  const save = (next: SongAttachment[]) => saveSong({ id: song.id, content: song.content, files: next });
+  const move = (i: number) => void save(files.map((f, j) => (j === i - 1 ? files[i] : j === i ? files[i - 1] : f)));
+  const remove = (i: number) => {
+    if (!confirm(`Ta bort ${files[i].name} från låten?`)) return;
+    void save(files.filter((_, j) => j !== i));
+  };
+  const add = async (list: FileList | null) => {
+    if (!list?.length) return;
+    setBusy(true);
+    try {
+      const added: SongAttachment[] = [];
+      for (const f of Array.from(list)) added.push(await fileToAttachment(f));
+      await save([...files, ...added]);
+      toast(added.length === 1 ? 'Filen är tillagd' : `${added.length} filer är tillagda`);
+    } catch (e) {
+      toastError(e, 'Filen kunde inte läggas till');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Sheet title="Filer" onClose={onClose}>
+      <p className="muted small-text" style={{ marginTop: 0 }}>
+        Filerna visas i den här ordningen, t.ex. sida 1 och sida 2 av noterna.
+      </p>
+      <div className="file-list">
+        {files.map((a, i) => (
+          <div className="file-row" key={i}>
+            {a.kind === 'pdf' ? <FileText size={18} /> : <ImageIcon size={18} />}
+            <span className="name">{a.name}</span>
+            <button className="btn icon ghost" aria-label={`Flytta upp ${a.name}`} disabled={i === 0} onClick={() => move(i)}>
+              <ArrowUp size={18} />
+            </button>
+            {/* Den sista filen tas bort genom att radera låten */}
+            <button className="btn icon ghost danger" aria-label={`Ta bort ${a.name}`} disabled={files.length === 1} onClick={() => remove(i)}>
+              <X size={18} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <label className={`btn${busy ? ' disabled' : ''}`} style={{ marginTop: 12 }}>
+        <FilePlus size={18} /> {busy ? 'Lägger till…' : 'Lägg till PDF eller bild'}
+        <input
+          type="file"
+          accept=".pdf,application/pdf,image/*"
+          multiple
+          hidden
+          disabled={busy}
+          onChange={(e) => {
+            void add(e.target.files);
+            e.target.value = '';
+          }}
+        />
+      </label>
+    </Sheet>
   );
 }
 

@@ -33,6 +33,18 @@ export interface Song extends SyncRecord {
   annotations?: Annotations;
   /** Låten visas som en bifogad fil (t.ex. noter) i stället för text och ackord */
   attachment?: SongAttachment;
+  /** Fler filer efter den första (t.ex. sida 2 av noterna), visas i tur och ordning */
+  extraAttachments?: SongAttachment[];
+}
+
+/** Alla låtens filer i ordning. */
+export function songFiles(s: Pick<Song, 'attachment' | 'extraAttachments'>): SongAttachment[] {
+  return s.attachment ? [s.attachment, ...(s.extraAttachments ?? [])] : [];
+}
+
+/** Fälten för en låt med de här filerna. */
+export function filesFields(files: SongAttachment[]): Pick<Song, 'attachment' | 'extraAttachments'> {
+  return { attachment: files[0], extraAttachments: files.length > 1 ? files.slice(1) : undefined };
 }
 
 /** En PDF eller bild som sparas med låten. */
@@ -104,6 +116,10 @@ export interface Settings {
   simplifyChords?: boolean;
   /** Två spalter på en bred skärm i liggande läge, när låten då får plats (förval: på) */
   twoColumns?: boolean;
+  /** PDF:er och bilder bläddras sida för sida i sidled (förval) i stället för att scrollas */
+  filePaging?: boolean;
+  /** Förslag på att slå ihop sidor av samma noter som man tackat nej till (låtarnas id) */
+  dismissedMerges?: string[];
   /** Om en tonartsändring i en setlista bara gäller där (förval) eller för låten överallt */
   transposeScope?: 'setlist' | 'global';
   /** Senast använda e-postadresser för export (sparas bara på enheten) */
@@ -163,6 +179,13 @@ function validAnnotations(a: Annotations | undefined): Annotations | undefined {
   return a && Array.isArray(a.strokes) && Array.isArray(a.notes) ? a : undefined;
 }
 
+// En bifogad fil behålls så länge innehållet (eller en hänvisning till det) finns
+function validAttachment(a: SongAttachment | undefined): SongAttachment | undefined {
+  return a && (typeof a.dataUrl === 'string' || typeof a.file === 'string')
+    ? { ...a, dataUrl: typeof a.dataUrl === 'string' ? a.dataUrl : '', name: typeof a.name === 'string' && a.name ? a.name : 'fil' }
+    : undefined;
+}
+
 /**
  * Fyller i saknade fält i poster från synk eller säkerhetskopior (t.ex. från en äldre version
  * eller en skadad fil), så att appen inte kraschar på dem. Poster utan id eller tidsstämpel
@@ -179,15 +202,11 @@ export function sanitizeLibrary<T extends LibraryData>(data: T): T {
       tags: Array.isArray(s.tags) ? s.tags.filter((t) => typeof t === 'string') : [],
       transpose: typeof s.transpose === 'number' ? s.transpose : 0,
       createdAt: typeof s.createdAt === 'number' ? s.createdAt : s.updatedAt,
-      // En bifogad fil behålls så länge innehållet (eller en hänvisning till det) finns
-      attachment:
-        s.attachment && (typeof s.attachment.dataUrl === 'string' || typeof s.attachment.file === 'string')
-          ? {
-              ...s.attachment,
-              dataUrl: typeof s.attachment.dataUrl === 'string' ? s.attachment.dataUrl : '',
-              name: typeof s.attachment.name === 'string' && s.attachment.name ? s.attachment.name : 'fil',
-            }
-          : undefined,
+      ...filesFields(
+        [s.attachment, ...(Array.isArray(s.extraAttachments) ? s.extraAttachments : [])]
+          .map((a) => (a && typeof a === 'object' ? validAttachment(a) : undefined))
+          .filter((a): a is SongAttachment => !!a),
+      ),
     })),
     setlists: data.setlists.filter(isRecord).map((sl) => ({
       ...sl,

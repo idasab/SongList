@@ -2,7 +2,9 @@ import { create } from 'zustand';
 import { parseChordPro, shapesToSounding } from '../lib/chordpro';
 import {
   DEFAULT_SETTINGS,
+  filesFields,
   newId,
+  songFiles,
   type Category,
   type LibraryData,
   type Setlist,
@@ -51,9 +53,12 @@ export interface ImportQueueItem {
   interpreted?: boolean;
   /** Valet för en låt som redan finns (undefined = förvalet) */
   duplicate?: DuplicateAction;
+  /** Filen hör till låten ovanför i listan och blir en sida till i den (undefined = förvalet) */
+  joinPrev?: boolean;
 }
 
-export type DuplicateAction = 'add' | 'skip' | 'replace';
+/** merge: filerna läggs till i låten som redan finns (t.ex. sida 2 av noterna) */
+export type DuplicateAction = 'add' | 'skip' | 'replace' | 'merge';
 
 /** Importlistan finns kvar när man byter sida (men sparas inte mellan omstarter). */
 export interface ImportQueue {
@@ -83,11 +88,13 @@ interface State {
     content: string;
     tags?: string[];
     categoryId?: string;
-    /** null tar bort en bifogad fil */
+    /** Byter låtens filer mot den här (null tar bort dem) */
     attachment?: SongAttachment | null;
+    /** Byter låtens filer mot de här (tom lista tar bort dem) */
+    files?: SongAttachment[];
   }): Promise<Song>;
   importSongs(
-    contents: { content: string; tags?: string[]; categoryId?: string; attachment?: SongAttachment }[],
+    contents: { content: string; tags?: string[]; categoryId?: string; files?: SongAttachment[] }[],
   ): Promise<Song[]>;
   updateSongPrefs(id: string, prefs: Partial<Pick<Song, 'transpose' | 'scrollSpeed' | 'annotations'>>): Promise<void>;
   deleteSong(id: string): Promise<void>;
@@ -196,7 +203,7 @@ export const useStore = create<State>((set, get) => ({
     return initPromise;
   },
 
-  async saveSong({ id, content: input, tags, categoryId, attachment }) {
+  async saveSong({ id, content: input, tags, categoryId, attachment, files }) {
     // å, ä och ö som bokstav + prick/ring görs om till ett tecken (annars känns t.ex.
     // "Refräng:" inte igen och titlar sorteras fel)
     const content = input.normalize('NFC');
@@ -209,7 +216,7 @@ export const useStore = create<State>((set, get) => ({
       transpose: existing?.transpose ?? 0,
       scrollSpeed: existing?.scrollSpeed,
       annotations: existing?.annotations,
-      attachment: attachment === null ? undefined : (attachment ?? existing?.attachment),
+      ...filesFields(files ?? (attachment !== undefined ? (attachment ? [attachment] : []) : existing ? songFiles(existing) : [])),
       ...deriveSongMeta(content),
       content,
       tags: normalizeTags(tags ?? existing?.tags ?? []),
@@ -230,10 +237,10 @@ export const useStore = create<State>((set, get) => ({
       transpose: 0,
       ...deriveSongMeta(it.content.normalize('NFC')),
       // Ackord skrivna som grepp för kapot skrivs om till tonarten
-      content: it.attachment ? it.content.normalize('NFC') : shapesToSounding(it.content.normalize('NFC')),
+      content: it.files?.length ? it.content.normalize('NFC') : shapesToSounding(it.content.normalize('NFC')),
       tags: normalizeTags(it.tags ?? []),
       categoryId: liveCategoryId(get().categories, it.categoryId),
-      attachment: it.attachment,
+      ...filesFields(it.files ?? []),
     }));
     set((s) => ({ songs: { ...s.songs, ...toRecord(songs) }, revision: s.revision + 1 }));
     await db.songs.putMany(songs);
@@ -259,6 +266,7 @@ export const useStore = create<State>((set, get) => ({
       tags: [],
       annotations: undefined,
       attachment: undefined,
+      extraAttachments: undefined,
       deletedAt: now,
       updatedAt: now,
     };
