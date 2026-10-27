@@ -236,6 +236,33 @@ describe('OCR-layout', () => {
   });
 });
 
+describe('ackordscheman i PDF', () => {
+  it('tar bort scheman med grepp under, men inte ackord och text ovanför', () => {
+    const W = 600;
+    const H = 800;
+    const word = (text: string, x: number, y: number, w: number, h = 10) => ({ text, x: x / W, y: y / H, w: w / W, h: h / H });
+    const line = (...words: ReturnType<typeof word>[]) => ({ text: words.map((w) => w.text).join(' '), x: 0, y: 0, w: 0, h: 0, words });
+    const fingers = (x: number, y: number, s: string) => line(...s.split(' ').map((t, i) => word(t, x + i * 6, y, 4, 7)));
+    const page: OcrPage = {
+      width: W,
+      height: H,
+      lines: [
+        line(word('G', 50, 100, 10), word('C', 150, 100, 10)),
+        line(word('Solen', 50, 115, 50), word('går', 110, 115, 30), word('upp', 150, 115, 30)),
+        line(word('Nr', 50, 300, 20), word('2112', 75, 300, 30)),
+        line(word('C', 70, 500, 10), word('Am7', 150, 500, 25)),
+        line(word('GG', 64, 512, 14)),
+        fingers(60, 560, 'X 3 2 0 1 0'),
+        fingers(140, 560, 'X 0 2 0 1 0'),
+      ],
+    };
+    const out = ocrToChordPro([page]);
+    expect(out).toContain('[G]Solen går [C]upp');
+    expect(out).toContain('Nr 2112');
+    expect(out).not.toMatch(/Am7|GG|X 3/);
+  });
+});
+
 describe('ackordgrepp', () => {
   it('normaliserar suffix', () => {
     expect(normalizeSuffix('')).toBe('major');

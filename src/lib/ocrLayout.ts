@@ -245,8 +245,65 @@ function rowsWithMarginLabels(lines: VisualLine[], measure?: (t: string) => numb
   return { rows, gapsBefore };
 }
 
+const FINGER = /^[xXoO0-9]$/;
+
+/**
+ * Tar bort ackordscheman för gitarr (t.ex. längst ner på noterna). De känns igen på raden med
+ * grepp under schemat, t.ex. "X 3 2 0 1 0". Raden och ackordnamnet ovanför (och annat brus i
+ * schemat) tas bort, annars blir de konstiga ackord och text.
+ */
+export function dropChordDiagrams(lines: VisualLine[]): VisualLine[] {
+  const drop = new Set<OcrWord>();
+  for (const l of lines) {
+    // Följder av minst fyra enskilda strängtecken nära varandra, eller "x32010" (alla sex strängar) i ett ord
+    const runs: OcrWord[][] = [];
+    let run: OcrWord[] = [];
+    const flush = () => {
+      if (run.length >= 4) runs.push(run);
+      run = [];
+    };
+    for (const w of l.words) {
+      if (/^[xXoO0-9]{6}$/.test(w.text) && /\d/.test(w.text)) {
+        flush();
+        runs.push([w]);
+        continue;
+      }
+      const prev = run[run.length - 1];
+      if (FINGER.test(w.text) && (!prev || w.x - (prev.x + prev.w) <= Math.max(prev.w, w.h * 0.6) * 3)) run.push(w);
+      else {
+        flush();
+        if (FINGER.test(w.text)) run.push(w);
+      }
+    }
+    flush();
+    for (const r of runs) {
+      const count = r.reduce((n, w) => n + w.text.length, 0);
+      if (count < 4) continue;
+      const x0 = r[0].x;
+      const x1 = r[r.length - 1].x + r[r.length - 1].w;
+      // Flera scheman bredvid varandra kan ha lästs som en följd
+      const dw = (x1 - x0) / Math.max(1, Math.round(count / 6));
+      const top = Math.min(...r.map((w) => w.y));
+      for (const w of r) drop.add(w);
+      for (const o of lines) {
+        for (const w of o.words) {
+          const cx = w.x + w.w / 2;
+          const cy = w.y + w.h / 2;
+          if (cx < x0 - dw * 0.5 || cx > x1 + dw * 0.5 || cy >= top || cy < top - dw * 2.2) continue;
+          if (isChord(w.text) || /^[A-H]{1,3}$/.test(w.text) || FINGER.test(w.text)) drop.add(w);
+        }
+      }
+    }
+  }
+  if (!drop.size) return lines;
+  return lines
+    .map((l) => ({ ...l, words: l.words.filter((w) => !drop.has(w)) }))
+    .filter((l) => l.words.length)
+    .map((l) => ({ ...l, ...coreBounds(l.words) }));
+}
+
 export function pageToRows(page: OcrPage, measure?: (t: string) => number): SourceRow[] {
-  const lines = groupVisualLines(page);
+  const lines = dropChordDiagrams(groupVisualLines(page));
   if (!lines.length) return [];
   const mh = median(lines.map((l) => l.bottom - l.top)) || 1;
   const { rows, gapsBefore } = rowsWithMarginLabels(lines, measure);
