@@ -13,6 +13,7 @@ import {
   splitWords,
   songPrefersFlats,
   transposeSource,
+  upsertDirective,
   type Line,
   type ParsedSong,
   type Section,
@@ -31,7 +32,7 @@ import { safeFileName, saveBinaryFile, saveTextFile } from './files';
 import { loadPdfJs } from './fileImport';
 import { pdfSafe } from '../lib/pdfText';
 import { SHARE_EXTENSION, buildSharedSetlist } from './setlistShare';
-import { isCue, itemTitle, itemTranspose, liveItems } from '../lib/setlist';
+import { isCue, itemTitle, itemTranspose, liveItems, withItemCapo } from '../lib/setlist';
 
 export type SetlistExportFormat = 'text' | 'pdf-annotated' | 'pdf-clean' | 'chordpro' | 'songlist';
 
@@ -65,7 +66,7 @@ function prepare(setlist: Setlist, songs: Record<string, Song>, notation: Notati
     .map((it) => {
       const song = songs[it.songId];
       const transpose = itemTranspose(it, song);
-      const parsed = parseChordPro(song.content);
+      const parsed = withItemCapo(parseChordPro(song.content), it);
       // Ackorden exporteras som de visas: som grepp när låten har kapo
       return { song, transpose, parsed, ctx: displayChordContext(parsed, transpose, notation) };
     });
@@ -186,7 +187,10 @@ function songChordPro(p: PreparedSong): string {
         notation: p.parsed.hNotation ? 'swedish' : 'international',
       })
     : p.song.content;
-  return src.trim() + '\n';
+  // Setlistans eget kapo skrivs in i filen
+  const capo = capoOf(p.parsed);
+  const withCapo = capo === capoOf(parseChordPro(p.song.content)) ? src : upsertDirective(src, 'capo', capo ? String(capo) : '');
+  return withCapo.trim() + '\n';
 }
 
 export function buildChordProExport(setlist: Setlist, songs: Record<string, Song>, notation: Notation): string {

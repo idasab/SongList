@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CUE_ROUTE_ID, itemPath, itemTitle, itemTranspose, liveItems, moveVisible, songCount } from './setlist';
+import { CUE_ROUTE_ID, itemPath, itemTitle, itemTranspose, liveItems, moveVisible, songCount, withItemCapo } from './setlist';
 import { sanitizeLibrary, type BackupFile, type Setlist, type Song } from './model';
 import { pdfSafe } from './pdfText';
 import { attachmentFileName, contentHash, dataUrlBase64, markMissingAttachments, referencedFiles } from './backupFiles';
@@ -451,6 +451,17 @@ describe('tonartsfilter', () => {
     expect(keyId(am.key)).toBe('9m');
     expect(am.guessed).toBe(true);
     expect(songKey(songs[5])).toBeNull();
+  });
+
+  it('kapo som bara gäller i setlistan', () => {
+    const p = parseChordPro('{title: x}\n{capo: 2}\n[A]Rad');
+    expect(capoOf(withItemCapo(p, undefined))).toBe(2);
+    expect(capoOf(withItemCapo(p, { id: 'a', songId: 'x' }))).toBe(2);
+    expect(capoOf(withItemCapo(p, { id: 'a', songId: 'x', capo: 4 }))).toBe(4);
+    // 0 = utan kapo i setlistan
+    expect(capoOf(withItemCapo(p, { id: 'a', songId: 'x', capo: 0 }))).toBe(0);
+    // Låten själv ändras inte
+    expect(capoOf(p)).toBe(2);
   });
 
   it('tonart med setlistans egen transponering', () => {

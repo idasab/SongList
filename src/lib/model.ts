@@ -58,6 +58,8 @@ export interface SetlistItem {
   cue?: string;
   /** Transponering som bara gäller i den här setlistan (annars låtens egen) */
   transpose?: number;
+  /** Kapo som bara gäller i den här setlistan, 0 = utan kapo (annars låtens {capo}) */
+  capo?: number;
   /** Låtens anteckningar som de var när låten senast visades i setlistan (historik) */
   annotations?: Annotations;
   /** När kopian av anteckningarna sparades (ms) */
@@ -190,6 +192,7 @@ export function sanitizeLibrary<T extends LibraryData>(data: T): T {
             .map((it) => ({
               ...it,
               transpose: typeof it.transpose === 'number' ? it.transpose : undefined,
+              capo: Number.isInteger(it.capo) && it.capo! >= 0 && it.capo! <= 11 ? it.capo : undefined,
               annotations:
                 it.annotations && Array.isArray(it.annotations.strokes) && Array.isArray(it.annotations.notes) ? it.annotations : undefined,
             }))

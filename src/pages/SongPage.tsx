@@ -49,7 +49,7 @@ import { useWakeLock } from '../hooks/useWakeLock';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useSwipeNavigation } from '../hooks/useSwipeNavigation';
 import { AttachmentView } from '../components/AttachmentView';
-import { isCue, itemPath, itemTitle, itemTranspose, liveItems, songCount } from '../lib/setlist';
+import { isCue, itemPath, itemTitle, itemTranspose, liveItems, songCount, withItemCapo } from '../lib/setlist';
 import { useAnnotationGestures, type AnnotTool } from '../hooks/useAnnotationGestures';
 import { EMPTY_ANNOTATIONS, INK_WIDTHS, hasAnnotations, type Annotations, type InkColor, type StickyNote } from '../lib/annotations';
 import { lastPlayed, songHistory, todayIso } from '../lib/history';
@@ -100,7 +100,7 @@ export function SongPage() {
 
   useWakeLock(true);
 
-  const parsed = useMemo(() => parseChordPro(song?.content ?? ''), [song?.content]);
+  const songParsed = useMemo(() => parseChordPro(song?.content ?? ''), [song?.content]);
   // Position i setlistan
   const setlistIndex = setlist ? Number(params.get('i') ?? 0) : -1;
   const setlistItems = useMemo(
@@ -112,6 +112,9 @@ export function SongPage() {
   const setlistItem =
     setlistItems[setlistIndex]?.songId === id ? setlistItems[setlistIndex] : setlistItems.find((it) => it.songId === id);
   const transpose = song ? itemTranspose(setlistItem, song) : 0;
+  // Låten som den visas: med setlistans eget kapo, om det finns
+  const itemCapo = setlistItem?.capo;
+  const parsed = useMemo(() => withItemCapo(songParsed, itemCapo === undefined ? undefined : { id: '', songId: '', capo: itemCapo }), [songParsed, itemCapo]);
 
   // Historik: när låten lämnas i en setlista sparas en kopia av dess anteckningar i setlistan,
   // så att man senare kan se hur de såg ut den gången
@@ -148,7 +151,7 @@ export function SongPage() {
     if (isCue(nextItem) || !next) return { title: itemTitle(nextItem, songs) };
     const t = itemTranspose(nextItem, next);
     const k = next.attachment ? null : songKey(next, t);
-    const p = parseChordPro(next.content);
+    const p = withItemCapo(parseChordPro(next.content), nextItem);
     const c = displayChordContext(p, t, settings.notation, settings.simplifyChords);
     const chords = [...new Set(p.chords.filter((ch) => !ch.startsWith('*')).map((ch) => formatChord(ch, c)))].slice(0, 5);
     return {
@@ -470,23 +473,26 @@ export function SongPage() {
   const displayChords = parsed.chords.filter((c) => !c.startsWith('*')).map((c) => formatChord(c, ctx));
   const uniqueChords = [...new Set(displayChords)];
 
-  // I en setlista: ändringen gäller bara där, eller för låten överallt (valet sparas)
-  const transposeInSetlist = !!setlistItem && settings.transposeScope !== 'global';
-  const setItemTranspose = (t: number | undefined) =>
-    setlist && setlistItem && void saveSetlist({ ...setlist, items: setlist.items.map((x) => (x.id === setlistItem.id ? { ...x, transpose: t } : x)) });
+  // I en setlista: tonart och kapo ändras bara där, eller för låten överallt (valet sparas)
+  const inSetlist = !!setlistItem && settings.transposeScope !== 'global';
+  const setItem = (patch: { transpose?: number; capo?: number }) =>
+    setlist && setlistItem && void saveSetlist({ ...setlist, items: setlist.items.map((x) => (x.id === setlistItem.id ? { ...x, ...patch } : x)) });
   const setTranspose = (n: number) => {
     const t = normalizeTranspose(n);
     // Samma som låtens egen: setlistan följer låten igen
-    if (transposeInSetlist) return setItemTranspose(t === song.transpose ? undefined : t);
+    if (inSetlist) return setItem({ transpose: t === song.transpose ? undefined : t });
     // Överallt: setlistan följer låtens tonart igen
-    if (setlistItem?.transpose !== undefined) setItemTranspose(undefined);
+    if (setlistItem?.transpose !== undefined) setItem({ transpose: undefined });
     void updateSongPrefs(song.id, { transpose: t });
   };
-  // Kapot sparas i låten ({capo}), så att det följer med i synk, export och redigering
+  // Låtens eget kapo sparas i låten ({capo}), så att det följer med i synk, export och redigering
+  const songCapo = capoOf(songParsed);
   const setCapo = (n: number) => {
     const next = Math.max(0, Math.min(11, n));
     if (next === capo) return;
-    void saveSong({ id: song.id, content: upsertDirective(song.content, 'capo', next ? String(next) : '') });
+    if (inSetlist) return setItem({ capo: next === songCapo ? undefined : next });
+    if (setlistItem?.capo !== undefined) setItem({ capo: undefined });
+    if (next !== songCapo) void saveSong({ id: song.id, content: upsertDirective(song.content, 'capo', next ? String(next) : '') });
   };
   const setFont = (n: number) => void updateSettings({ fontSize: Math.max(MIN_FONT, Math.min(MAX_FONT, n)) });
   const setSpeed = (n: number) => void updateSongPrefs(song.id, { scrollSpeed: Math.max(1, Math.min(10, n)) });
@@ -654,11 +660,11 @@ export function SongPage() {
             </button>
             {setlistItem && (
               <button
-                className={`btn small scope-btn${transposeInSetlist ? ' active' : ''}`}
-                title={transposeInSetlist ? 'Tonarten ändras bara i den här setlistan' : 'Tonarten ändras för låten överallt'}
-                onClick={() => void updateSettings({ transposeScope: transposeInSetlist ? 'global' : 'setlist' })}
+                className={`btn small scope-btn${inSetlist ? ' active' : ''}`}
+                title={inSetlist ? 'Tonart och kapo ändras bara i den här setlistan' : 'Tonart och kapo ändras för låten överallt'}
+                onClick={() => void updateSettings({ transposeScope: inSetlist ? 'global' : 'setlist' })}
               >
-                {transposeInSetlist ? 'I setlistan' : 'Överallt'}
+                {inSetlist ? 'I setlistan' : 'Överallt'}
               </button>
             )}
           </div>
@@ -812,7 +818,7 @@ export function SongPage() {
               </div>
             </div>
           )}
-          {!isFile && !stage && !controlsHidden && !annotating && capoShapeShift(parsed) > 0 && (
+          {!isFile && !stage && !controlsHidden && !annotating && itemCapo === undefined && capoShapeShift(songParsed) > 0 && (
             <div className="tip small-text capo-tip" onClick={(e) => e.stopPropagation()}>
               <div>
                 Ackorden verkar vara skrivna som grepp för kapo {capo}, men tonarten är {parsed.meta.key}. Skriv om

@@ -33,7 +33,7 @@ export interface SharedSetlist {
     name: string;
     date?: string;
     notes?: string;
-    items: { songId: string; cue?: string; transpose?: number }[];
+    items: { songId: string; cue?: string; transpose?: number; capo?: number }[];
   };
   songs: SharedSong[];
 }
@@ -49,7 +49,7 @@ export function buildSharedSetlist(setlist: Setlist, songs: Record<string, Song>
       name: setlist.name,
       date: setlist.date,
       notes: setlist.notes,
-      items: items.map((it) => (isCue(it) ? { songId: '', cue: it.cue } : { songId: it.songId, transpose: it.transpose })),
+      items: items.map((it) => (isCue(it) ? { songId: '', cue: it.cue } : { songId: it.songId, transpose: it.transpose, capo: it.capo })),
     },
     songs: ids.map((id) => {
       const s = songs[id];
@@ -90,6 +90,7 @@ export function parseSharedSetlist(text: string): SharedSetlist | null {
           songId: it.songId,
           cue: typeof it.cue === 'string' ? it.cue : undefined,
           transpose: Number.isInteger(it.transpose) ? normalizeTranspose(it.transpose!) : undefined,
+          capo: Number.isInteger(it.capo) && it.capo! >= 0 && it.capo! <= 11 ? it.capo : undefined,
         })),
     },
     songs: songs.map((s) => ({
@@ -140,7 +141,7 @@ export async function importSharedSetlist(shared: SharedSetlist): Promise<Setlis
         if (it.cue !== undefined) return { id: newId(), songId: '', cue: it.cue };
         const songId = ids.get(it.songId)!;
         const wanted = it.transpose ?? sender.get(it.songId)?.transpose ?? 0;
-        return { id: newId(), songId, transpose: wanted === (songs[songId]?.transpose ?? 0) ? undefined : wanted };
+        return { id: newId(), songId, transpose: wanted === (songs[songId]?.transpose ?? 0) ? undefined : wanted, capo: it.capo };
       }),
   });
 }

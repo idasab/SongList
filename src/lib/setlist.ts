@@ -1,5 +1,6 @@
 // Hjälpfunktioner för punkterna i en setlista: låtar och mellanpunkter (t.ex. "Tal").
 
+import type { ParsedSong } from './chordpro';
 import type { SetlistItem, Song } from './model';
 
 /** Låt-id i adressen när en mellanpunkt visas */
@@ -25,6 +26,12 @@ export function itemPath(setlistId: string, it: SetlistItem, index: number): str
 /** Transponeringen för en låt i setlistan: setlistans egen om den har en, annars låtens. */
 export function itemTranspose(it: SetlistItem | undefined, song: Song): number {
   return typeof it?.transpose === 'number' ? it.transpose : song.transpose;
+}
+
+/** Låten med setlistans eget kapo, om punkten har ett (annars som den är). */
+export function withItemCapo(song: ParsedSong, it: SetlistItem | undefined): ParsedSong {
+  if (typeof it?.capo !== 'number') return song;
+  return { ...song, meta: { ...song.meta, capo: it.capo > 0 ? String(it.capo) : undefined } };
 }
 
 export function songCount(items: SetlistItem[]): number {
