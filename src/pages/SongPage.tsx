@@ -1203,7 +1203,7 @@ function FilesSheet({ song, onClose }: { song: Song; onClose: () => void }) {
           </div>
         ))}
       </div>
-      <div className="label" style={{ marginTop: 14 }}>
+      <div className="section-title" style={{ marginTop: 18 }}>
         Lägg till
       </div>
       <div className="btn-row">
