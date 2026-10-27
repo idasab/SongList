@@ -88,7 +88,32 @@ export function EditorPage() {
   const tagSuggestions = useMemo(() => allTags(songsRec), [songsRec]);
   const categories = useMemo(() => liveCategories(categoriesRec), [categoriesRec]);
 
+  // Öppnad från importlistan: ändringarna sparas där, och låten sparas först vid importen
+  const inQueue = useStore((s) => !!importItemId && s.importQueue.items.some((x) => x.id === importItemId));
   const save = useCallback(async () => {
+    if (importItemId && useStore.getState().importQueue.items.some((x) => x.id === importItemId)) {
+      updateImportQueue((q) => ({
+        ...q,
+        items: q.items.map((x) =>
+          x.id === importItemId
+            ? {
+                ...x,
+                raw: content,
+                kind: 'chordpro',
+                edited: true,
+                // Bara det som skiljer sig från det som gäller alla låtar i importen
+                tags: tags.filter((t) => !q.tags.includes(t)),
+                categoryId: categoryId === q.categoryId ? undefined : categoryId,
+              }
+            : x,
+        ),
+      }));
+      setSaved(true);
+      leavingAfterSave.current = true;
+      toast('Ändrat i importlistan');
+      navigate('/import', { replace: true });
+      return;
+    }
     const song = await saveSong({ id: existing?.id, content, tags, categoryId, attachment: draftAttachment });
     setSaved(true);
     toast('Sparat');
@@ -242,7 +267,7 @@ export function EditorPage() {
 
   return (
     <div className="screen">
-      <Header title={existing ? 'Redigera' : 'Ny låt'} back={true}>
+      <Header title={existing ? 'Redigera' : inQueue ? 'Låt i importen' : 'Ny låt'} back={true}>
         {!wide && (
           <Segmented
             value={view}

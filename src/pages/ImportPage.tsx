@@ -50,7 +50,8 @@ function convert(item: ImportItem): string {
 
 /** Låtens text vid import: bara titeln när filen ska visas som original. */
 function contentFor(item: ImportItem): string {
-  if (item.display !== 'file') return convert(item);
+  // Ändrat i editorn: titel, artist m.m. som de skrevs där
+  if (item.display !== 'file' || item.edited) return convert(item);
   const title = parseChordPro(convert(item)).meta.title || titleFromFileName(item.fileName);
   return `{title: ${title}}\n`;
 }
@@ -584,7 +585,7 @@ function ImportItemCard({
           </button>
         )}
         <div className="main">
-          <div style={{ fontWeight: 600 }}>{(asFile ? null : parsed.meta.title) || titleFromFileName(item.fileName)}</div>
+          <div style={{ fontWeight: 600 }}>{(asFile && !item.edited ? null : parsed.meta.title) || titleFromFileName(item.fileName)}</div>
           <div className="muted small-text">
             {parsed.meta.artist ? parsed.meta.artist + ' · ' : ''}
             {item.fileName}
