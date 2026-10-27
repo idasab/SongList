@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, ChevronDown, ChevronUp, ClipboardPaste, FileUp, Image as ImageIcon, Lightbulb, Pencil, X } from 'lucide-react';
+import { Camera, Check, ChevronDown, ChevronUp, ClipboardPaste, FileUp, Image as ImageIcon, Lightbulb, Pencil, X } from 'lucide-react';
 import { SongRenderer } from '../components/SongRenderer';
 import { TagInput } from '../components/TagInput';
 import { CategorySelect, SAME_AS_ALL } from '../components/CategorySelect';
@@ -239,6 +239,21 @@ export function ImportPage() {
   const dupCount = duplicates.filter(Boolean).length;
   const toImport = actions.filter((a, i) => a !== 'skip' && !joins[i]).length;
   const joinedCount = joins.filter(Boolean).length;
+  // Vad som händer med dubbletterna: samma val för alla (som markeras), och en sammanfattning
+  const dupActions = actions.filter((_, i) => duplicates[i]);
+  const dupAll = dupActions.length && dupActions.every((a) => a === dupActions[0]) ? dupActions[0] : undefined;
+  const dupSummary = (
+    [
+      ['skip', 'hoppas över'],
+      ['add', 'läggs till'],
+      ['merge', 'läggs till som sida'],
+      ['replace', 'ersätter den som finns'],
+    ] as const
+  )
+    .map(([a, text]) => [dupActions.filter((x) => x === a).length, text] as const)
+    .filter(([n]) => n)
+    .map(([n, text]) => `${n} ${text}`)
+    .join(', ');
   const setAllDuplicates = (action: DuplicateAction) =>
     setItems((cur) => cur.map((x, i) => (duplicates[i] ? { ...x, duplicate: action } : x)));
 
@@ -406,16 +421,30 @@ export function ImportPage() {
                     <b>
                       {dupCount} {dupCount === 1 ? 'låt finns' : 'låtar finns'} redan
                     </b>
-                    <div className="muted small-text">
-                      Likadana låtar hoppas över, övriga läggs till. Du kan välja för varje låt nedan.
-                    </div>
+                    {/* Hur det blir just nu, så att det syns när valet ändras */}
+                    <div className="small-text">{dupSummary}</div>
+                    <div className="muted small-text">Du kan välja för varje låt nedan.</div>
                   </div>
                   <div className="btn-row">
-                    <button className="btn small" onClick={() => setAllDuplicates('skip')}>
-                      Hoppa över alla
+                    <button
+                      className={`btn small${dupAll === 'skip' ? ' active' : ''}`}
+                      aria-pressed={dupAll === 'skip'}
+                      onClick={() => {
+                        setAllDuplicates('skip');
+                        toast(`${dupCount} ${dupCount === 1 ? 'låt hoppas' : 'låtar hoppas'} över`);
+                      }}
+                    >
+                      {dupAll === 'skip' && <Check size={15} />} Hoppa över alla
                     </button>
-                    <button className="btn small" onClick={() => setAllDuplicates('add')}>
-                      Lägg till alla
+                    <button
+                      className={`btn small${dupAll === 'add' ? ' active' : ''}`}
+                      aria-pressed={dupAll === 'add'}
+                      onClick={() => {
+                        setAllDuplicates('add');
+                        toast(`${dupCount} ${dupCount === 1 ? 'låt läggs' : 'låtar läggs'} till`);
+                      }}
+                    >
+                      {dupAll === 'add' && <Check size={15} />} Lägg till alla
                     </button>
                   </div>
                 </div>
