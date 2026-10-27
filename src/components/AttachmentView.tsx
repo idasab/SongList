@@ -172,15 +172,31 @@ function PagedView(props: PagedProps & { pages: FilePage[]; status: string }) {
   const lastTap = useRef({ t: 0, x: 0, y: 0 });
   const [active, setActive] = useState(false);
 
+  // Zoomen som syns just nu: under övergången (0,2 s) är den på väg mot zoomRef
+  const shownZoom = (): PageZoom => {
+    const img = imgRef.current;
+    const t = img ? getComputedStyle(img).transform : 'none';
+    if (!t || t === 'none') return NO_ZOOM;
+    const m = new DOMMatrixReadOnly(t);
+    return m.a > 0 ? { s: m.a, x: m.e, y: m.f } : NO_ZOOM;
+  };
+
   // Sidans yta utan zoom (skärmkoordinater)
   const baseRect = (): DOMRect | null => {
     const r = imgRef.current?.getBoundingClientRect();
     if (!r) return null;
-    const z = zoomRef.current;
+    const z = shownZoom();
     return new DOMRect(r.left - z.x, r.top - z.y, r.width / z.s, r.height / z.s);
   };
 
   const begin = () => {
+    // En ny gest mitt i en övergång börjar där sidan syns, inte där den skulle hamna
+    const shown = shownZoom();
+    const z = zoomRef.current;
+    if (Math.abs(shown.s - z.s) > 0.001 || Math.abs(shown.x - z.x) > 0.5 || Math.abs(shown.y - z.y) > 0.5) {
+      zoomRef.current = shown;
+      onZoom(shown);
+    }
     const b = baseRect();
     const pts = [...pointers.current.values()];
     if (!b || !pts.length) {
