@@ -35,7 +35,7 @@ import { ChordDiagram, ChordSheet } from '../components/ChordDiagram';
 import { SongRenderer } from '../components/SongRenderer';
 import { Header, Sheet, toast, toastError } from '../components/ui';
 import { formatChord, formatKey, normalizeTranspose } from '../lib/chords';
-import { songKey } from '../lib/search';
+import { filterSongs, songKey, sortSongs } from '../lib/search';
 import {
   capoOf,
   capoShapeShift,
@@ -48,7 +48,8 @@ import {
   transposeSource,
   upsertDirective,
 } from '../lib/chordpro';
-import { liveSetlists, useStore } from '../store/useStore';
+import { liveSetlists, liveSongs, useStore } from '../store/useStore';
+import { mergeSongs } from '../services/mergeSongs';
 import { safeFileName, saveTextFile } from '../services/files';
 import { newId, songFiles, type Song, type SongAttachment } from '../lib/model';
 import { Metronome, beatsPerBar, parseTempo } from '../lib/metronome';
@@ -1161,6 +1162,7 @@ function FilesSheet({ song, onClose }: { song: Song; onClose: () => void }) {
   const saveSong = useStore((s) => s.saveSong);
   const files = songFiles(song);
   const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState(false);
   const save = (next: SongAttachment[]) => saveSong({ id: song.id, content: song.content, files: next });
   const move = (i: number) => void save(files.map((f, j) => (j === i - 1 ? files[i] : j === i ? files[i - 1] : f)));
   const remove = (i: number) => {
@@ -1201,8 +1203,12 @@ function FilesSheet({ song, onClose }: { song: Song; onClose: () => void }) {
           </div>
         ))}
       </div>
-      <label className={`btn${busy ? ' disabled' : ''}`} style={{ marginTop: 12 }}>
-        <FilePlus size={18} /> {busy ? 'Lägger till…' : 'Lägg till PDF eller bild'}
+      <div className="label" style={{ marginTop: 14 }}>
+        Lägg till
+      </div>
+      <div className="btn-row">
+      <label className={`btn${busy ? ' disabled' : ''}`}>
+        <FilePlus size={18} /> {busy ? 'Lägger till…' : 'Ny fil'}
         <input
           type="file"
           accept=".pdf,application/pdf,image/*"
@@ -1215,6 +1221,91 @@ function FilesSheet({ song, onClose }: { song: Song; onClose: () => void }) {
           }}
         />
       </label>
+      <button className="btn" disabled={busy} onClick={() => setPicking(true)}>
+        <Files size={18} /> Finns i appen
+      </button>
+      </div>
+      {picking && <PickFileSongSheet song={song} onClose={() => setPicking(false)} />}
+    </Sheet>
+  );
+}
+
+/** En PDF eller bild som redan finns i appen: slå ihop låtarna, eller kopiera bara filerna. */
+function PickFileSongSheet({ song, onClose }: { song: Song; onClose: () => void }) {
+  const songsRec = useStore((s) => s.songs);
+  const saveSong = useStore((s) => s.saveSong);
+  const [query, setQuery] = useState('');
+  const [other, setOther] = useState<Song | null>(null);
+  const [busy, setBusy] = useState(false);
+  const candidates = useMemo(
+    () => sortSongs(filterSongs(liveSongs(songsRec).filter((s) => s.attachment && s.id !== song.id), { query, fullText: false, tags: [] }), 'title'),
+    [songsRec, song.id, query],
+  );
+  const run = async (merge: boolean) => {
+    if (!other) return;
+    setBusy(true);
+    try {
+      if (merge) await mergeSongs([song.id, other.id]);
+      else await saveSong({ id: song.id, content: song.content, files: [...songFiles(song), ...songFiles(other)] });
+      toast(merge ? `${other.title} är ihopslagen med låten` : 'Filerna är tillagda');
+      onClose();
+    } catch (e) {
+      toastError(e, 'Filerna kunde inte läggas till');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Sheet title={other ? other.title : 'Välj en låt med filer'} onClose={onClose}>
+      {other ? (
+        <>
+          <p className="muted small-text" style={{ marginTop: 0 }}>
+            {songFiles(other).length === 1 ? 'Filen' : `De ${songFiles(other).length} filerna`} i {other.title} läggs till sist i{' '}
+            {song.title}.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button className="btn primary" disabled={busy} onClick={() => void run(true)}>
+              Slå ihop till en låt
+            </button>
+            <p className="muted small-text" style={{ margin: '0 0 6px' }}>
+              {other.title} tas bort, och setlistor som har den får {song.title} i stället.
+            </p>
+            <button className="btn" disabled={busy} onClick={() => void run(false)}>
+              Kopiera bara filerna
+            </button>
+            <p className="muted small-text" style={{ margin: '0 0 6px' }}>
+              {other.title} finns kvar som egen låt.
+            </p>
+            <button className="btn ghost" disabled={busy} onClick={() => setOther(null)}>
+              Välj en annan
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <input
+            className="input"
+            type="search"
+            placeholder="Sök titel eller artist"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <div className="file-list" style={{ marginTop: 10 }}>
+            {candidates.length === 0 && <p className="muted small-text">Inga andra låtar med PDF:er eller bilder.</p>}
+            {candidates.map((s) => (
+              <button key={s.id} className="file-row pick-row" onClick={() => setOther(s)}>
+                {s.attachment!.kind === 'pdf' ? <FileText size={18} /> : <ImageIcon size={18} />}
+                <span className="name">
+                  {s.title}
+                  {s.artist && <span className="muted"> – {s.artist}</span>}
+                </span>
+                {songFiles(s).length > 1 && <span className="badge">{songFiles(s).length}</span>}
+                <ChevronRight size={18} />
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </Sheet>
   );
 }

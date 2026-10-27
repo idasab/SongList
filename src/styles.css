@@ -2219,3 +2219,15 @@ label.btn.disabled {
   height: 18px;
   accent-color: var(--accent);
 }
+
+/* En låt att välja i listan över låtar med filer */
+.file-row.pick-row {
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
