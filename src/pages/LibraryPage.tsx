@@ -56,6 +56,10 @@ export function LibraryPage() {
   const tagList = useMemo(() => allTags(songsRec), [songsRec]);
   const categories = useMemo(() => liveCategories(categoriesRec), [categoriesRec]);
   const keys = useMemo(() => keysInLibrary(songs), [songs]);
+  const hasUncategorized = useMemo(() => {
+    const live = new Set(categories.map((c) => c.id));
+    return songs.some((s) => !s.categoryId || !live.has(s.categoryId));
+  }, [songs, categories]);
   const sort = settings.librarySort;
 
   // Sökfältet svarar direkt; listan filtreras om när det finns tid över mellan tangenttrycken
@@ -238,12 +242,6 @@ export function LibraryPage() {
                     <button className={`chip${!categoryId ? ' on' : ''}`} onClick={() => setCategoryId(undefined)}>
                       Alla
                     </button>
-                    <button
-                      className={`chip${categoryId === NO_CATEGORY ? ' on' : ''}`}
-                      onClick={() => setCategoryId(categoryId === NO_CATEGORY ? undefined : NO_CATEGORY)}
-                    >
-                      Utan kategori
-                    </button>
                     {categories.map((c) => (
                       <button
                         key={c.id}
@@ -253,6 +251,15 @@ export function LibraryPage() {
                         {c.name}
                       </button>
                     ))}
+                    {/* Sist, och bara när det finns låtar utan kategori */}
+                    {(hasUncategorized || categoryId === NO_CATEGORY) && (
+                      <button
+                        className={`chip${categoryId === NO_CATEGORY ? ' on' : ''}`}
+                        onClick={() => setCategoryId(categoryId === NO_CATEGORY ? undefined : NO_CATEGORY)}
+                      >
+                        Utan kategori
+                      </button>
+                    )}
                   </div>
                 </>
               )}
