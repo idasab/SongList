@@ -11,6 +11,9 @@ export interface Token {
   start: number;
   /** Bredd (om känd, t.ex. från OCR) */
   w?: number;
+  /** Överkant och höjd (från OCR), för att se upphöjda tecken */
+  top?: number;
+  h?: number;
 }
 
 export interface Row {

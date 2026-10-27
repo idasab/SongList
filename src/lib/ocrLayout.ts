@@ -1,6 +1,7 @@
 // Omvandlar OCR-resultat (ord med positioner) till ChordPro.
 
 import { isChord } from './chords';
+import { extractImportMeta } from './importMeta';
 import { assembleChordPro, expandChordSuffixes, isChordLine, isChordToken, parseHeader, type Row, type SourceRow, type Token } from './layout';
 
 /** Normaliserade koordinater 0..1 med origo uppe till vänster. */
@@ -64,9 +65,16 @@ export function groupVisualLines(page: OcrPage): VisualLine[] {
   const units: VisualLine[] = [];
   for (const line of page.lines) {
     const src = line.words.length ? line.words : [{ ...line, text: line.text }];
-    const words = src
+    const all = src
       .filter((w) => w.text.trim())
       .map((w) => ({ text: w.text.trim(), x: w.x * sx, y: w.y * sy, w: w.w * sx, h: w.h * sy }));
+    // Linjer och ramar läses som "ord" som är alldeles för breda för sina tecken
+    const isRule = (w: OcrWord) => w.w > w.h * (1.5 * w.text.length + 1);
+    const ruleWidth = all.filter(isRule).reduce((n, w) => n + w.w, 0);
+    const span = all.length ? Math.max(...all.map((w) => w.x + w.w)) - Math.min(...all.map((w) => w.x)) : 0;
+    // Mest linje: hela raden är brus
+    if (ruleWidth > span * 0.5) continue;
+    const words = all.filter((w) => !isRule(w));
     if (!words.length) continue;
     units.push({ words, ...coreBounds(words) });
   }
@@ -126,7 +134,7 @@ export function rowFromWords(words: OcrWord[], measure: (t: string) => number = 
       charX.push(words[idx - 1].x + words[idx - 1].w);
     }
     const start = text.length;
-    tokens.push({ text: w.text, x: w.x, start, w: w.w });
+    tokens.push({ text: w.text, x: w.x, start, w: w.w, top: w.y, h: w.h });
     const full = measure(w.text) || w.text.length;
     for (let i = 0; i < w.text.length; i++) {
       charX.push(w.x + (measure(w.text.slice(0, i)) / full) * w.w);
@@ -153,23 +161,30 @@ export function keepOcrWord(text: string, confidence: number): boolean {
   return confidence > 20 || /\p{L}.*\p{L}/u.test(text);
 }
 
-/** Kursiva ackord som lästs som andra tecken: 6 = G, 4 = A, ö = D */
-const LOOKALIKE: Record<string, string> = { '6': 'G', '4': 'A', ö: 'D', Ö: 'D', '0': 'D' };
+/** Ackord som lästs som andra tecken: kursivt 6 = G, 4 = A, ö = D; fetstilt C = 0 eller [0] */
+const LOOKALIKE: Record<string, string> = { '6': 'G', '4': 'A', ö: 'D', Ö: 'D', '0': 'C', O: 'C', '[0]': 'C', '(0)': 'C' };
 
 /**
  * Försöker rätta en felläst ackordbit. Vanliga fel: "Cc" för C, "G/F?" för G/F#, "C®" för C⁶,
  * "Di" för D¹¹ (upphöjda tecken), "GB" för G/B och två ackord som lästs som ett ("CG").
  * Returnerar null om biten inte går att tolka som ackord.
  */
-export function fixOcrChord(t: Token, charW: number): Token[] | null {
+export function fixOcrChord(t: Token, charW: number, raised = false): Token[] | null {
   if (isChordToken(t.text)) return [t];
-  let s = t.text
+  let s = t.text;
+  // Upphöjd siffra som lästs som ett tecken högt upp: "Bm?" och "D'" för Bm⁷ och D⁷, "DI" för D¹¹
+  if (raised) s = s.replace(/[?'’"”`]$/, '7').replace(/(?<=[A-H][#b]?(?:m|maj|sus|add)?)[Il|]{1,2}$/, '11');
+  s = s
+    // Efter m, sus m.m. kan ? inte vara ett korsförtecken: det är en upphöjd 7:a
+    .replace(/(?<=[A-H][#b]?(?:m|maj|sus|add|dim))\?$/, '7')
     .replace(/[?”"“]/g, '#')
     .replace(/[®©]/g, '6')
     // Smuts före ackordet, t.ex. "oD", och efter, t.ex. "D'"
     .replace(/^[o°•·.,'’]+(?=[A-H])/, '')
     .replace(/(?<=\S)[°•·.,'’`]+$/, '');
   if (s in LOOKALIKE) s = LOOKALIKE[s];
+  // Liten bokstav för ett ackord, t.ex. "c"
+  if (/^[a-h]$/.test(s)) s = s.toUpperCase();
   // A med ring eller prickar ("ÅA", "ÅSuUS")
   s = s.replace(/^[ÅÄåä](?=[A-Za-z#]|$)/, 'A');
   // Versaler i hela ackordet, t.ex. "ASUS" för Asus
@@ -214,9 +229,17 @@ function fixChordRow(row: Row): Row {
   if (isChordLine(texts)) return row;
   const widths = row.tokens.filter((t) => t.w).map((t) => t.w! / Math.max(1, t.text.length));
   const charW = median(widths) || row.spaceWidth;
+  // Ackord med upphöjda tecken sticker upp över de andra och är högre
+  const sized = row.tokens.filter((t) => t.top !== undefined && t.h);
+  // Jämför med ackord som lästs rätt (utan upphöjt), annars med alla
+  const plain = sized.filter((t) => /^[A-H][#b]?m?$/.test(t.text));
+  const ref = plain.length ? plain : sized;
+  const midTop = median(ref.map((t) => t.top!));
+  const midH = median(ref.map((t) => t.h!));
+  const raised = (t: Token) => sized.length >= 2 && t.top! < midTop - midH * 0.15 && t.h! > midH * 1.15;
   let fixed: Token[] = [];
   for (const t of row.tokens) {
-    const f = fixOcrChord(t, charW);
+    const f = fixOcrChord(t, charW, raised(t));
     if (f) fixed.push(...f);
     else fixed.push(t);
   }
@@ -248,6 +271,11 @@ function rowsWithMarginLabels(lines: VisualLine[], measure?: (t: string) => numb
     for (const w of l.words) {
       if (w.x + w.w < mainLeft - mh * 0.8) labelWords.push(w);
       else break;
+    }
+    // Rubrik som går nästan ända fram till texten, t.ex. "Refräng" tätt intill första ordet
+    const [first, second] = l.words;
+    if (!labelWords.length && second && first.x < mainLeft - mh && second.x > mainLeft - mh * 0.5 && parseHeader(first.text)) {
+      labelWords.push(first);
     }
     const label = labelWords.map((w) => w.text).join(' ');
     const header = label ? parseHeader(label) ?? parseHeader(`${label}:`) : null;
@@ -393,7 +421,7 @@ export function ocrToChordPro(pages: OcrPage[], measure?: (t: string) => number)
     if (i > 0) rows.push(null);
     rows.push(...pageToRows(p, measure, footer));
   });
-  const body = joinSyllables(assembleChordPro(rows, { detectTitle: true, chordTolerance: CHORD_TOLERANCE }));
+  const body = extractImportMeta(joinSyllables(assembleChordPro(rows, { detectTitle: true, chordTolerance: CHORD_TOLERANCE })));
   // Sidfoten som kommentarer sist, en gång även om den står på varje sida
   const comments = [...new Set(footer)].map((t) => `{comment: ${t}}`);
   return comments.length ? `${body.trimEnd()}\n\n${comments.join('\n')}\n` : body;

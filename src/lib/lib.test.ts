@@ -266,6 +266,26 @@ describe('ovanliga typsnitt i OCR', () => {
     expect(out).toContain('[F#m]Månen går [F#m7]ner [Asus]över [A]ån');
   });
 
+  it('upphöjda siffror, rubrik tätt intill texten och linjer', () => {
+    const W = 1000;
+    const H = 1000;
+    const word = (text: string, x: number, y: number, w: number, h = 25) => ({ text, x: x / W, y: y / H, w: w / W, h: h / H });
+    const line = (...words: ReturnType<typeof word>[]) => ({ text: words.map((w) => w.text).join(' '), x: 0, y: 0, w: 0, h: 0, words });
+    const page: OcrPage = {
+      width: W,
+      height: H,
+      lines: [
+        line(word('HV', 40, 60, 450, 30), word('OO', 600, 60, 300, 30)),
+        line(word("D'", 180, 100, 38, 34), word('G', 300, 108, 24), word('[0]', 450, 104, 29, 30), word('Bm?', 700, 100, 66, 34), word('DI', 850, 100, 49, 34)),
+        line(word('Refräng', 65, 160, 92), word('Vi', 180, 150, 33), word('vill', 300, 150, 43), word('upp', 450, 150, 60), word('höja', 700, 150, 70), word('Dig', 850, 150, 50)),
+      ],
+    };
+    const out = ocrToChordPro([page]);
+    expect(out).toContain('{start_of_chorus: Refräng}');
+    expect(out).toContain('[D7]Vi [G]vill [C]upp [Bm7]höja [D11]Dig');
+    expect(out).not.toMatch(/HV|OO/);
+  });
+
   it('behåller ord med låg säkerhet om de har bokstäver', () => {
     expect(keepOcrWord('Åhh,', 0)).toBe(true);
     expect(keepOcrWord('F#m', 5)).toBe(true);
