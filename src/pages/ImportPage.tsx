@@ -608,6 +608,18 @@ function ImportItemCard({
     }
   };
 
+  const actions = (
+    <>
+      <span style={{ flex: 1 }} />
+      <button className="btn small" onClick={onEdit}>
+        <Pencil size={15} /> Öppna i editor
+      </button>
+      <button className="btn small" onClick={() => setOpen((v) => !v)}>
+        {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />} Förhandsvisa
+      </button>
+    </>
+  );
+
   return (
     <div className={`import-item${action === 'skip' ? ' skipped' : ''}${join?.joined ? ' joined' : ''}`} data-import={item.id}>
       <div className="head">
@@ -715,18 +727,16 @@ function ImportItemCard({
         <button className={`btn small${showTags || item.tags?.length ? ' active' : ''}`} onClick={() => setShowTags((v) => !v)}>
           Taggar{item.tags?.length ? ` (${item.tags.length})` : ''}
         </button>
-        <span style={{ flex: 1 }} />
-        <button className="btn small" onClick={onEdit}>
-          <Pencil size={15} /> Öppna i editor
-        </button>
-        <button className="btn small" onClick={() => setOpen((v) => !v)}>
-          {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />} Förhandsvisa
-        </button>
+        {!showTags && actions}
       </div>
       {showTags && (
-        <div className="opts" style={{ display: 'block' }}>
-          <TagInput value={item.tags ?? []} onChange={(t) => onChange({ ...item, tags: t })} suggestions={tagSuggestions} />
-        </div>
+        <>
+          <div className="opts" style={{ display: 'block' }}>
+            <TagInput value={item.tags ?? []} onChange={(t) => onChange({ ...item, tags: t })} suggestions={tagSuggestions} />
+          </div>
+          {/* Knapparna står alltid närmast förhandsvisningen */}
+          <div className="opts">{actions}</div>
+        </>
       )}
       </>
       )}
