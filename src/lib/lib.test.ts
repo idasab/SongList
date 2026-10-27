@@ -652,6 +652,18 @@ describe('ackord mellan ord', () => {
     ]);
   });
 
+  it('flera mellanslag efter ackordet: ackordet står före texten', () => {
+    const segs = splitWords(parseLyricsLine('[Am7]    Kom som en [Em] kraftfull vind'));
+    expect(segs.map((s) => [s.chord ?? '', s.text])).toEqual([
+      ['Am7', '    '],
+      ['', 'Kom '],
+      ['', 'som '],
+      ['', 'en  '],
+      ['Em', 'kraftfull '],
+      ['', 'vind'],
+    ]);
+  });
+
   it('ackord först på raden före ett mellanslag', () => {
     const segs = splitWords(parseLyricsLine('[A] Och var'));
     expect(segs.map((s) => [s.chord ?? '', s.text])).toEqual([

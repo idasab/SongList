@@ -342,7 +342,9 @@ export function splitWords(segments: Segment[]): Segment[] {
     }
     let chord = s.chord;
     parts.forEach((p, i) => {
-      if (i === 0 && chord !== undefined && !p.trim()) {
+      // Ett mellanslag efter ackordet: ackordet hör till nästa ord. Flera mellanslag är ett
+      // avsiktligt avstånd, t.ex. "[Am7]    Kom": då står ackordet kvar före texten.
+      if (i === 0 && chord !== undefined && !p.trim() && p.length < 2) {
         const prev = out[out.length - 1];
         if (prev) prev.text += p;
         else out.push({ text: p });
