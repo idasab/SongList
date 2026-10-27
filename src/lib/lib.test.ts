@@ -11,7 +11,7 @@ import { formatChord, isChord, parseChord, parseKey, formatKey } from './chords'
 import { capoOf, capoShapeShift, displayChordContext, formatDuration, isChordRow, parseDuration, shapesToSounding, midWordBreaks, parseChordPro, parseLyricsLine, splitWords, transposeSource, upsertDirective } from './chordpro';
 import { isChordLine, parseHeader } from './layout';
 import { decodeText, isChordProFileName, looksLikeChordPro, textToChordPro, titleFromFileName, type Measure } from './textImport';
-import { ocrToChordPro, type OcrPage } from './ocrLayout';
+import { keepOcrWord, ocrToChordPro, type OcrPage } from './ocrLayout';
 import { getPianoChord, normalizeSuffix } from './chordShapes';
 import { mergeRecords, restoreMerge } from './merge';
 import { anchorAt, anchorToPx, clampNoteCenter, hitStroke, mergeAnnotations, strokeFromPx, strokeToPx } from './annotations';
@@ -233,6 +233,37 @@ describe('OCR-layout', () => {
     expect(out).toContain('{start_of_verse: Vers 1}');
     expect(out).toContain('Mor[G]gon [D11]dagg');
     expect(out).toContain('[G/F#]Fåg lar sjunger');
+  });
+});
+
+describe('ovanliga typsnitt i OCR', () => {
+  it('rättar kursiva ackord som lästs fel och delade ord', () => {
+    const W = 1000;
+    const H = 1000;
+    const word = (text: string, x: number, y: number, w: number, h = 40) => ({ text, x: x / W, y: y / H, w: w / W, h: h / H });
+    const line = (...words: ReturnType<typeof word>[]) => ({ text: words.map((w) => w.text).join(' '), x: 0, y: 0, w: 0, h: 0, words });
+    const page: OcrPage = {
+      width: W,
+      height: H,
+      lines: [
+        line(word('Fam', 50, 100, 60), word('6', 300, 100, 20), word('4', 400, 100, 20), word('ö', 500, 100, 20)),
+        line(word('Solen', 50, 160, 100), word('går', 170, 160, 60), word('upp', 300, 160, 60), word('över', 400, 160, 80), word('ån', 500, 160, 40)),
+        line(word('ASUS', 50, 260, 80), word("D'", 300, 260, 25)),
+        line(word('S', 50, 320, 20), word('olen', 74, 320, 80), word('lyser', 300, 320, 100)),
+      ],
+    };
+    const out = ocrToChordPro([page]);
+    expect(out).toContain('[F#m]Solen går [G]upp [A]över [D]ån');
+    expect(out).toContain('[Asus]Solen [D]lyser');
+  });
+
+  it('behåller ord med låg säkerhet om de har bokstäver', () => {
+    expect(keepOcrWord('Åhh,', 0)).toBe(true);
+    expect(keepOcrWord('F#m', 5)).toBe(true);
+    expect(keepOcrWord('|', 5)).toBe(false);
+    expect(keepOcrWord('Fam', 5)).toBe(true);
+    expect(keepOcrWord('~', 10)).toBe(false);
+    expect(keepOcrWord('G', 90)).toBe(true);
   });
 });
 

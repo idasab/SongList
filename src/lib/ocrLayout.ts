@@ -94,7 +94,17 @@ export function groupVisualLines(page: OcrPage): VisualLine[] {
       lines.push({ words: [...u.words], top: u.top, bottom: u.bottom });
     }
   }
-  for (const l of lines) l.words.sort((a, b) => a.x - b.x);
+  for (const l of lines) {
+    l.words.sort((a, b) => a.x - b.x);
+    // Ord som delats mitt i, t.ex. "J esus": nästan inget mellanrum och en liten bokstav efter
+    l.words = l.words.reduce<OcrWord[]>((out, w) => {
+      const prev = out[out.length - 1];
+      if (prev && /\p{L}$/u.test(prev.text) && /^\p{Ll}/u.test(w.text) && w.x - (prev.x + prev.w) < Math.min(prev.h, w.h) * 0.15) {
+        out[out.length - 1] = { ...prev, text: prev.text + w.text, w: w.x + w.w - prev.x, h: Math.max(prev.h, w.h) };
+      } else out.push(w);
+      return out;
+    }, []);
+  }
   lines.sort((a, b) => a.top - b.top);
   return lines;
 }
@@ -134,6 +144,19 @@ export function rowFromWords(words: OcrWord[], measure: (t: string) => number = 
 // --- Rättning av felästa ackord ---
 
 /**
+ * Om ett ord från textigenkänningen ska användas. Ord med låg säkerhet är oftast brus (prickar,
+ * streck), men i ovanliga typsnitt kan även riktiga ord och ackord få låg säkerhet, t.ex. "Åhh"
+ * eller "F#m". Ord med minst två bokstäver behålls därför alltid.
+ */
+export function keepOcrWord(text: string, confidence: number): boolean {
+  if (!text.trim()) return false;
+  return confidence > 20 || /\p{L}.*\p{L}/u.test(text);
+}
+
+/** Kursiva ackord som lästs som andra tecken: 6 = G, 4 = A, ö = D */
+const LOOKALIKE: Record<string, string> = { '6': 'G', '4': 'A', ö: 'D', Ö: 'D', '0': 'D' };
+
+/**
  * Försöker rätta en felläst ackordbit. Vanliga fel: "Cc" för C, "G/F?" för G/F#, "C®" för C⁶,
  * "Di" för D¹¹ (upphöjda tecken), "GB" för G/B och två ackord som lästs som ett ("CG").
  * Returnerar null om biten inte går att tolka som ackord.
@@ -143,8 +166,16 @@ export function fixOcrChord(t: Token, charW: number): Token[] | null {
   let s = t.text
     .replace(/[?”"“]/g, '#')
     .replace(/[®©]/g, '6')
-    // Smuts före ackordet, t.ex. "oD"
-    .replace(/^[o°•·.,'’]+(?=[A-G])/, '');
+    // Smuts före ackordet, t.ex. "oD", och efter, t.ex. "D'"
+    .replace(/^[o°•·.,'’]+(?=[A-H])/, '')
+    .replace(/(?<=\S)[°•·.,'’`]+$/, '');
+  if (s in LOOKALIKE) s = LOOKALIKE[s];
+  // Versaler i hela ackordet, t.ex. "ASUS" för Asus
+  const caps = /^([A-H][#b]?)(SUS|MAJ|DIM|ADD|AUG|M)(\d*)$/.exec(s);
+  if (caps) s = `${caps[1]}${caps[2].toLowerCase()}${caps[3]}`;
+  // Korsförtecknet läst som en bokstav: "Fam", "FAtm" och "FAm7" för F#m
+  const sharp = /^([A-H])(?:a|A|At|At|H)(m.*|7.*|sus.*)$/.exec(s);
+  if (sharp && !isChord(s) && isChord(`${sharp[1]}#${sharp[2]}`)) s = `${sharp[1]}#${sharp[2]}`;
   const doubled = /^([A-G])\1$/i.exec(s);
   if (doubled) s = doubled[1].toUpperCase();
   // Upphöjt 11 läses ofta som i, l eller |

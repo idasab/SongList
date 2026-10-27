@@ -2,7 +2,7 @@
 // - iOS: Apples dokumentskanner + Vision (inbyggd textigenkänning)
 // - Webb: Tesseract.js i webbläsaren
 
-import { ocrToChordPro, type OcrLine, type OcrPage } from '../lib/ocrLayout';
+import { keepOcrWord, ocrToChordPro, type OcrLine, type OcrPage } from '../lib/ocrLayout';
 import { canvasMeasure } from '../lib/textImport';
 import { hasNativePlugin, SongListNative } from '../native/songlistNative';
 
@@ -117,7 +117,7 @@ async function recognizeWithTesseract(canvas: HTMLCanvasElement, onProgress?: Pr
             text: line.text.trim(),
             ...box(line.bbox),
             words: line.words
-              .filter((w) => w.text.trim() && w.confidence > 20)
+              .filter((w) => keepOcrWord(w.text, w.confidence))
               .map((w) => ({ text: w.text.trim(), ...box(w.bbox) })),
           });
         }
