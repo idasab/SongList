@@ -302,8 +302,28 @@ export function dropChordDiagrams(lines: VisualLine[]): VisualLine[] {
     .map((l) => ({ ...l, ...coreBounds(l.words) }));
 }
 
-export function pageToRows(page: OcrPage, measure?: (t: string) => number): SourceRow[] {
-  const lines = dropChordDiagrams(groupVisualLines(page));
+/**
+ * Sidfot nere till höger, t.ex. förlag, katalognummer och webbadress: rader längst ner på sidan
+ * som börjar till höger om mitten. De är inte låttext; texten läggs i `footer`.
+ */
+export function splitFooter(lines: VisualLine[], page: OcrPage, footer: string[]): VisualLine[] {
+  const w = page.width || 1;
+  const h = page.height || 1;
+  let i = lines.length;
+  while (i > 0) {
+    const l = lines[i - 1];
+    if (l.top < h * 0.8 || Math.min(...l.words.map((x) => x.x)) < w * 0.5) break;
+    i--;
+  }
+  // Allt på sidan kan inte vara sidfot
+  if (i === 0) return lines;
+  footer.push(...lines.slice(i).map((l) => l.words.map((x) => x.text).join(' ')));
+  return lines.slice(0, i);
+}
+
+export function pageToRows(page: OcrPage, measure?: (t: string) => number, footer?: string[]): SourceRow[] {
+  let lines = dropChordDiagrams(groupVisualLines(page));
+  if (footer) lines = splitFooter(lines, page, footer);
   if (!lines.length) return [];
   const mh = median(lines.map((l) => l.bottom - l.top)) || 1;
   const { rows, gapsBefore } = rowsWithMarginLabels(lines, measure);
@@ -327,9 +347,13 @@ export function joinSyllables(chordPro: string): string {
 
 export function ocrToChordPro(pages: OcrPage[], measure?: (t: string) => number): string {
   const rows: SourceRow[] = [];
+  const footer: string[] = [];
   pages.forEach((p, i) => {
     if (i > 0) rows.push(null);
-    rows.push(...pageToRows(p, measure));
+    rows.push(...pageToRows(p, measure, footer));
   });
-  return joinSyllables(assembleChordPro(rows, { detectTitle: true, chordTolerance: CHORD_TOLERANCE }));
+  const body = joinSyllables(assembleChordPro(rows, { detectTitle: true, chordTolerance: CHORD_TOLERANCE }));
+  // Sidfoten som kommentarer sist, en gång även om den står på varje sida
+  const comments = [...new Set(footer)].map((t) => `{comment: ${t}}`);
+  return comments.length ? `${body.trimEnd()}\n\n${comments.join('\n')}\n` : body;
 }

@@ -236,8 +236,8 @@ describe('OCR-layout', () => {
   });
 });
 
-describe('ackordscheman i PDF', () => {
-  it('tar bort scheman med grepp under, men inte ackord och text ovanför', () => {
+describe('ackordscheman och sidfot i PDF', () => {
+  it('tar bort scheman med grepp under och gör sidfoten till kommentarer', () => {
     const W = 600;
     const H = 800;
     const word = (text: string, x: number, y: number, w: number, h = 10) => ({ text, x: x / W, y: y / H, w: w / W, h: h / H });
@@ -254,12 +254,16 @@ describe('ackordscheman i PDF', () => {
         line(word('GG', 64, 512, 14)),
         fingers(60, 560, 'X 3 2 0 1 0'),
         fingers(140, 560, 'X 0 2 0 1 0'),
+        line(word('Förlaget', 420, 700, 60)),
+        line(word('www.exempel.se', 420, 715, 90)),
       ],
     };
     const out = ocrToChordPro([page]);
     expect(out).toContain('[G]Solen går [C]upp');
     expect(out).toContain('Nr 2112');
     expect(out).not.toMatch(/Am7|GG|X 3/);
+    // Sidfoten nere till höger blir kommentarer
+    expect(out.trim().endsWith('{comment: Förlaget}\n{comment: www.exempel.se}')).toBe(true);
   });
 });
 
