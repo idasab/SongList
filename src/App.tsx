@@ -134,6 +134,11 @@ export function App() {
     const root = document.documentElement;
     if (theme === 'system') root.removeAttribute('data-theme');
     else root.setAttribute('data-theme', theme);
+    // Statusfältet i samma färg som sidhuvudet, även när temat valts i appen i stället för av systemet
+    for (const m of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+      const dark = m.media.includes('dark');
+      m.content = theme === 'system' ? (dark ? '#1a1d24' : '#ffffff') : theme === 'dark' ? '#1a1d24' : '#ffffff';
+    }
   }, [theme]);
 
   if (!ready) {

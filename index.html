@@ -7,9 +7,12 @@
       content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
     />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- Från hemskärmen: innehållet börjar under statusfältet (iOS gör annars innehållet bakom det suddigt) -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="SongList" />
-    <meta name="theme-color" content="#111318" />
+    <!-- Statusfältet i samma färg som sidhuvudet; följer appens tema (sätts även i App) -->
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1a1d24" media="(prefers-color-scheme: dark)" />
     <link rel="icon" type="image/svg+xml" href="./icon.svg" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <title>SongList</title>
