@@ -178,6 +178,13 @@ export function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
 
+/** Två lager ovanpå varandra (t.ex. låtens och setlistans egna). */
+export function mergeAnnotations(a: Annotations | undefined, b: Annotations | undefined): Annotations | undefined {
+  if (!hasAnnotations(b)) return a;
+  if (!hasAnnotations(a)) return b;
+  return { strokes: [...a!.strokes, ...b!.strokes], notes: [...a!.notes, ...b!.notes] };
+}
+
 export function hasAnnotations(a: Annotations | undefined): boolean {
   return !!a && (a.strokes.length > 0 || a.notes.length > 0);
 }

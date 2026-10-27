@@ -67,6 +67,7 @@ export function AnnotationLayer({
   editingId,
   onTextChange,
   onTextDone,
+  dim,
 }: {
   annotations: Annotations;
   metrics: LineMetrics;
@@ -76,6 +77,8 @@ export function AnnotationLayer({
   editingId: string | null;
   onTextChange: (id: string, text: string) => void;
   onTextDone: (id: string) => void;
+  /** Blekt, t.ex. det lager man inte ritar i */
+  dim?: boolean;
 }) {
   const fp = metrics.fontPx;
   // Låtens bredd: lappar hålls inom den
@@ -91,7 +94,7 @@ export function AnnotationLayer({
     return () => ro.disconnect();
   }, []);
   return (
-    <div ref={layerRef} className={`annot-layer${interactive ? ' on' : ''}`} aria-hidden={!interactive}>
+    <div ref={layerRef} className={`annot-layer${interactive ? ' on' : ''}${dim ? ' dim' : ''}`} aria-hidden={!interactive}>
       <svg className="annot-svg">
         {annotations.strokes.map((s) => (
           <path

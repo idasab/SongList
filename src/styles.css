@@ -2082,3 +2082,8 @@ textarea.note-text {
   text-align: left;
   cursor: pointer;
 }
+
+/* Det anteckningslager man inte ritar i (låtens, när man ritar i setlistans, eller tvärtom) */
+.annot-layer.dim {
+  opacity: 0.4;
+}

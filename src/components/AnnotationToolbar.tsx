@@ -40,11 +40,24 @@ export function AnnotationToolbar(props: {
   onNoteChange: (patch: Partial<StickyNote>) => void;
   onNoteDelete: () => void;
   onNoteEdit: () => void;
+  /** I en setlista: om man ritar i setlistans lager eller på låten (överallt) */
+  scope?: { inSetlist: boolean; onToggle: () => void };
   style?: CSSProperties;
 }) {
   const { note } = props;
   return (
     <div className="song-toolbar annot-toolbar" style={props.style}>
+      {/* Först, så att man alltid ser vilket lager man ritar i */}
+      {props.scope && (
+        <button
+          className={`btn small scope-btn${props.scope.inSetlist ? ' active' : ''}`}
+          title={props.scope.inSetlist ? 'Du ritar i setlistans lager (syns bara i den här setlistan)' : 'Du ritar på låten (syns överallt)'}
+          onClick={props.scope.onToggle}
+        >
+          {props.scope.inSetlist ? 'I setlistan' : 'Överallt'}
+        </button>
+      )}
+
       <div className="tool-group">
         {TOOLS.map(({ value, label, Icon }) => (
           <button

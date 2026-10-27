@@ -14,7 +14,7 @@ import { decodeText, isChordProFileName, looksLikeChordPro, textToChordPro, titl
 import { ocrToChordPro, type OcrPage } from './ocrLayout';
 import { getPianoChord, normalizeSuffix } from './chordShapes';
 import { mergeRecords, restoreMerge } from './merge';
-import { anchorAt, anchorToPx, clampNoteCenter, hitStroke, strokeFromPx, strokeToPx } from './annotations';
+import { anchorAt, anchorToPx, clampNoteCenter, hitStroke, mergeAnnotations, strokeFromPx, strokeToPx } from './annotations';
 import { buildChordProExport, buildPdfExport, buildSongFiles, buildTextExport, mailBody, mailSubject } from '../services/setlistExport';
 import { isValidEmail } from '../services/mail';
 import { filterSongs, groupLetter, keyId, keyIdLabel, keysInLibrary, songKey, sortSongs } from './search';
@@ -285,6 +285,16 @@ describe('anteckningar', () => {
     const a = anchorAt(m20, 50, 80);
     // Samma rad, 1,5 gånger större text
     expect(anchorToPx(m30, a)).toEqual({ x: 75, y: 120 });
+  });
+
+  it('två lager: låtens och setlistans egna ovanpå', () => {
+    const note = (id: string) => ({ id, anchor: { line: 0, dx: 0, dy: 0 }, w: 1, h: 1, rotation: 0, text: id, fontSize: 1, color: 'yellow' as const });
+    const song = { strokes: [], notes: [note('låt')] };
+    const own = { strokes: [], notes: [note('setlista')] };
+    expect(mergeAnnotations(song, own)!.notes.map((n) => n.id)).toEqual(['låt', 'setlista']);
+    expect(mergeAnnotations(song, undefined)).toBe(song);
+    expect(mergeAnnotations(undefined, own)).toBe(own);
+    expect(mergeAnnotations(undefined, { strokes: [], notes: [] })).toBeUndefined();
   });
 
   it('i två spalter: fäster vid raden i spalten och följer med till en spalt', () => {

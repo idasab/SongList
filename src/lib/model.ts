@@ -60,6 +60,8 @@ export interface SetlistItem {
   transpose?: number;
   /** Kapo som bara gäller i den här setlistan, 0 = utan kapo (annars låtens {capo}) */
   capo?: number;
+  /** Anteckningar som bara gäller i den här setlistan (visas ovanpå låtens egna) */
+  ownAnnotations?: Annotations;
   /** Låtens anteckningar som de var när låten senast visades i setlistan (historik) */
   annotations?: Annotations;
   /** När kopian av anteckningarna sparades (ms) */
@@ -157,6 +159,10 @@ export function isBackupFile(data: unknown): data is BackupFile {
 const isRecord = (r: unknown): r is SyncRecord =>
   !!r && typeof r === 'object' && typeof (r as SyncRecord).id === 'string' && typeof (r as SyncRecord).updatedAt === 'number';
 
+function validAnnotations(a: Annotations | undefined): Annotations | undefined {
+  return a && Array.isArray(a.strokes) && Array.isArray(a.notes) ? a : undefined;
+}
+
 /**
  * Fyller i saknade fält i poster från synk eller säkerhetskopior (t.ex. från en äldre version
  * eller en skadad fil), så att appen inte kraschar på dem. Poster utan id eller tidsstämpel
@@ -193,8 +199,8 @@ export function sanitizeLibrary<T extends LibraryData>(data: T): T {
               ...it,
               transpose: typeof it.transpose === 'number' ? it.transpose : undefined,
               capo: Number.isInteger(it.capo) && it.capo! >= 0 && it.capo! <= 11 ? it.capo : undefined,
-              annotations:
-                it.annotations && Array.isArray(it.annotations.strokes) && Array.isArray(it.annotations.notes) ? it.annotations : undefined,
+              annotations: validAnnotations(it.annotations),
+              ownAnnotations: validAnnotations(it.ownAnnotations),
             }))
         : [],
     })),

@@ -22,6 +22,7 @@ import { formatChord, formatKey, parseKey, type ChordContext, type Notation } fr
 import {
   NOTE_COLORS,
   anchorToPx,
+  mergeAnnotations,
   strokeToPx,
   type Annotations,
   type InkColor,
@@ -56,6 +57,8 @@ interface PreparedSong {
   song: Song;
   /** Transponeringen i setlistan (setlistans egen, annars låtens) */
   transpose: number;
+  /** Låtens anteckningar med setlistans egna ovanpå */
+  annotations?: Annotations;
   parsed: ParsedSong;
   ctx: ChordContext;
 }
@@ -68,7 +71,8 @@ function prepare(setlist: Setlist, songs: Record<string, Song>, notation: Notati
       const transpose = itemTranspose(it, song);
       const parsed = withItemCapo(parseChordPro(song.content), it);
       // Ackorden exporteras som de visas: som grepp när låten har kapo
-      return { song, transpose, parsed, ctx: displayChordContext(parsed, transpose, notation) };
+      const annotations = mergeAnnotations(song.annotations, it.ownAnnotations);
+      return { song, transpose, annotations, parsed, ctx: displayChordContext(parsed, transpose, notation) };
     });
 }
 
@@ -715,7 +719,7 @@ async function renderPdf(
       n += (sec.label ? 1 : 0) + sec.lines.length;
     }
     for (let i = 0; i < tops.length; i++) if (tops[i] === undefined) tops[i] = i ? tops[i - 1] : 0;
-    if (opts.withAnnotations && p.song.annotations) drawAnnotations(doc, p.song.annotations, tops);
+    if (opts.withAnnotations && p.annotations) drawAnnotations(doc, p.annotations, tops);
   }
 
   drawFooters(doc, opts.footer);

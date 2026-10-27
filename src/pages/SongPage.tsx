@@ -51,7 +51,7 @@ import { useSwipeNavigation } from '../hooks/useSwipeNavigation';
 import { AttachmentView } from '../components/AttachmentView';
 import { isCue, itemPath, itemTitle, itemTranspose, liveItems, songCount, withItemCapo } from '../lib/setlist';
 import { useAnnotationGestures, type AnnotTool } from '../hooks/useAnnotationGestures';
-import { EMPTY_ANNOTATIONS, INK_WIDTHS, hasAnnotations, type Annotations, type InkColor, type StickyNote } from '../lib/annotations';
+import { EMPTY_ANNOTATIONS, INK_WIDTHS, hasAnnotations, mergeAnnotations, type Annotations, type InkColor, type StickyNote } from '../lib/annotations';
 import { lastPlayed, songHistory, todayIso } from '../lib/history';
 import { formatDate } from './SetlistsPage';
 
@@ -122,7 +122,11 @@ export function SongPage() {
   // Uppdateras efter renderingen: när låten byts har referensen kvar den förra låtens värden
   // när kopian sparas nedan
   useEffect(() => {
-    snapshotRef.current = { setlistId: setlist?.id ?? '', itemId: setlistItem?.id ?? '', annotations: song?.annotations };
+    snapshotRef.current = {
+      setlistId: setlist?.id ?? '',
+      itemId: setlistItem?.id ?? '',
+      annotations: mergeAnnotations(song?.annotations, setlistItem?.ownAnnotations),
+    };
   });
   useEffect(() => {
     const save = () => {
@@ -166,7 +170,12 @@ export function SongPage() {
   const duration = song?.scrollSpeed === undefined ? parseDuration(parsed.meta.duration) : undefined;
   const speed = song?.scrollSpeed ?? 3;
 
-  const saved = song?.annotations ?? EMPTY_ANNOTATIONS;
+  // Anteckningar i två lager: låtens egna (syns överallt) och setlistans egna (syns bara i
+  // setlistan, ovanpå låtens). Med "I setlistan" ritar och suddar man i setlistans lager.
+  const scopeSetlist = !!setlistItem && settings.transposeScope !== 'global';
+  const layer: 'song' | 'setlist' = scopeSetlist ? 'setlist' : 'song';
+  const saved = (layer === 'setlist' ? setlistItem?.ownAnnotations : song?.annotations) ?? EMPTY_ANNOTATIONS;
+  const otherLayer = layer === 'setlist' ? song?.annotations : setlistItem?.ownAnnotations;
   const annotations = draft ?? saved;
   // Två spalter på en bred skärm i liggande läge, men bara när hela låten då får plats
   const wide = useMediaQuery('(min-width: 900px) and (orientation: landscape)');
@@ -177,6 +186,16 @@ export function SongPage() {
   const [areaHeight, setAreaHeight] = useState(0);
   const metrics = useLineMetrics(songRef, [parsed, showChords, settings.fontSize, transpose, stage, song?.id, columns, settings.simplifyChords]);
 
+  const writeLayer = useCallback(
+    (next: Annotations) => {
+      if (layer === 'song') return void updateSongPrefs(id, { annotations: next });
+      if (!setlist || !setlistItem) return;
+      const own = hasAnnotations(next) ? next : undefined;
+      void saveSetlist({ ...setlist, items: setlist.items.map((x) => (x.id === setlistItem.id ? { ...x, ownAnnotations: own } : x)) });
+    },
+    [layer, id, setlist, setlistItem, updateSongPrefs, saveSetlist],
+  );
+
   const updateAnnotations = useCallback(
     (next: Annotations, commit: boolean) => {
       if (!commit) {
@@ -186,9 +205,9 @@ export function SongPage() {
       history.current.push(saved);
       if (history.current.length > 50) history.current.shift();
       setDraft(null);
-      void updateSongPrefs(id, { annotations: next });
+      writeLayer(next);
     },
-    [id, saved, updateSongPrefs],
+    [saved, writeLayer],
   );
 
   const gestures = useAnnotationGestures({
@@ -218,6 +237,16 @@ export function SongPage() {
 
   const annotatingRef = useRef(annotating);
   annotatingRef.current = annotating;
+
+  // Annat lager: det som pågår och ångra-historiken hör till det förra
+  useEffect(() => {
+    gestures.reset();
+    setLive(null);
+    setDraft(null);
+    setSelectedId(null);
+    setEditingId(null);
+    history.current = [];
+  }, [layer]);
 
   // Ny låt: nollställ anteckningsläget
   useEffect(() => {
@@ -474,7 +503,7 @@ export function SongPage() {
   const uniqueChords = [...new Set(displayChords)];
 
   // I en setlista: tonart och kapo ändras bara där, eller för låten överallt (valet sparas)
-  const inSetlist = !!setlistItem && settings.transposeScope !== 'global';
+  const inSetlist = scopeSetlist;
   const setItem = (patch: { transpose?: number; capo?: number }) =>
     setlist && setlistItem && void saveSetlist({ ...setlist, items: setlist.items.map((x) => (x.id === setlistItem.id ? { ...x, ...patch } : x)) });
   const setTranspose = (n: number) => {
@@ -583,11 +612,11 @@ export function SongPage() {
     setDraft(null);
     setSelectedId(null);
     setEditingId(null);
-    void updateSongPrefs(song.id, { annotations: prev });
+    writeLayer(prev);
   };
   const clearAnnotations = () => {
     if (!annotations.notes.length && !annotations.strokes.length) return;
-    if (!confirm('Radera alla anteckningar på den här låten?')) return;
+    if (!confirm(layer === 'setlist' ? 'Radera alla anteckningar som bara gäller i den här setlistan?' : 'Radera alla anteckningar på den här låten?')) return;
     updateAnnotations(EMPTY_ANNOTATIONS, true);
     setSelectedId(null);
   };
@@ -642,6 +671,7 @@ export function SongPage() {
             setEditingId(null);
           }}
           onNoteEdit={() => selectedNote && setEditingId(selectedNote.id)}
+          scope={setlistItem ? { inSetlist, onToggle: () => void updateSettings({ transposeScope: inSetlist ? 'global' : 'setlist' }) } : undefined}
         />
       )}
 
@@ -661,7 +691,7 @@ export function SongPage() {
             {setlistItem && (
               <button
                 className={`btn small scope-btn${inSetlist ? ' active' : ''}`}
-                title={inSetlist ? 'Tonart och kapo ändras bara i den här setlistan' : 'Tonart och kapo ändras för låten överallt'}
+                title={inSetlist ? 'Tonart, kapo och anteckningar ändras bara i den här setlistan' : 'Tonart, kapo och anteckningar ändras för låten överallt'}
                 onClick={() => void updateSettings({ transposeScope: inSetlist ? 'global' : 'setlist' })}
               >
                 {inSetlist ? 'I setlistan' : 'Överallt'}
@@ -804,8 +834,9 @@ export function SongPage() {
                 <button
                   className="btn small"
                   onClick={() => {
-                    if (hasAnnotations(saved) && !confirm('Ersätta låtens nuvarande anteckningar med dessa?')) return;
-                    updateAnnotations(pastNotes.annotations, true);
+                    if (hasAnnotations(song.annotations) && !confirm('Ersätta låtens nuvarande anteckningar med dessa?')) return;
+                    // Alltid på låten (kopian innehåller båda lagren från då)
+                    void updateSongPrefs(song.id, { annotations: pastNotes.annotations });
                     setPastNotes(null);
                     toast('Anteckningarna är återställda');
                   }}
@@ -855,6 +886,20 @@ export function SongPage() {
             containerRef={songRef}
             overlay={
               showLayer ? (
+                <>
+                {!pastNotes && (settings.showAnnotations || annotating) && hasAnnotations(otherLayer) && (
+                  <AnnotationLayer
+                    annotations={otherLayer!}
+                    metrics={metrics}
+                    live={null}
+                    interactive={false}
+                    dim={annotating}
+                    selectedId={null}
+                    editingId={null}
+                    onTextChange={() => undefined}
+                    onTextDone={() => undefined}
+                  />
+                )}
                 <AnnotationLayer
                   annotations={pastNotes ? pastNotes.annotations : settings.showAnnotations || annotating ? annotations : EMPTY_ANNOTATIONS}
                   metrics={metrics}
@@ -873,6 +918,7 @@ export function SongPage() {
                     setEditingId(null);
                   }}
                 />
+                </>
               ) : null
             }
           />
