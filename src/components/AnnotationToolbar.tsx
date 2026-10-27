@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { Check, Eraser, Eye, EyeOff, Hand, PenLine, StickyNote as NoteIcon, Trash, Type, Undo2 } from 'lucide-react';
+import { Check, Eraser, Hand, PenLine, StickyNote as NoteIcon, Trash, Type, Undo2 } from 'lucide-react';
 import {
   INK_COLORS,
   INK_WIDTHS,
@@ -32,8 +32,6 @@ export function AnnotationToolbar(props: {
   setInkWidth: (w: number) => void;
   canUndo: boolean;
   onUndo: () => void;
-  visible: boolean;
-  onToggleVisible: () => void;
   onClear: () => void;
   onDone: () => void;
   note: StickyNote | null;
@@ -152,14 +150,6 @@ export function AnnotationToolbar(props: {
       <div className="tool-group">
         <button className="btn icon" aria-label="Ångra" title="Ångra" disabled={!props.canUndo} onClick={props.onUndo}>
           <Undo2 size={18} />
-        </button>
-        <button
-          className="btn icon"
-          aria-label={props.visible ? 'Dölj anteckningar' : 'Visa anteckningar'}
-          title={props.visible ? 'Dölj anteckningar' : 'Visa anteckningar'}
-          onClick={props.onToggleVisible}
-        >
-          {props.visible ? <Eye size={18} /> : <EyeOff size={18} />}
         </button>
         <button className="btn icon danger" aria-label="Radera alla anteckningar" title="Radera alla anteckningar" onClick={props.onClear}>
           <Trash size={17} />

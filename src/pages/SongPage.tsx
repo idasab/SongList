@@ -16,6 +16,8 @@ import {
   PenLine,
   Pause,
   Pencil,
+  StickyNote as NoteIcon,
+  StickyNoteOff as NoteOffIcon,
   Play,
   Plus,
   Trash,
@@ -666,8 +668,6 @@ export function SongPage() {
           setInkWidth={setInkWidth}
           canUndo={history.current.length > 0}
           onUndo={undo}
-          visible={settings.showAnnotations}
-          onToggleVisible={() => updateSettings({ showAnnotations: !settings.showAnnotations })}
           onClear={clearAnnotations}
           onDone={stopAnnotating}
           note={selectedNote}
@@ -791,6 +791,18 @@ export function SongPage() {
             <button className="btn icon" aria-label="Anteckna" title="Anteckna och rita" onClick={startAnnotating}>
               <PenLine size={18} />
             </button>
+            {/* Bara när det finns något att visa eller dölja (gäller alla låtar) */}
+            {hasAnnotations(mergeAnnotations(song.annotations, setlistItem?.ownAnnotations)) && (
+              <button
+                className={`btn icon${settings.showAnnotations ? '' : ' active'}`}
+                aria-label={settings.showAnnotations ? 'Dölj anteckningar' : 'Visa anteckningar'}
+                title={settings.showAnnotations ? 'Dölj anteckningar' : 'Visa anteckningar'}
+                aria-pressed={!settings.showAnnotations}
+                onClick={() => updateSettings({ showAnnotations: !settings.showAnnotations })}
+              >
+                {settings.showAnnotations ? <NoteIcon size={18} /> : <NoteOffIcon size={18} />}
+              </button>
+            )}
             </>
             )}
             <button
