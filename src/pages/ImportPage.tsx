@@ -5,6 +5,7 @@ import { SongRenderer } from '../components/SongRenderer';
 import { TagInput } from '../components/TagInput';
 import { CategorySelect, SAME_AS_ALL } from '../components/CategorySelect';
 import { Header, Segmented, Sheet, Switch, toast, toastError } from '../components/ui';
+import { useRememberScroll } from '../hooks/useRememberScroll';
 import { parseChordPro, shapesToSounding, upsertDirective } from '../lib/chordpro';
 import {
   SOURCE_FONTS,
@@ -101,6 +102,8 @@ export function ImportPage() {
   const categoriesRec = useStore((s) => s.categories);
   // Importlistan ligger i appens minne, så att den finns kvar när man byter sida
   const queue = useStore((s) => s.importQueue);
+  // Tillbaka från editorn: samma ställe i listan
+  const scrollRef = useRememberScroll<HTMLDivElement>('import', 'data-import');
   const updateQueue = useStore((s) => s.updateImportQueue);
   const resetQueue = useStore((s) => s.resetImportQueue);
   const { items, tags, categoryId } = queue;
@@ -335,7 +338,7 @@ export function ImportPage() {
   return (
     <div className="screen">
       <Header title="Importera" />
-      <div className="content narrow">
+      <div className="content narrow" ref={scrollRef}>
         <div>
           <div className="toggle-row choice-row import-mode">
             <div>
@@ -606,7 +609,7 @@ function ImportItemCard({
   };
 
   return (
-    <div className={`import-item${action === 'skip' ? ' skipped' : ''}${join?.joined ? ' joined' : ''}`}>
+    <div className={`import-item${action === 'skip' ? ' skipped' : ''}${join?.joined ? ' joined' : ''}`} data-import={item.id}>
       <div className="head">
         {item.previewDataUrl && (
           <button className="import-thumb" onClick={() => setBigPreview(true)} aria-label="Visa filen större">
