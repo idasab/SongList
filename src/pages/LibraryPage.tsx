@@ -1,6 +1,6 @@
 import { memo, useCallback, useDeferredValue, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Check, ListMusic, Music, Plus, Search, SlidersHorizontal, Tag, Tags, X } from 'lucide-react';
+import { Check, ListChecks, ListMusic, Music, Plus, Search, SlidersHorizontal, Tag, Tags, X } from 'lucide-react';
 import { Header, Sheet, toast } from '../components/ui';
 import { TagInput } from '../components/TagInput';
 import { CategorySelect } from '../components/CategorySelect';
@@ -132,8 +132,8 @@ export function LibraryPage() {
       ) : (
         <Header title="Låtar">
           {songs.length > 0 && (
-            <button className="btn ghost" onClick={() => setSelecting(true)}>
-              Välj
+            <button className="btn" onClick={() => setSelecting(true)}>
+              <ListChecks size={18} /> Välj
             </button>
           )}
           <button className="btn primary icon-mobile" aria-label="Ny låt" onClick={() => navigate('/new')}>
