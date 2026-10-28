@@ -131,6 +131,13 @@ export function extractImportMeta(chordPro: string): string {
         directives.push(...(creditLine(inLine[2]) ?? []));
       }
       const meta = creditLine(value) ?? fieldLine(value);
+      // Tonart sist i titeln: "Holy Spirit Tonart D", "Visa - Key: G"
+      const key = dir[1] === 'title' ? /^(.+?)[\s,–-]+(?:tonart|key)\s*:?\s*(\S.*)$/i.exec(value) : null;
+      const keyMeta = key ? fieldLine(`Key: ${key[2]}`) : undefined;
+      if (key && keyMeta) {
+        value = key[1].trim();
+        directives.push(...keyMeta);
+      }
       if (dir[1] === 'title') title = value;
       else if (meta) directives.push(...meta);
       else directives.push({ name: 'artist', value });

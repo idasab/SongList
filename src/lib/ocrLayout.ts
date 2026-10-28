@@ -151,6 +151,31 @@ export function rowFromWords(words: OcrWord[], measure: (t: string) => number = 
   return { text, charX, spaceWidth: avgChar * 0.9, tokens };
 }
 
+// --- PDF:er med text ---
+
+// Notsymboler som text (noteringsprogrammens typsnitt): noter, pauser, bågar, klaver m.m.
+const MUSIC_GLYPHS = /^[œŒ‰’‘ˆ˙˘¿j&#b.·•\-–—=><-]+$/u;
+
+/**
+ * Sant för en PDF med notskrift (från ett notprogram): notsymbolerna ligger där som text, och
+ * tolkat som text och ackord blir det oläsligt. Sådana PDF:er visas bara som fil.
+ */
+export function isSheetMusic(pages: OcrPage[]): boolean {
+  const words = pages.flatMap((p) => p.lines.flatMap((l) => (l.words.length ? l.words.map((w) => w.text) : l.text.split(/\s+/)))).filter(Boolean);
+  if (words.length < 50) return false;
+  return words.filter((w) => MUSIC_GLYPHS.test(w)).length / words.length > 0.15;
+}
+
+/**
+ * Text med extra avstånd mellan bokstäverna, t.ex. en rubrik "V A R J E" i en PDF: bokstäverna
+ * står med mellanslag i samma textbit. Ackordrader ("G C D") lämnas som de är.
+ */
+export function unspaceLetters(text: string): string {
+  const parts = text.trim().split(' ');
+  if (parts.length < 2 || !parts.every((p) => /^\p{Lu}{1,2}$/u.test(p)) || parts.every((p) => isChord(p))) return text;
+  return text.replace(/(?<=\p{Lu}) (?=\p{Lu})/gu, '');
+}
+
 // --- Rättning av felästa ackord ---
 
 /**
@@ -412,7 +437,9 @@ export function splitFooter(lines: VisualLine[], page: OcrPage, footer: string[]
   }
   // Allt på sidan kan inte vara sidfot
   if (i === 0) return lines;
-  footer.push(...lines.slice(i).map((l) => l.words.map((x) => x.text).join(' ')));
+  // Sidnummer ("Page 1", "Sida 2 av 3", "2") behövs inte i låten
+  const pageNumber = /^(?:(?:page|sida|s\.)\s*)?\d+(?:\s*(?:av|of|\/)\s*\d+)?$/i;
+  footer.push(...lines.slice(i).map((l) => l.words.map((x) => x.text).join(' ')).filter((t) => !pageNumber.test(t.trim())));
   return lines.slice(0, i);
 }
 

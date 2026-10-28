@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { parseChordPro } from './chordpro';
 import { extractImportMeta } from './importMeta';
 import { parseHeader } from './layout';
-import { ocrToChordPro, type OcrPage } from './ocrLayout';
+import { isSheetMusic, ocrToChordPro, unspaceLetters, type OcrPage } from './ocrLayout';
 
 const W = 1000;
 const H = 1000;
@@ -132,5 +132,27 @@ describe('OCR', () => {
       ),
     ]);
     expect(out).not.toContain('{comment');
+  });
+});
+
+describe('PDF:er med text', () => {
+  it('känner igen noter från ett notprogram', () => {
+    const glyphs = page(...Array.from({ length: 12 }, (_, i) => line(...['œ', '’', 'œ', 'j', '‰', 'œ'].map((g, k) => word(g, 100 + k * 40, 50 + i * 60, 10)))));
+    const lyrics = page(...Array.from({ length: 12 }, (_, i) => line(...['Solen', 'går', 'upp', 'över', 'ån', 'nu'].map((g, k) => word(g, 100 + k * 90, 50 + i * 60, 60)))));
+    expect(isSheetMusic([glyphs])).toBe(true);
+    expect(isSheetMusic([lyrics])).toBe(false);
+  });
+
+  it('bokstäver med extra avstånd blir ord, men inte ackordrader', () => {
+    expect(unspaceLetters('VA R J E')).toBe('VARJE');
+    expect(unspaceLetters('L ÅT')).toBe('LÅT');
+    expect(unspaceLetters('G C D')).toBe('G C D');
+    expect(unspaceLetters('Solen går')).toBe('Solen går');
+  });
+
+  it('tonart i titeln och sidnummer i sidfoten', () => {
+    expect(extractImportMeta('{title: Visa Tonart D}\n\n[D]la')).toBe('{title: Visa}\n{key: D}\n\n[D]la');
+    const out = ocrToChordPro([page(line(word('Solen', 100, 100, 80)), line(word('Page', 600, 900, 40, 12), word('1', 650, 900, 10, 12)))]);
+    expect(out).not.toContain('Page');
   });
 });

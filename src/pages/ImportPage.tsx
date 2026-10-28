@@ -645,8 +645,9 @@ function ImportItemCard({
       const res = await interpretFile(file, item.original.kind, (m) => setInterpreting(m));
       // Bara tolkningens fält: annat som ändrats medan tolkningen pågick ska vara kvar
       onPatch({ raw: res.raw, imageDataUrl: res.imageDataUrl, interpreted: true, display: 'chordpro' });
-    } catch {
-      toast('Hittade ingen text och inga ackord att tolka i filen', { error: true });
+    } catch (e) {
+      // Noter har ett eget meddelande; annars fanns inget att tolka
+      toast(e instanceof Error && /noter/.test(e.message) ? e.message : 'Hittade ingen text och inga ackord att tolka i filen', { error: true });
     } finally {
       setInterpreting('');
     }

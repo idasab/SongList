@@ -7,7 +7,7 @@
 // - Zip: packas upp och varje fil hanteras enligt ovan. Mappar och systemfiler hoppas över.
 
 import type { SongAttachment } from '../lib/model';
-import type { OcrLine, OcrPage, OcrWord } from '../lib/ocrLayout';
+import { isSheetMusic, unspaceLetters, type OcrLine, type OcrPage, type OcrWord } from '../lib/ocrLayout';
 import { decodeText, isChordProFileName, titleFromFileName } from '../lib/textImport';
 import { zipNameMap } from '../lib/zipNames';
 import { readFileAsDataUrl } from './files';
@@ -262,30 +262,32 @@ async function readPdf(file: File, onProgress: ProgressFn): Promise<ImportCandid
       const lines: OcrLine[] = [];
       for (const item of content.items) {
         if (!('str' in item) || !item.str.trim()) continue;
+        const str = unspaceLetters(item.str);
         // Textens position i sidans koordinater, origo uppe till vänster
         const [, , , , x, baseline] = pdfjs.Util.transform(viewport.transform, item.transform);
         const h = item.height || Math.hypot(item.transform[2], item.transform[3]) || 10;
         const top = baseline - h;
-        const width = item.width || h * 0.5 * item.str.length;
+        const width = item.width || h * 0.5 * str.length;
         const words: OcrWord[] = [];
         const re = /\S+/g;
         let m: RegExpExecArray | null;
-        while ((m = re.exec(item.str))) {
+        while ((m = re.exec(str))) {
           words.push({
             text: m[0],
-            x: (x + (width * m.index) / item.str.length) / viewport.width,
+            x: (x + (width * m.index) / str.length) / viewport.width,
             y: top / viewport.height,
-            w: (width * m[0].length) / item.str.length / viewport.width,
+            w: (width * m[0].length) / str.length / viewport.width,
             h: h / viewport.height,
           });
         }
-        chars += item.str.trim().length;
-        lines.push({ text: item.str, x: x / viewport.width, y: top / viewport.height, w: width / viewport.width, h: h / viewport.height, words });
+        chars += str.trim().length;
+        lines.push({ text: str, x: x / viewport.width, y: top / viewport.height, w: width / viewport.width, h: h / viewport.height, words });
       }
       pages.push({ width: viewport.width, height: viewport.height, lines });
     }
 
     if (chars >= 20) {
+      if (isSheetMusic(pages)) throw new Error('PDF:en är noter och kan inte göras om till text och ackord. Den visas som fil.');
       return { fileName: file.name, raw: pagesToChordPro(pages), kind: 'chordpro', origin: 'pdf' };
     }
 
