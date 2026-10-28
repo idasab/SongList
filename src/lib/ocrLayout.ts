@@ -74,8 +74,8 @@ export function groupVisualLines(page: OcrPage): VisualLine[] {
     const isRule = (w: OcrWord) => w.w > Math.max(w.h, lineH) * (1.5 * w.text.length + 1);
     const ruleWidth = all.filter(isRule).reduce((n, w) => n + w.w, 0);
     const span = all.length ? Math.max(...all.map((w) => w.x + w.w)) - Math.min(...all.map((w) => w.x)) : 0;
-    // Mest linje: hela raden är brus
-    if (ruleWidth > span * 0.5) continue;
+    // Till stor del linje: hela raden är brus (resten är felläsningar av linjen)
+    if (ruleWidth > span * 0.25) continue;
     const words = all.filter((w) => !isRule(w));
     if (!words.length) continue;
     units.push({ words, ...coreBounds(words) });
@@ -208,11 +208,21 @@ export function fixOcrChord(t: Token, charW: number, raised = false, multi = tru
     .replace(/[®©]/g, '6')
     // Smuts före ackordet, t.ex. "oD", och efter, t.ex. "D'"
     .replace(/^[o°•·.,'’]+(?=[A-H])/, '')
-    .replace(/(?<=\S)[°•·.,'’`]+$/, '');
+    .replace(/(?<=\S)[°•·.,'’`!]+$/, '')
+    // Ackordtyp i parentes: "D(Sus4)", "F(Su$4)" och "Gsus)" för D(sus4), F(sus4) och Gsus
+    .replace(/\(([^()]*)\)$/, (_m, inner: string) => `(${inner.toLowerCase().replace(/\$/g, 's').replace(/^5(?=us)/, 's')})`)
+    .replace(/^([^(]+)\)$/, '$1')
+    // Korsförtecknet efter basen läst som en bokstav: "A/CÉ", "A/Ci" och "D/Ff" för A/C# och D/F#
+    .replace(/\/([A-H])[ÉéÈèikKfF]$/, '/$1#')
+    // Upphöjd 4 eller 9 läst som bokstav: "Fsust" och "Fmajo" för Fsus4 och Fmaj9
+    .replace(/^([A-H][#b]?)sust$/, '$1sus4')
+    .replace(/^([A-H][#b]?)majo$/, '$1maj9');
   // Tecken som bara liknar ackord rättas bara på rader med flera ackord (inte t.ex. ett
   // sidnummer "6" eller ett ensamt "Å" på en egen rad)
   if (multi) {
     if (s in LOOKALIKE) s = LOOKALIKE[s];
+    // Fetstilt C läst som noll, med eller utan hakparentes: "[0", "0]", "(O)"
+    if (/^[[(]?[0O][\])]?$/.test(s)) s = 'C';
     // Liten bokstav för ett ackord, t.ex. "c"
     if (/^[a-h]$/.test(s)) s = s.toUpperCase();
     // A med ring eller prickar ("ÅA", "ÅSuUS")
@@ -233,7 +243,7 @@ export function fixOcrChord(t: Token, charW: number, raised = false, multi = tru
   const doubled = /^([A-G])\1$/i.exec(s);
   if (doubled) s = doubled[1].toUpperCase();
   // Upphöjt 11 läses ofta som i, l eller |
-  s = s.replace(/^([A-G][#b]?(?:m|maj|sus|dim|add)?)[il|]{1,2}$/, '$111');
+  s = s.replace(/^([A-G][#b]?(?:m|maj|sus|dim|add)?)[ilI|]{1,2}$/, '$111');
   if (isChord(s)) return [{ ...t, text: s }];
 
   // Två tonnamn: snedstrecksackord (GB = G/B) eller två ackord som slagits ihop (CG = C G)
@@ -250,6 +260,11 @@ export function fixOcrChord(t: Token, charW: number, raised = false, multi = tru
       { ...t, text: split[2], x: Math.max(t.x + charW, secondX), w: split[2].length * charW },
     ];
   }
+  // Grundtonen med ett oläsligt upphöjt tecken, t.ex. "Dp" för D¹¹: hellre D än att hela
+  // ackordraden blir text (bara bland andra ackord). Inte vokaler och vanliga slutbokstäver,
+  // så att ord som "Du", "Ge", "Er" och "En" inte blir ackord
+  const root = /^([A-H][#b]?)[cfghjklpqvwxz]$/.exec(s);
+  if (multi && root) return [{ ...t, text: root[1] }];
   return null;
 }
 
@@ -270,6 +285,8 @@ function fixChordRow(row: Row): Row {
   const raised = (t: Token) => sized.length >= 2 && t.top! < midTop - midH * 0.15 && t.h! > midH * 1.15;
   let fixed: Token[] = [];
   for (const t of row.tokens) {
+    // Taktnummer i ett notblad ("42", "49,") är inga ackord
+    if (/^\d{2,3}[.,]?$/.test(t.text) && row.tokens.length > 1) continue;
     const f = fixOcrChord(t, charW, raised(t), row.tokens.length > 1);
     if (f) fixed.push(...f);
     else fixed.push(t);

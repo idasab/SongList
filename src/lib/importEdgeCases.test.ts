@@ -156,3 +156,25 @@ describe('PDF:er med text', () => {
     expect(out).not.toContain('Page');
   });
 });
+
+describe('OCR av notblad och sångblad', () => {
+  it('rättar vanliga felläsningar på ackordrader och tar bort taktnummer', () => {
+    const out = ocrToChordPro([
+      page(
+        line(word('42', 40, 100, 30), word('D(Sus4)', 150, 100, 80), word('A/CÉ', 300, 100, 50), word('[0', 450, 100, 20), word('Fsust', 600, 100, 60), word('Fmajo', 750, 100, 60)),
+        line(word('Solen', 150, 130, 100), word('går', 300, 130, 60), word('upp', 450, 130, 60), word('över', 600, 130, 80), word('ån', 750, 130, 40)),
+      ),
+    ]);
+    expect(out).toContain('[D(sus4)]Solen [A/C#]går [C]upp [Fsus4]över [Fmaj9]ån');
+    expect(out).not.toContain('42');
+  });
+});
+
+describe('OCR: grundton med oläsligt upphöjt tecken', () => {
+  it('"Dp" blir D bland andra ackord, men "Du" och "Ge" blir inga ackord', () => {
+    const chords = ocrToChordPro([page(line(word('Asus', 100, 100, 70), word('A7', 300, 100, 40), word('Dp', 500, 100, 40)), line(word('Solen', 100, 130, 90), word('går', 300, 130, 60), word('upp', 500, 130, 60)))]);
+    expect(chords).toContain('[Asus]Solen [A7]går [D]upp');
+    const words = ocrToChordPro([page(line(word('Du', 100, 100, 40), word('Ge', 300, 100, 40), word('Du', 500, 100, 40)))]);
+    expect(words).not.toContain('[');
+  });
+});
