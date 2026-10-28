@@ -86,6 +86,36 @@ export function textToChordPro(text: string, opts: TextImportOptions = {}): stri
   return result;
 }
 
+/**
+ * En ChordPro-fil där en del ackord står på en egen rad ovanför texten, utan hakparenteser
+ * (vanligt i filer som kopierats från webben). Bara de raderna görs om; direktiv, rader med
+ * hakparenteser och tabulatur lämnas som de är.
+ */
+export function convertChordsAboveInChordPro(source: string, measure: Measure = monospaceMeasure): string {
+  const lines = source.replace(/\r\n?/g, '\n').split('\n');
+  let inTab = false;
+  const plain = (l: string) => !!l.trim() && !l.includes('[') && !l.trim().startsWith('{');
+  const isChordRow = (l: string) => plain(l) && !/:\s*$/.test(l) && isChordLine(l.trim().split(/\s+/));
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const t = line.trim();
+    if (/^\{(start_of_tab|sot|start_of_grid|sog)\b/i.test(t)) inTab = true;
+    if (/^\{(end_of_tab|eot|end_of_grid|eog)\b/i.test(t)) inTab = false;
+    if (inTab || !isChordRow(line)) {
+      out.push(line);
+      continue;
+    }
+    // Ackordraden och textraden under den (om det finns en) blir en rad
+    const lyric = lines[i + 1];
+    const pair = lyric !== undefined && plain(lyric) && !isChordRow(lyric) ? [line, lyric] : [line];
+    const rows = textToRows(pair.join('\n'), measure);
+    out.push(assembleChordPro(rows).trimEnd());
+    i += pair.length - 1;
+  }
+  return out.join('\n');
+}
+
 export function titleFromFileName(name: string): string {
   return name
     // Filnamn från Mac och iPhone kan ha "å" som "a" + ring; gör om till ett tecken

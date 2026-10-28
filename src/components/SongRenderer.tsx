@@ -1,6 +1,6 @@
 import { memo, type CSSProperties, type ReactNode, type Ref } from 'react';
 import { capoOf, displayChordContext, isChordRow, midWordBreaks, splitWords, type Line, type ParsedSong, type Section } from '../lib/chordpro';
-import { formatChord, formatKey, parseKey, type ChordContext } from '../lib/chords';
+import { formatChord, formatKey, isAnnotationChord, parseKey, type ChordContext } from '../lib/chords';
 
 export interface RenderOptions {
   /** Transponering av låten (som den klingar). Kapot räknas av automatiskt för ackorden. */
@@ -59,7 +59,7 @@ function LineView({ line, ctx, opts, ln }: { line: Line; ctx: ChordContext; opts
         return (
           <div className="ln chord-row" data-ln={ln}>
             {line.segments.map((s, i) => {
-              const annot = s.chord?.startsWith('*');
+              const annot = s.chord !== undefined && isAnnotationChord(s.chord, ctx.hNotation);
               const chord = s.chord !== undefined ? formatChord(s.chord, ctx) : '';
               return (
                 <span key={i}>
@@ -84,7 +84,7 @@ function LineView({ line, ctx, opts, ln }: { line: Line; ctx: ChordContext; opts
       return (
         <div className="ln" data-ln={ln}>
           {segs.map((s, i) => {
-            const annot = s.chord?.startsWith('*');
+            const annot = s.chord !== undefined && isAnnotationChord(s.chord, ctx.hNotation);
             const chord = s.chord !== undefined ? formatChord(s.chord, ctx) : '';
             return (
               <span className="seg" key={i}>

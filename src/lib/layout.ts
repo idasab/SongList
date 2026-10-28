@@ -86,10 +86,10 @@ export interface Header {
 
 const HEADER_WORDS: [RegExp, HeaderKind][] = [
   [/^(refräng|refr|ref|chorus|omkväde|kör|refrain)$/i, 'chorus'],
-  [/^(vers|verse|strof)$/i, 'verse'],
+  [/^(vers|verse|vrs|strof)$/i, 'verse'],
   [/^(bridge|stick|brygga)$/i, 'bridge'],
   [
-    /^(intro|outro|förspel|efterspel|mellanspel|slut|ending|coda|pre-?chorus|förrefräng|instrumental|solo|interlude|tag|vamp|riff)$/i,
+    /^(intro|outro|förspel|efterspel|mellanspel|slut|avslut|ending|coda|pre-?chorus|förrefräng|channel|turn|instrumental|solo|interlude|tag|vamp|riff)$/i,
     'comment',
   ],
 ];
@@ -97,13 +97,22 @@ const HEADER_WORDS: [RegExp, HeaderKind][] = [
 // Nummer med bokstäver, t.ex. "VERSE ONE:"
 const NUMBER_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, två: 2, tre: 3, fyra: 4, fem: 5 };
 
+// Antal gånger efter rubriken: "Stick x2:", "Intro 2x:", "Refräng (x3):"
+const REPEAT_MARK = /^\(?\s*(?:x\s*(\d+)|(\d+)\s*x)\s*\)?$/i;
+
 const HEADER_RE =
-  /^\s*[\[(]?\s*(?:(final|last|sista)\s+)?([A-Za-zÅÄÖåäö-]+)\.?\s*(\d+|one|two|three|four|five|six|två|tre|fyra|fem)?\s*[\])]?\s*:?\s*(.*)$/i;
+  /^\s*[\[(]?\s*(?:(final|last|sista)\s+)?([A-Za-zÅÄÖåäö-]+)\.?\s*(\d+(?!\d|\s*x)|one|two|three|four|five|six|två|tre|fyra|fem)?\s*(\(?\s*(?:x\s*\d+|\d+\s*x)\s*\)?)?\s*[\])]?\s*:?\s*(.*)$/i;
 
 /** Delar som "A:", "B2:" eller "Del A:" – en versal följd av kolon (annars vore det ett ackord). */
 const PART_RE = /^(del\s+)?([A-ZÅÄÖ]\d*)\s*:$/i;
 
 export function parseHeader(line: string): Header | null {
+  // En anteckning i parentes efter rubriken, t.ex. "Refräng (1a lugn):", följer med i namnet
+  const note = /^([^()[\]]+?)\s*(\((?!\s*x?\s*\d+\s*x?\s*\))[^()]+\))\s*(:?)\s*$/i.exec(line.trim());
+  if (note) {
+    const h = parseHeader(`${note[1]}${note[3]}`);
+    return h && !h.trailing && h.kind !== 'part' ? { ...h, label: `${h.label} ${note[2]}` } : null;
+  }
   const trimmed = line.trim();
   const part = PART_RE.exec(trimmed);
   if (part && /^[A-ZÅÄÖ]/.test(part[2])) {
@@ -112,17 +121,18 @@ export function parseHeader(line: string): Header | null {
   }
   const m = HEADER_RE.exec(trimmed);
   if (m) {
-    const [, prefix, word, num] = m;
+    const [, prefix, word, num, times] = m;
     const kind = HEADER_WORDS.find(([re]) => re.test(word))?.[1];
     // "Kör två" och "Last chorus" kan vara sångtext: med nummer i ord eller förled krävs kolon
     const wordy = !!prefix || (!!num && !/^\d+$/.test(num));
     if (kind && (!wordy || /:\s*$/.test(trimmed))) {
-      const rest = m[4].trim();
+      const rest = m[5].trim();
       const n = num && (NUMBER_WORDS[num.toLowerCase()] ?? num);
       // "VERSE" i versaler visas som "Verse"
       const name = word === word.toUpperCase() ? word.charAt(0) + word.slice(1).toLowerCase() : word.charAt(0).toUpperCase() + word.slice(1);
       const first = prefix ? `${prefix.charAt(0).toUpperCase()}${prefix.slice(1).toLowerCase()} ${name.toLowerCase()}` : name;
-      const label = (first + (n ? ' ' + n : '')).trim();
+      const rep = times && REPEAT_MARK.exec(times.trim());
+      const label = (first + (n ? ' ' + n : '') + (rep ? ` x${rep[1] ?? rep[2]}` : '')).trim();
       if (!rest) return { kind, label };
       if (isChordLine(rest.split(/\s+/))) return { kind, label, trailing: rest };
       return null;

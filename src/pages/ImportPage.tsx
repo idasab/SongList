@@ -10,6 +10,7 @@ import { parseChordPro, shapesToSounding, upsertDirective } from '../lib/chordpr
 import {
   SOURCE_FONTS,
   canvasMeasure,
+  convertChordsAboveInChordPro,
   isChordProFileName,
   looksLikeChordPro,
   suggestSourceFont,
@@ -45,7 +46,8 @@ function resolveMeta(it: ImportItem, common: { tags: string[]; categoryId: strin
 }
 
 function convert(item: ImportItem): string {
-  if (item.kind === 'chordpro') return item.raw;
+  // Ackord ovanför texten i en ChordPro-fil görs om (inte det som skrivits i editorn)
+  if (item.kind === 'chordpro') return item.edited ? item.raw : convertChordsAboveInChordPro(item.raw);
   return textToChordPro(item.raw, { measure: canvasMeasure(item.font), fileName: item.fileName });
 }
 

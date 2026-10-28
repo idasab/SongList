@@ -4,6 +4,7 @@ import {
   detectHNotation,
   formatChord,
   formatKey,
+  isChordLike,
   isMinorSuffix,
   keyPrefersFlats,
   parseChord,
@@ -52,10 +53,20 @@ const HEADER_SECTION: Record<Exclude<Header['kind'], 'comment'>, SectionType> = 
  * så att en vanlig textrad inte misstolkas.
  */
 export function chordProHeader(line: string): Header | null {
+  // Delens namn i hakparentes på en egen rad, t.ex. "[Chorus]" eller "[Bridge x2]" (inte ett ackord)
+  const br = /^\s*\[([^\]]+)\]\s*$/.exec(line);
+  if (br && !isChordLike(br[1]) && !br[1].startsWith('*') && /\p{L}{2}/u.test(br[1])) {
+    const h = parseHeader(`${br[1].trim()}:`);
+    return h && !h.trailing && h.kind !== 'comment' ? h : { kind: 'comment', label: h?.label ?? br[1].trim() };
+  }
   const h = parseHeader(line);
-  if (!h) return null;
-  if (h.kind !== 'comment') return h;
-  return /^\s*[\[(]?\s*(?:(?:final|last|sista)\s+)?[A-Za-zÅÄÖåäö-]+\.?\s*(?:\d+|one|two|three|four|five|six|två|tre|fyra|fem)?\s*[\])]?\s*:/i.test(line) ? h : null;
+  if (h && h.kind !== 'comment') return h;
+  // Övriga rubriker (Intro, Solo …) kräver kolon, så att en vanlig textrad inte misstolkas
+  if (h && /^\s*[\[(]?\s*(?:(?:final|last|sista)\s+)?[A-Za-zÅÄÖåäö-]+\.?\s*(?:\d+|one|two|three|four|five|six|två|tre|fyra|fem)?\s*(?:\(?\s*(?:x\s*\d+|\d+\s*x)\s*\)?)?\s*[\])]?\s*:/i.test(line)) return h;
+  // En kort rad med stor bokstav och kolon, t.ex. "Original:", "Alternativ 1:" eller "Mid section:"
+  const label = /^\s*(\p{Lu}[\p{L}\d'’ -]{0,28}?)\s*:\s*$/u.exec(line)?.[1];
+  if (label && label.split(/\s+/).length <= 4 && !isChordLike(label)) return { kind: 'comment', label };
+  return null;
 }
 
 /** Ackorden efter en rubrik ("G C D" eller "[G] [C]") som en ChordPro-rad. */
@@ -339,15 +350,23 @@ export function parseChordPro(source: string): ParsedSong {
         current.lines.push({ type: 'comment', text: header.label, style: 'normal' });
       } else {
         const next = lines[li + 1]?.trim();
-        // "Refräng:" med kolon följd av tomrad och text är en refräng med tomrad efter rubriken
+        // "Refräng:" med kolon (eller "[Chorus]") följd av tomrad och text är en refräng med
+        // tomrad efter rubriken
         const body = nextFilled(li + 1);
         const textAfter =
-          /:\s*$/.test(line) && next === '' && body < lines.length && !isHeaderOrDirective(body) && versesLabeled && !stanzaBeforeRepeat(body);
-        if (header.kind === 'chorus' && !header.trailing && !textAfter && (next === undefined || next === '' || next.startsWith('{'))) {
+          /:\s*$|^\s*\[.*\]\s*$/.test(line) && next === '' && body < lines.length && !isHeaderOrDirective(body) && versesLabeled && !stanzaBeforeRepeat(body);
+        if (header.kind === 'chorus' && !header.trailing && !textAfter && (next === undefined || next === '' || next.startsWith('{') || isHeaderOrDirective(li + 1))) {
           // "Refräng" ensamt på en rad = upprepa refrängen, som {chorus}
           closeSection();
           const ref = lastChorus as Section | null;
           sections.push({ type: 'chorus', label: header.label, lines: ref ? ref.lines : [], isRepeat: true });
+          continue;
+        }
+        // "Brygga:" utan text (följd av en ny rubrik) när bryggan redan funnits = spela den igen
+        const earlier = sections.find((s) => !s.isRepeat && s.label?.toLowerCase() === header.label.toLowerCase() && s.lines.length);
+        if (earlier && !header.trailing && (body >= lines.length || isHeaderOrDirective(body))) {
+          closeSection();
+          sections.push({ type: earlier.type, label: header.label, lines: earlier.lines, isRepeat: true });
           continue;
         }
         closeSection();
@@ -358,7 +377,7 @@ export function parseChordPro(source: string): ParsedSong {
 
     const segments = parseLyricsLine(header?.trailing ? trailingChordLine(header.trailing) : line);
     for (const s of segments) {
-      if (s.chord && !s.chord.startsWith('*') && !seen.has(s.chord)) {
+      if (s.chord && parseChord(s.chord) && !seen.has(s.chord)) {
         seen.add(s.chord);
         chords.push(s.chord);
       }

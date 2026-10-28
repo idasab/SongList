@@ -156,7 +156,7 @@ export function simplifySuffix(suffix: string): string {
 export function formatChord(raw: string, ctx: ChordContext): string {
   if (raw.startsWith('*')) return raw.slice(1); // ChordPro-annotation, inte ett ackord
   const c = parseChord(raw, { hNotation: ctx.hNotation });
-  if (!c) return raw;
+  if (!c) return formatLooseChord(raw, ctx);
   const t = ctx.transpose;
   let rootStr: string;
   let bassStr: string | undefined;
@@ -173,6 +173,48 @@ export function formatChord(raw: string, ctx: ChordContext): string {
   // Slutparenteser utöver startparenteserna hör till ackordtypen, t.ex. "E7(b9)", och försvinner med den
   if (ctx.simplify) return `${c.prefix}${rootStr}${simplifySuffix(c.suffix)}${c.postfix.slice(0, c.prefix.length)}`;
   return `${c.prefix}${rootStr}${c.suffix}${bassStr ? '/' + bassStr : ''}${c.postfix}`;
+}
+
+// Bara ny bas, t.ex. "/F#", "-/A" eller "(/D#)": ackordet före ligger kvar med en annan bas
+const BASS_ONLY = /^([(\[]*)(-?)\/([^/\s()[\]]+)([)\]]*)$/;
+
+/**
+ * Det som inte är ett ackord men ändå ska följa med vid transponering: en ny bas ("/F#") eller
+ * flera ackord i samma hakparentes ("Dsus D"). Annat (t.ex. "(x2)") lämnas som det är.
+ */
+function formatLooseChord(raw: string, ctx: ChordContext): string {
+  const bass = BASS_ONLY.exec(raw.trim());
+  if (bass) {
+    const c = parseChord(`C/${bass[3]}`, { hNotation: ctx.hNotation });
+    if (c?.bass === undefined) return raw;
+    // Utan förenkling, som annars tar bort basen
+    const moved = formatChord(`C/${bass[3]}`, { ...ctx, simplify: false });
+    return `${bass[1]}${bass[2]}/${moved.slice(moved.indexOf('/') + 1)}${bass[4]}`;
+  }
+  const parts = raw.split(/(\s+)/);
+  if (parts.length > 1 && parts.every((p) => !p.trim() || isChordLike(p, ctx.hNotation))) {
+    return parts.map((p) => (p.trim() ? formatChord(p, ctx) : p)).join('');
+  }
+  return raw;
+}
+
+/**
+ * Text i hakparentes som inte är ett ackord, t.ex. "*Lugnt" eller "(x2)": visas som en anteckning
+ * (kursivt, går inte att trycka på) i stället för som ett ackord.
+ */
+export function isAnnotationChord(raw: string, hNotation?: boolean): boolean {
+  return raw.startsWith('*') || (!!raw.trim() && !isChordLike(raw, hNotation));
+}
+
+/** Ett ackord, en ny bas ("/F#") eller flera ackord ("Dsus D"): visas och transponeras som ackord. */
+export function isChordLike(raw: string, hNotation?: boolean): boolean {
+  const t = raw.trim();
+  if (!t || t.startsWith('*')) return false;
+  if (parseChord(t, { hNotation })) return true;
+  const bass = BASS_ONLY.exec(t);
+  if (bass) return parseChord(`C/${bass[3]}`, { hNotation })?.bass !== undefined;
+  const parts = t.split(/\s+/);
+  return parts.length > 1 && parts.every((p) => isChordLike(p, hNotation));
 }
 
 export function isMinorSuffix(suffix: string): boolean {

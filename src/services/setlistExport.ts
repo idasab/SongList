@@ -18,7 +18,7 @@ import {
   type ParsedSong,
   type Section,
 } from '../lib/chordpro';
-import { formatChord, formatKey, parseKey, type ChordContext, type Notation } from '../lib/chords';
+import { formatChord, formatKey, isAnnotationChord, parseKey, type ChordContext, type Notation } from '../lib/chords';
 import {
   NOTE_COLORS,
   anchorToPx,
@@ -339,7 +339,7 @@ function drawLine(
         let x = x0;
         for (const s of line.segments) {
           if (s.chord !== undefined) {
-            const annot = s.chord.startsWith('*');
+            const annot = isAnnotationChord(s.chord, ctx.hNotation);
             const chord = formatChord(s.chord, ctx);
             setFont(doc, annot ? 'italic' : 'bold', 0.85 * EM, annot ? MUTED : TEXT);
             if (x + doc.getTextWidth(chord) > maxX && x > x0) {
@@ -369,7 +369,7 @@ function drawLine(
         const cw = chord ? doc.getTextWidth(chord) + 0.35 * 0.85 * EM : 0;
         setFont(doc, 'normal', EM);
         const lw = lyricsEmpty ? 0 : doc.getTextWidth(s.text);
-        return { chord, text: s.text, annot: !!s.chord?.startsWith('*'), w: Math.max(cw, lw), lw };
+        return { chord, text: s.text, annot: s.chord !== undefined && isAnnotationChord(s.chord, ctx.hNotation), w: Math.max(cw, lw), lw };
       });
       c.y += chordGap;
       let first = true;
