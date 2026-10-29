@@ -883,13 +883,13 @@ export function SongPage() {
           <div className="tool-group">
             {isFile && (
               <button
-                className={`btn icon${song.enhance ? ' active' : ''}`}
-                aria-label="Skarpare bild"
+                className={`btn tool-pill${song.enhance ? ' active' : ''}`}
                 title="Skarpare bild: vitt papper och svarta noter (t.ex. för ett grått foto)"
                 aria-pressed={!!song.enhance}
                 onClick={() => void updateSongPrefs(song.id, { enhance: !song.enhance || undefined })}
               >
-                <Contrast size={18} />
+                <Contrast size={16} />
+                <span>Skärpa</span>
               </button>
             )}
             {!isFile && (
