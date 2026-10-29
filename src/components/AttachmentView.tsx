@@ -17,19 +17,39 @@ export interface FilePage {
 export function useFilePages(files: SongAttachment[], enhance = false): { pages: FilePage[]; status: string } {
   const [pages, setPages] = useState<FilePage[]>([]);
   const [status, setStatus] = useState('');
+  // Sidorna som visas, och bilderna från förra inläsningen som ska släppas när de inte syns längre
+  const shown = useRef<{ files: SongAttachment[] | null; pages: FilePage[] }>({ files: null, pages: [] });
+  const stale = useRef<string[]>([]);
+  const releaseStale = () => {
+    stale.current.forEach((u) => URL.revokeObjectURL(u));
+    stale.current = [];
+  };
 
   useEffect(() => {
     let cancelled = false;
     const urls: string[] = [];
     const destroy: (() => void)[] = [];
     const found: FilePage[] = [];
+    // Samma filer igen (t.ex. Skärpa slogs på): de gamla sidorna syns tills de nya är klara, så
+    // att man står kvar på samma sida och scrollposition
+    const redraw = shown.current.files === files;
+    const old = redraw ? shown.current.pages : [];
+    shown.current.files = files;
+    const show = (list: FilePage[]) => {
+      shown.current.pages = list;
+      setPages(list);
+    };
     const add = (p: FilePage) => {
       if (cancelled) return;
       found.push(p);
-      setPages([...found]);
+      show([...found, ...old.slice(found.length)]);
     };
-    setPages([]);
-    setStatus(files.length ? 'Laddar…' : '');
+    const progress = (text: string) => !redraw && setStatus(text);
+    if (!redraw) {
+      releaseStale();
+      show([]);
+    }
+    progress(files.length ? 'Laddar…' : '');
     (async () => {
       let failed = '';
       for (const [i, a] of files.entries()) {
@@ -43,7 +63,7 @@ export function useFilePages(files: SongAttachment[], enhance = false): { pages:
               add({ src: a.dataUrl, width, height });
               continue;
             }
-            setStatus(`Gör bilden skarpare${of}…`);
+            progress(`Gör bilden skarpare${of}…`);
             const canvas = await enhancedImageCanvas(a.dataUrl);
             const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', 0.9));
             if (!blob || cancelled) continue;
@@ -66,7 +86,7 @@ export function useFilePages(files: SongAttachment[], enhance = false): { pages:
           const dpr = window.devicePixelRatio || 1;
           const target = Math.min(2400, Math.max(1200, Math.max(window.innerWidth, window.innerHeight) * dpr));
           for (let n = 1; n <= doc.numPages && !cancelled; n++) {
-            setStatus(doc.numPages > 1 ? `Laddar sida ${n} av ${doc.numPages}${of}…` : `Laddar${of}…`);
+            progress(doc.numPages > 1 ? `Laddar sida ${n} av ${doc.numPages}${of}…` : `Laddar${of}…`);
             const page = await doc.getPage(n);
             const base = page.getViewport({ scale: 1 });
             const viewport = page.getViewport({ scale: target / base.width });
@@ -88,14 +108,20 @@ export function useFilePages(files: SongAttachment[], enhance = false): { pages:
           failed = `${a.name} kunde inte visas på den här enheten.`;
         }
       }
-      if (!cancelled) setStatus(failed);
+      if (cancelled) return;
+      // Klart: bara de nya sidorna, och de gamla bilderna kan släppas
+      show([...found]);
+      releaseStale();
+      setStatus(failed);
     })();
     return () => {
       cancelled = true;
       destroy.forEach((d) => d());
-      urls.forEach((u) => URL.revokeObjectURL(u));
+      // Bilderna kan synas tills nästa inläsning är klar
+      stale.current.push(...urls);
     };
   }, [files, enhance]);
+  useEffect(() => releaseStale, []);
 
   return { pages, status };
 }
