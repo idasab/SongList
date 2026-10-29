@@ -34,7 +34,7 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
-import { AnnotationLayer, useLineMetrics, type LiveStroke } from '../components/AnnotationLayer';
+import { AnnotationLayer, useFileMetrics, useLineMetrics, type LiveStroke } from '../components/AnnotationLayer';
 import { AnnotationToolbar } from '../components/AnnotationToolbar';
 import { ChordDiagram, ChordSheet } from '../components/ChordDiagram';
 import { SongRenderer } from '../components/SongRenderer';
@@ -61,7 +61,7 @@ import { Metronome, beatsPerBar, parseTempo } from '../lib/metronome';
 import { useWakeLock } from '../hooks/useWakeLock';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useSwipeNavigation } from '../hooks/useSwipeNavigation';
-import { AttachmentView, NO_ZOOM, useFilePages, type PageZoom } from '../components/AttachmentView';
+import { AttachmentView, NO_ZOOM, clampZoom, useFilePages, zoomAround, type PageZoom } from '../components/AttachmentView';
 import { fileToAttachment } from '../services/fileImport';
 import { isCue, itemPath, itemTitle, itemTranspose, liveItems, songCount, withItemCapo } from '../lib/setlist';
 import { useAnnotationGestures, type AnnotTool } from '../hooks/useAnnotationGestures';
@@ -252,7 +252,26 @@ export function SongPage() {
   const fontSize = columns ? Math.min(fit.font, settings.fontSize) : settings.fontSize;
   // Ökar när låtytans höjd ändras (t.ex. när kontrollerna eller ackorddiagrammen visas)
   const [areaHeight, setAreaHeight] = useState(0);
-  const metrics = useLineMetrics(songRef, [parsed, showChords, fontSize, transpose, stage, song?.id, columns, settings.simplifyChords]);
+  const lineMetrics = useLineMetrics(songRef, [parsed, showChords, fontSize, transpose, stage, song?.id, columns, settings.simplifyChords]);
+  // En fil: anteckningarna sitter på sidorna (i sidled på sidan som visas)
+  const fileMetrics = useFileMetrics(songRef, !!song?.attachment, pages.length, paged ? page : null, [song?.id, stage, settings.fontSize]);
+  const metrics = song?.attachment ? fileMetrics : lineMetrics;
+
+  // Antecknar man på en sida i sidled flyttar och zoomar två fingrar sidan
+  const panZoomPage = useCallback((dx: number, dy: number, k: number, mid: { x: number; y: number }) => {
+    const el = songRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    setPageZoom((z) => {
+      // Sidans hörn utan zoom (zoomen räknas från övre vänstra hörnet)
+      const left = r.left - z.x;
+      const top = r.top - z.y;
+      const zz = k === 1 ? z : zoomAround(z, z.s * k, mid.x - left, mid.y - top, w, h);
+      return clampZoom({ s: zz.s, x: zz.x + dx, y: zz.y + dy }, w, h);
+    });
+  }, []);
 
   const writeLayer = useCallback(
     (next: Annotations) => {
@@ -294,6 +313,7 @@ export function SongPage() {
     editingId,
     setEditingId,
     setLive,
+    onPanZoom: paged ? panZoomPage : undefined,
   });
 
   // När redigeringen av en lapp avslutas (även utan att textrutan hann tappa fokus): spara texten
@@ -718,6 +738,51 @@ export function SongPage() {
   };
   const showLayer = metrics && (settings.showAnnotations || annotating || !!pastNotes);
 
+  // Anteckningslagren: det andra lagret (blekt) och det man ritar i. page: bara det som
+  // sitter på den sidan av en fil (i sidled)
+  const onPage = (a: Annotations, pg: number | null): Annotations =>
+    pg === null ? a : { strokes: a.strokes.filter((x) => x.anchor.line === pg), notes: a.notes.filter((x) => x.anchor.line === pg) };
+  const annotationLayers = (pg: number | null) => {
+    if (!showLayer || !metrics) return null;
+    const layers = (
+      <>
+        {!pastNotes && (settings.showAnnotations || annotating) && hasAnnotations(otherLayer) && (
+          <AnnotationLayer
+            annotations={onPage(otherLayer!, pg)}
+            metrics={metrics}
+            live={null}
+            interactive={false}
+            dim={annotating}
+            selectedId={null}
+            editingId={null}
+            onTextChange={() => undefined}
+            onTextDone={() => undefined}
+          />
+        )}
+        <AnnotationLayer
+          annotations={onPage(pastNotes ? pastNotes.annotations : settings.showAnnotations || annotating ? annotations : EMPTY_ANNOTATIONS, pg)}
+          metrics={metrics}
+          live={live}
+          interactive={annotating}
+          selectedId={selectedId}
+          editingId={editingId}
+          onTextChange={(nid, text) =>
+            updateAnnotations(
+              { ...annotations, notes: annotations.notes.map((n) => (n.id === nid ? { ...n, text } : n)) },
+              false,
+            )
+          }
+          onTextDone={() => {
+            if (draft) updateAnnotations(draft, true);
+            setEditingId(null);
+          }}
+        />
+      </>
+    );
+    // En fil: 1 em efter sidans bredd (texten i låten har annars sin egen storlek)
+    return isFile ? <div className="file-annot" style={{ fontSize: metrics.fontPx }}>{layers}</div> : layers;
+  };
+
   return (
     <div className={`screen${stage ? ' stage' : ''}`}>
       {!stage && !controlsHidden && (
@@ -893,23 +958,25 @@ export function SongPage() {
               </button>
             )}
             {!isFile && (
-            <>
-            <button
-              className={`btn icon${showChords ? '' : ' active'}`}
-              aria-label={showChords ? 'Dölj ackord' : 'Visa ackord'}
-              title={showChords ? 'Dölj ackord' : 'Visa ackord'}
-              onClick={() => setShowChords((v) => !v)}
-            >
-              {showChords ? <Eye size={18} /> : <EyeOff size={18} />}
-            </button>
-            <button
-              className={`btn icon${settings.showDiagrams ? ' active' : ''}`}
-              aria-label="Ackorddiagram"
-              title="Ackorddiagram"
-              onClick={() => updateSettings({ showDiagrams: !settings.showDiagrams })}
-            >
-              {settings.instrument === 'piano' ? <Piano size={18} /> : <Guitar size={18} />}
-            </button>
+              <>
+                <button
+                  className={`btn icon${showChords ? '' : ' active'}`}
+                  aria-label={showChords ? 'Dölj ackord' : 'Visa ackord'}
+                  title={showChords ? 'Dölj ackord' : 'Visa ackord'}
+                  onClick={() => setShowChords((v) => !v)}
+                >
+                  {showChords ? <Eye size={18} /> : <EyeOff size={18} />}
+                </button>
+                <button
+                  className={`btn icon${settings.showDiagrams ? ' active' : ''}`}
+                  aria-label="Ackorddiagram"
+                  title="Ackorddiagram"
+                  onClick={() => updateSettings({ showDiagrams: !settings.showDiagrams })}
+                >
+                  {settings.instrument === 'piano' ? <Piano size={18} /> : <Guitar size={18} />}
+                </button>
+              </>
+            )}
             <button className="btn icon" aria-label="Anteckna" title="Anteckna och rita" onClick={startAnnotating}>
               <PenLine size={18} />
             </button>
@@ -924,8 +991,6 @@ export function SongPage() {
               >
                 {settings.showAnnotations ? <NoteIcon size={18} /> : <NoteOffIcon size={18} />}
               </button>
-            )}
-            </>
             )}
           </div>
         </div>
@@ -1032,6 +1097,8 @@ export function SongPage() {
               <AttachmentView
                 pages={pages}
                 status={pagesStatus}
+                pageRef={songRef}
+                overlay={annotationLayers}
                 zoom={settings.fontSize / 20}
                 paged={
                   paged
@@ -1044,6 +1111,7 @@ export function SongPage() {
                         onGestureStart: swipe.cancel,
                         zoomStep,
                         onTap: () => tapToHide && !justClosedTool() && setControlsHidden((v) => !v),
+                        locked: annotating,
                         // Låtytan minus luften ovanför och sidvisaren nedanför
                         viewHeight: (areaHeight || scrollRef.current?.clientHeight || 600) - (pages.length > 1 ? 76 : 36),
                       }
@@ -1064,43 +1132,7 @@ export function SongPage() {
               onChordClick: annotating ? undefined : setChordSheet,
             }}
             containerRef={songRef}
-            overlay={
-              showLayer ? (
-                <>
-                {!pastNotes && (settings.showAnnotations || annotating) && hasAnnotations(otherLayer) && (
-                  <AnnotationLayer
-                    annotations={otherLayer!}
-                    metrics={metrics}
-                    live={null}
-                    interactive={false}
-                    dim={annotating}
-                    selectedId={null}
-                    editingId={null}
-                    onTextChange={() => undefined}
-                    onTextDone={() => undefined}
-                  />
-                )}
-                <AnnotationLayer
-                  annotations={pastNotes ? pastNotes.annotations : settings.showAnnotations || annotating ? annotations : EMPTY_ANNOTATIONS}
-                  metrics={metrics}
-                  live={live}
-                  interactive={annotating}
-                  selectedId={selectedId}
-                  editingId={editingId}
-                  onTextChange={(nid, text) =>
-                    updateAnnotations(
-                      { ...annotations, notes: annotations.notes.map((n) => (n.id === nid ? { ...n, text } : n)) },
-                      false,
-                    )
-                  }
-                  onTextDone={() => {
-                    if (draft) updateAnnotations(draft, true);
-                    setEditingId(null);
-                  }}
-                />
-                </>
-              ) : null
-            }
+            overlay={annotationLayers(null)}
           />
           )}
           {nextUp && !annotating && (!paged || page >= lastPage) && (

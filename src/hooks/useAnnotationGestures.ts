@@ -66,6 +66,11 @@ export interface GestureOptions {
   editingId: string | null;
   setEditingId: (id: string | null) => void;
   setLive: (s: LiveStroke | null) => void;
+  /**
+   * Två fingrar (eller Flytta) flyttar och zoomar i stället för att scrolla, t.ex. en sida av en
+   * fil: förflyttning i px, zoomfaktor sedan förra gången och punkten mellan fingrarna.
+   */
+  onPanZoom?: (dx: number, dy: number, k: number, mid: { x: number; y: number }) => void;
 }
 
 const TAP_DISTANCE = 8;
@@ -82,6 +87,7 @@ export function useAnnotationGestures(options: GestureOptions) {
     stroke: [] as number[],
     penSeen: false,
     lastPan: { x: 0, y: 0 },
+    panDist: 0,
     note: null as NoteGesture | null,
     latest: null as Annotations | null,
     changed: false,
@@ -95,9 +101,12 @@ export function useAnnotationGestures(options: GestureOptions) {
     opt.current.update(next, commit);
   };
 
+  // Punkten i låtens koordinater (utan zoom, om låten, t.ex. en sida av en fil, är zoomad)
   const toSong = (cx: number, cy: number) => {
-    const r = opt.current.songRef.current!.getBoundingClientRect();
-    return { x: cx - r.left, y: cy - r.top };
+    const el = opt.current.songRef.current!;
+    const r = el.getBoundingClientRect();
+    const k = el.offsetWidth ? r.width / el.offsetWidth : 1;
+    return { x: (cx - r.left) / k, y: (cy - r.top) / k };
   };
 
   const midClient = () => {
@@ -111,6 +120,12 @@ export function useAnnotationGestures(options: GestureOptions) {
     return { x: x / list.length, y: y / list.length };
   };
 
+  // Avståndet mellan de två första fingrarna (0 med ett finger)
+  const pinchDist = () => {
+    const [a, b] = [...st.current.pointers.values()];
+    return a && b ? Math.hypot(a.cx - b.cx, a.cy - b.cy) : 0;
+  };
+
   const startPan = () => {
     const s = st.current;
     if (s.mode === 'draw') opt.current.setLive(null);
@@ -118,6 +133,7 @@ export function useAnnotationGestures(options: GestureOptions) {
     if (s.mode === 'erase' && s.changed) push(current(), true);
     s.mode = 'pan';
     s.lastPan = midClient();
+    s.panDist = pinchDist();
   };
 
   const geomOf = (n: StickyNote, m: LineMetrics): Geom => {
@@ -311,8 +327,14 @@ export function useAnnotationGestures(options: GestureOptions) {
       }
       case 'pan': {
         const m = midClient();
-        const el = o.scrollRef.current;
-        if (el) el.scrollTop -= m.y - s.lastPan.y;
+        if (o.onPanZoom) {
+          const d = pinchDist();
+          o.onPanZoom(m.x - s.lastPan.x, m.y - s.lastPan.y, s.panDist && d ? d / s.panDist : 1, m);
+          s.panDist = d;
+        } else {
+          const el = o.scrollRef.current;
+          if (el) el.scrollTop -= m.y - s.lastPan.y;
+        }
         s.lastPan = m;
         break;
       }
@@ -350,7 +372,10 @@ export function useAnnotationGestures(options: GestureOptions) {
         break;
       case 'pan':
         if (s.pointers.size === 0) s.mode = 'idle';
-        else s.lastPan = midClient();
+        else {
+          s.lastPan = midClient();
+          s.panDist = pinchDist();
+        }
         break;
       case 'place': {
         s.mode = 'idle';

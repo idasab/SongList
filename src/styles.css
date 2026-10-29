@@ -1866,6 +1866,8 @@ textarea.note-text {
 .attachment-pages {
   display: block;
   max-width: none;
+  /* Anteckningarna ligger ovanpå sidorna */
+  position: relative;
 }
 
 .attachment-view img,
@@ -2314,6 +2316,19 @@ textarea.note-text {
   min-width: 0;
   display: flex;
   justify-content: center;
+}
+
+/* Sidan som visas: bilden och anteckningarna ovanpå, som zoomas tillsammans */
+.file-page {
+  position: relative;
+  flex: none;
+}
+
+/* Anteckningar på en fil: textstorleken (1 em) sätts efter sidans bredd */
+.file-annot {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
 .file-slide .attachment-page {

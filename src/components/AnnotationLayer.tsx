@@ -52,6 +52,54 @@ export function useLineMetrics(ref: RefObject<HTMLDivElement | null>, deps: unkn
   return metrics;
 }
 
+/** På en fil är 1 em en fyrtiondel av sidans bredd, så att anteckningarna följer sidan */
+const FILE_EM = 40;
+/** Sidorna som inte visas (i sidled) läggs här, långt åt sidan, så att inget ritas på dem */
+const OFF_PAGE = 1e6;
+
+/**
+ * Mått för anteckningar på en låt som är en fil: varje sida räknas som en "rad". Under
+ * varandra (page = null) mäts var varje sida börjar; i sidled mäts bara sidan som visas.
+ */
+export function useFileMetrics(
+  ref: RefObject<HTMLDivElement | null>,
+  enabled: boolean,
+  pageCount: number,
+  page: number | null,
+  deps: unknown[],
+): LineMetrics | null {
+  const [metrics, setMetrics] = useState<LineMetrics | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!enabled || !el) return;
+    const measure = () => {
+      // Måtten utan zoom (offset*), så att anteckningarna zoomas med sidan
+      const fontPx = (el.offsetWidth || FILE_EM) / FILE_EM;
+      let tops: number[];
+      let lefts: number[] | undefined;
+      if (page === null) {
+        tops = [...el.querySelectorAll<HTMLElement>('.attachment-page')].map((n) => n.offsetTop);
+        if (!tops.length) tops = [0];
+      } else {
+        tops = Array.from({ length: Math.max(1, pageCount) }, () => 0);
+        lefts = tops.map((_, i) => (i === page ? 0 : OFF_PAGE));
+      }
+      const same = (a: number[] | undefined, b: number[] | undefined) =>
+        (!a && !b) || (!!a && !!b && a.length === b.length && a.every((t, i) => Math.abs(t - b[i]) < 0.5));
+      setMetrics((prev) =>
+        prev && Math.abs(prev.fontPx - fontPx) < 0.01 && same(prev.tops, tops) && same(prev.lefts, lefts)
+          ? prev
+          : { tops, fontPx, ...(lefts ? { lefts } : {}) },
+      );
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [enabled, pageCount, page, ...deps]);
+  return enabled ? metrics : null;
+}
+
 export interface LiveStroke {
   points: number[];
   color: InkColor;

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
 import type { SongAttachment } from '../lib/model';
 import { loadPdfJs } from '../services/fileImport';
 import { enhanceCanvas, enhancedImageCanvas } from '../lib/enhance';
@@ -121,14 +121,14 @@ const MAX_ZOOM = 5;
 const DOUBLE_TAP_MS = 300;
 
 /** Inom gränserna: sidan täcker alltid sin egen yta, och nästan 1 räknas som ingen zoom. */
-function clampZoom(z: PageZoom, w: number, h: number): PageZoom {
+export function clampZoom(z: PageZoom, w: number, h: number): PageZoom {
   const s = Math.min(MAX_ZOOM, z.s);
   if (s <= 1.02) return NO_ZOOM;
   return { s, x: Math.min(0, Math.max(w * (1 - s), z.x)), y: Math.min(0, Math.max(h * (1 - s), z.y)) };
 }
 
 /** Ny skala med punkten (cx, cy) på sidan kvar på samma ställe på skärmen. */
-function zoomAround(z: PageZoom, s: number, cx: number, cy: number, w: number, h: number): PageZoom {
+export function zoomAround(z: PageZoom, s: number, cx: number, cy: number, w: number, h: number): PageZoom {
   const k = s / z.s;
   return clampZoom({ s, x: cx - (cx - z.x) * k, y: cy - (cy - z.y) * k }, w, h);
 }
@@ -144,16 +144,21 @@ export function AttachmentView(props: {
   zoom: number;
   /** En sida i taget, i sidled */
   paged?: PagedProps;
+  /** Ytan som anteckningarna mäts mot: sidan som visas (i sidled), annars alla sidor */
+  pageRef?: RefObject<HTMLDivElement | null>;
+  /** Anteckningarna ovanpå sidan (i sidled), eller ovanpå alla sidor (page = null) */
+  overlay?: (page: number | null) => ReactNode;
 }) {
-  const { pages, status, zoom, paged } = props;
-  if (paged) return <PagedView pages={pages} status={status} {...paged} />;
+  const { pages, status, zoom, paged, pageRef, overlay } = props;
+  if (paged) return <PagedView pages={pages} status={status} pageRef={pageRef} overlay={overlay} {...paged} />;
   return (
     <div className="attachment-view">
       {status && <p className="muted small-text">{status}</p>}
-      <div className="attachment-pages" style={{ width: `${Math.round(zoom * 100)}%` }}>
+      <div ref={pageRef} className="attachment-pages" style={{ width: `${Math.round(zoom * 100)}%` }}>
         {pages.map((p, i) => (
           <img key={i} className="attachment-page" src={p.src} alt="" />
         ))}
+        {overlay?.(null)}
       </div>
     </div>
   );
@@ -172,11 +177,29 @@ interface PagedProps {
   zoomStep?: { id: number; factor: number };
   /** Ett tryck med fingret på sidan (inget dubbeltryck, svep eller zoom) */
   onTap?: () => void;
+  /** Man antecknar: anteckningsläget sköter gesterna (och zoomen ändras utan övergång) */
+  locked?: boolean;
 }
 
-function PagedView(props: PagedProps & { pages: FilePage[]; status: string }) {
-  const { pages, status, page, drag, dragging, viewHeight, pageZoom, onZoom, onGestureStart, zoomStep, onTap } = props;
-  const imgRef = useRef<HTMLImageElement>(null);
+function PagedView(
+  props: PagedProps & {
+    pages: FilePage[];
+    status: string;
+    pageRef?: RefObject<HTMLDivElement | null>;
+    overlay?: (page: number | null) => ReactNode;
+  },
+) {
+  const { pages, status, page, drag, dragging, viewHeight, pageZoom, onZoom, onGestureStart, zoomStep, onTap, locked, pageRef, overlay } =
+    props;
+  // Sidan som visas (bilden och anteckningarna på den, som zoomas tillsammans)
+  const imgRef = useRef<HTMLDivElement | null>(null);
+  const setCurrent = useCallback(
+    (el: HTMLDivElement | null) => {
+      imgRef.current = el;
+      if (pageRef) pageRef.current = el;
+    },
+    [pageRef],
+  );
   const zoomRef = useRef(pageZoom);
   zoomRef.current = pageZoom;
   const pointers = useRef(new Map<number, { x: number; y: number }>());
@@ -235,7 +258,7 @@ function PagedView(props: PagedProps & { pages: FilePage[]; status: string }) {
   const pointerType = useRef('mouse');
   const onPointerDown = (e: ReactPointerEvent) => {
     pointerType.current = e.pointerType;
-    if (e.pointerType === 'mouse') return;
+    if (e.pointerType === 'mouse' || locked) return;
     // Första fingret: inga gamla fingrar kvar (om ett släpp aldrig kom fram)
     if (e.isPrimary) pointers.current.clear();
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -253,7 +276,7 @@ function PagedView(props: PagedProps & { pages: FilePage[]; status: string }) {
   };
 
   const onPointerMove = (e: ReactPointerEvent) => {
-    if (!pointers.current.has(e.pointerId)) return;
+    if (locked || !pointers.current.has(e.pointerId)) return;
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     // Ett svep för att byta sida är inget tryck
     if (Math.hypot(e.clientX - downAt.current.x, e.clientY - downAt.current.y) > 10) moved.current = true;
@@ -341,21 +364,21 @@ function PagedView(props: PagedProps & { pages: FilePage[]; status: string }) {
           <div key={i} className="file-slide" aria-hidden={i !== page}>
             {/* Bara sidorna intill visas, så att många sidor inte tar minne i onödan */}
             {Math.abs(i - page) <= 2 && (
-              <img
-                ref={i === page ? imgRef : undefined}
-                className="attachment-page"
-                src={p.src}
-                alt={`Sida ${i + 1}`}
-                draggable={false}
+              <div
+                ref={i === page ? setCurrent : undefined}
+                className="file-page"
                 style={{
                   width: `min(100%, ${Math.round((Math.max(200, viewHeight) * p.width) / p.height)}px)`,
                   ...(i === page && pageZoom.s > 1
                     ? { transform: `translate(${pageZoom.x}px, ${pageZoom.y}px) scale(${pageZoom.s})` }
                     : {}),
                   transformOrigin: '0 0',
-                  transition: active ? 'none' : 'transform 0.2s ease-out',
+                  transition: active || locked ? 'none' : 'transform 0.2s ease-out',
                 }}
-              />
+              >
+                <img className="attachment-page" src={p.src} alt={`Sida ${i + 1}`} draggable={false} />
+                {i === page && overlay?.(i)}
+              </div>
             )}
           </div>
         ))}
