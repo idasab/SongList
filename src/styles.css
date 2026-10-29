@@ -80,9 +80,10 @@
   --border: #26262c;
   --chord: #ffd34d;
   --chorus-bar: #ffd34d;
-  --accent: #ffd34d;
+  /* Appens gröna, ljusare så att den syns lika tydligt mot svart */
+  --accent: #72c7a0;
   --accent-text: #000;
-  --accent-soft: #2a2410;
+  --accent-soft: #12291f;
   color-scheme: dark;
 }
 
