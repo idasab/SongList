@@ -515,7 +515,7 @@ export function SongPage() {
         <span className="hide-mobile">{setlistIndex > 0 ? itemTitle(setlistItems[setlistIndex - 1], songs) : 'Föregående'}</span>
       </button>
       <div className="pos">
-        {setlist.name} · {setlistIndex + 1}/{setlistItems.length}
+        {setlistIndex + 1}/{setlistItems.length}
       </div>
       <button className="btn" disabled={setlistIndex >= setlistItems.length - 1} onClick={() => goSetlist(1)}>
         <span className="hide-mobile">

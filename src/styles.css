@@ -1394,10 +1394,12 @@ textarea.note-text {
   padding: 18px 0;
 }
 
+/* Tre kolumner där sidorna är lika breda, så att sidnumret står mitt på skärmen
+   även när låttitlarna på knapparna är olika långa */
 .setlist-nav {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   padding: 6px calc(10px + var(--safe-right)) calc(6px + var(--safe-bottom)) calc(10px + var(--safe-left));
   border-top: 1px solid var(--border);
@@ -1405,14 +1407,28 @@ textarea.note-text {
   flex-shrink: 0;
 }
 
-.setlist-nav .pos {
-  font-size: 14px;
-  color: var(--text-muted);
-  text-align: center;
-  flex: 1;
+.setlist-nav > .btn {
+  justify-self: start;
+  max-width: 100%;
   min-width: 0;
+}
+
+.setlist-nav > .btn:last-child {
+  justify-self: end;
+}
+
+.setlist-nav > .btn span {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setlist-nav .pos {
+  font-size: 16px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-align: center;
   white-space: nowrap;
 }
 
