@@ -16,6 +16,8 @@ import {
   ListMusic,
   Minus,
   Fullscreen,
+  ArrowUpDown,
+  Gauge,
   Metronome as MetronomeIcon,
   MoreHorizontal,
   PenLine,
@@ -91,6 +93,22 @@ export function SongPage() {
 
   const [stage, setStage] = useState(false);
   const [controlsHidden, setControlsHidden] = useState(false);
+  // Tonart, kapo och scrollfart visas hopfällda; ett tryck fäller ut minus och plus
+  const [openTool, setOpenTool] = useState<'transpose' | 'capo' | 'speed' | null>(null);
+  const toolClosedAt = useRef(0);
+  useEffect(() => setOpenTool(null), [id]);
+  useEffect(() => {
+    if (!openTool) return;
+    // Ett tryck någon annanstans fäller ihop (och visar/döljer inte kontrollerna samtidigt)
+    const onDown = (e: PointerEvent) => {
+      if ((e.target as HTMLElement).closest?.('.tool-group.open')) return;
+      toolClosedAt.current = performance.now();
+      setOpenTool(null);
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    return () => document.removeEventListener('pointerdown', onDown, true);
+  }, [openTool]);
+  const justClosedTool = () => performance.now() - toolClosedAt.current < 800;
   const [showChords, setShowChords] = useState(true);
   const [scrolling, setScrolling] = useState(false);
   const [chordSheet, setChordSheet] = useState<string | null>(null);
@@ -650,6 +668,9 @@ export function SongPage() {
     navigate('/', { replace: true });
   };
 
+  const transposeLabel = transpose > 0 ? `+${transpose}` : transpose === 0 ? '±0' : String(transpose);
+  const speedLabel = duration ? formatDuration(duration) : String(speed);
+
   const backTo = setlist ? `/setlists/${setlist.id}` : '/';
   // Redigering från en setlista behåller platsen i setlistan
   const editPath = `/song/${song.id}/edit${setlist ? `?setlist=${setlist.id}&i=${setlistIndex}` : ''}`;
@@ -752,32 +773,49 @@ export function SongPage() {
       {!controlsHidden && !annotating && (
         <div className="song-toolbar" style={stage ? { paddingTop: 'calc(6px + var(--safe-top))', paddingRight: 64 } : undefined}>
           {!isFile && (
-          <div className="tool-group" title="Transponera">
-            <button className="btn icon" aria-label="Transponera ner" onClick={() => setTranspose(transpose - 1)}>
-              <Minus size={18} />
-            </button>
-            <span className="tool-value" onClick={() => setTranspose(0)}>
-              {transpose > 0 ? `+${transpose}` : transpose === 0 ? '±0' : transpose}
-            </span>
-            <button className="btn icon" aria-label="Transponera upp" onClick={() => setTranspose(transpose + 1)}>
-              <Plus size={18} />
-            </button>
-            {scopeButton}
+          <div className={`tool-group${openTool === 'transpose' ? ' open' : ''}`} title="Transponera">
+            {openTool === 'transpose' ? (
+              <>
+                <button className="btn icon" aria-label="Transponera ner" onClick={() => setTranspose(transpose - 1)}>
+                  <Minus size={18} />
+                </button>
+                <span className="tool-value" onClick={() => setTranspose(0)}>
+                  {transposeLabel}
+                </span>
+                <button className="btn icon" aria-label="Transponera upp" onClick={() => setTranspose(transpose + 1)}>
+                  <Plus size={18} />
+                </button>
+                {scopeButton}
+              </>
+            ) : (
+              <button className={`btn tool-pill${transpose ? ' set' : ''}`} aria-label={`Transponera, ${transposeLabel}`} onClick={() => setOpenTool('transpose')}>
+                <ArrowUpDown size={16} />
+                <span>{transposeLabel}</span>
+              </button>
+            )}
           </div>
           )}
 
           {!isFile && (
-          <div className="tool-group" title="Kapo">
-            <button className="btn icon" aria-label="Kapo ner" disabled={capo <= 0} onClick={() => setCapo(capo - 1)}>
-              <Minus size={18} />
-            </button>
-            <span className="tool-value capo-value" onClick={() => setCapo(0)}>
-              {capo ? `Kapo ${capo}` : 'Kapo'}
-            </span>
-            <button className="btn icon" aria-label="Kapo upp" disabled={capo >= 11} onClick={() => setCapo(capo + 1)}>
-              <Plus size={18} />
-            </button>
-            {scopeButton}
+          <div className={`tool-group${openTool === 'capo' ? ' open' : ''}`} title="Kapo">
+            {openTool === 'capo' ? (
+              <>
+                <button className="btn icon" aria-label="Kapo ner" disabled={capo <= 0} onClick={() => setCapo(capo - 1)}>
+                  <Minus size={18} />
+                </button>
+                <span className="tool-value capo-value" onClick={() => setCapo(0)}>
+                  {capo ? `Kapo ${capo}` : 'Kapo'}
+                </span>
+                <button className="btn icon" aria-label="Kapo upp" disabled={capo >= 11} onClick={() => setCapo(capo + 1)}>
+                  <Plus size={18} />
+                </button>
+                {scopeButton}
+              </>
+            ) : (
+              <button className={`btn tool-pill${capo ? ' set' : ''}`} onClick={() => setOpenTool('capo')}>
+                {capo ? `Kapo ${capo}` : 'Kapo'}
+              </button>
+            )}
           </div>
           )}
 
@@ -792,7 +830,7 @@ export function SongPage() {
 
           {/* En sida i taget: inget att scrolla */}
           {!paged && (
-          <div className="tool-group" title="Automatisk scroll">
+          <div className={`tool-group${openTool === 'speed' ? ' open' : ''}`} title="Automatisk scroll">
             <button
               className={`btn icon${scrolling ? ' active' : ''}`}
               aria-label={scrolling ? 'Pausa scroll' : 'Starta scroll'}
@@ -800,19 +838,28 @@ export function SongPage() {
             >
               {scrolling ? <Pause size={18} /> : <Play size={18} />}
             </button>
-            <button className="btn icon" aria-label="Långsammare" onClick={() => changeSpeed(-1)}>
-              <Minus size={16} />
-            </button>
-            <span
-              className="tool-value"
-              title={duration ? 'Scrollar genom låten på dess längd' : hasDuration ? 'Tryck för att scrolla på låtens längd' : undefined}
-              onClick={() => hasDuration && !duration && void updateSongPrefs(song.id, { scrollSpeed: undefined })}
-            >
-              {duration ? formatDuration(duration) : speed}
-            </span>
-            <button className="btn icon" aria-label="Snabbare" onClick={() => changeSpeed(1)}>
-              <Plus size={16} />
-            </button>
+            {openTool === 'speed' ? (
+              <>
+                <button className="btn icon" aria-label="Långsammare" onClick={() => changeSpeed(-1)}>
+                  <Minus size={16} />
+                </button>
+                <span
+                  className="tool-value"
+                  title={duration ? 'Scrollar genom låten på dess längd' : hasDuration ? 'Tryck för att scrolla på låtens längd' : undefined}
+                  onClick={() => hasDuration && !duration && void updateSongPrefs(song.id, { scrollSpeed: undefined })}
+                >
+                  {speedLabel}
+                </span>
+                <button className="btn icon" aria-label="Snabbare" onClick={() => changeSpeed(1)}>
+                  <Plus size={16} />
+                </button>
+              </>
+            ) : (
+              <button className="btn tool-pill" aria-label={`Scrollfart, ${speedLabel}`} onClick={() => setOpenTool('speed')}>
+                <Gauge size={16} />
+                <span>{speedLabel}</span>
+              </button>
+            )}
           </div>
           )}
 
@@ -895,7 +942,7 @@ export function SongPage() {
             ...((setlist || paged) && !annotating ? { touchAction: 'pan-y' } : {}),
           }}
           onClick={(e) => {
-            if (swipe.justSwiped()) return;
+            if (swipe.justSwiped() || justClosedTool()) return;
             // I setlistläge och scenläge: tryck på låten för att visa/dölja kontrollerna överst
             if (tapToHide && !(e.target as HTMLElement).closest('.ch')) setControlsHidden((v) => !v);
           }}
@@ -983,7 +1030,7 @@ export function SongPage() {
                         onZoom: setPageZoom,
                         onGestureStart: swipe.cancel,
                         zoomStep,
-                        onTap: () => tapToHide && setControlsHidden((v) => !v),
+                        onTap: () => tapToHide && !justClosedTool() && setControlsHidden((v) => !v),
                         // Låtytan minus luften ovanför och sidvisaren nedanför
                         viewHeight: (areaHeight || scrollRef.current?.clientHeight || 600) - (pages.length > 1 ? 76 : 36),
                       }
