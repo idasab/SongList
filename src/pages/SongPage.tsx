@@ -12,6 +12,7 @@ import {
   Eye,
   EyeOff,
   Guitar,
+  Piano,
   History,
   ListMusic,
   Minus,
@@ -895,7 +896,7 @@ export function SongPage() {
               title="Ackorddiagram"
               onClick={() => updateSettings({ showDiagrams: !settings.showDiagrams })}
             >
-              <Guitar size={18} />
+              {settings.instrument === 'piano' ? <Piano size={18} /> : <Guitar size={18} />}
             </button>
             <button className="btn icon" aria-label="Anteckna" title="Anteckna och rita" onClick={startAnnotating}>
               <PenLine size={18} />
