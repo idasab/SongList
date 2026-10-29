@@ -15,7 +15,7 @@ import {
   History,
   ListMusic,
   Minus,
-  Moon,
+  Fullscreen,
   Metronome as MetronomeIcon,
   MoreHorizontal,
   PenLine,
@@ -699,6 +699,9 @@ export function SongPage() {
     <div className={`screen${stage ? ' stage' : ''}`}>
       {!stage && !controlsHidden && (
         <Header title={song.title} back={backTo}>
+          <button className="btn ghost icon" aria-label="Scenläge" title="Scenläge" onClick={() => setStage(true)}>
+            <Fullscreen size={20} />
+          </button>
           <button className="btn ghost icon" aria-label="Redigera" onClick={() => navigate(editPath)}>
             <Pencil size={20} />
           </button>
@@ -864,14 +867,6 @@ export function SongPage() {
             )}
             </>
             )}
-            <button
-              className={`btn icon${stage ? ' active' : ''}`}
-              aria-label="Scenläge"
-              title="Scenläge"
-              onClick={() => setStage((v) => !v)}
-            >
-              <Moon size={18} />
-            </button>
           </div>
         </div>
       )}
