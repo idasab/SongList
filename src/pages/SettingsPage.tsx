@@ -78,8 +78,8 @@ export function SettingsPage() {
               />
             </div>
             <div className="toggle-row choice-row">
-              <span>Färg</span>
-              <div className="accent-swatches" role="radiogroup" aria-label="Färg">
+              <span>Färgtema</span>
+              <div className="accent-swatches" role="radiogroup" aria-label="Färgtema">
                 {ACCENT_COLORS.map((c) => {
                   const on = (settings.accent ?? 'green') === c.value;
                   return (
