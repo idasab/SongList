@@ -787,6 +787,17 @@ a {
   white-space: nowrap;
 }
 
+/* Scrollfarten tätt intill Play-knappen */
+.tool-group .btn.icon:has(+ .btn.tool-pill) {
+  position: relative;
+  z-index: 1;
+  margin-right: -6px;
+}
+
+.tool-group .btn.icon + .btn.tool-pill {
+  padding-left: 6px;
+}
+
 .tool-group .btn.tool-pill.set {
   color: var(--accent);
 }
