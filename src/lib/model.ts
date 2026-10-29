@@ -103,7 +103,7 @@ export interface SetlistFolder extends SyncRecord {
 export type Theme = 'system' | 'light' | 'dark';
 
 /** Appens accentfärg; nyanserna för varje läge finns i styles.css (data-accent) */
-export type AccentColor = 'green' | 'blue' | 'purple' | 'pink' | 'orange' | 'yellow';
+export type AccentColor = 'green' | 'blue' | 'purple' | 'pink' | 'orange' | 'yellow' | 'gray';
 
 /** Färgerna att välja bland, med färgen som visas i väljaren */
 export const ACCENT_COLORS: { value: AccentColor; label: string; swatch: string }[] = [
@@ -113,6 +113,7 @@ export const ACCENT_COLORS: { value: AccentColor; label: string; swatch: string 
   { value: 'pink', label: 'Rosa', swatch: '#b0456e' },
   { value: 'orange', label: 'Orange', swatch: '#b5551f' },
   { value: 'yellow', label: 'Gul', swatch: '#f2c230' },
+  { value: 'gray', label: 'Grå', swatch: '#464b53' },
 ];
 
 export interface Settings {

@@ -128,6 +128,28 @@
   --a-stage-soft: #2a2410;
 }
 
+/* Grå: neutral. Mörkgrå knappar i ljust läge; i mörkt läge och scenläget ljusgrå med mörk text,
+   eftersom mörkgrått inte syns mot den mörka bakgrunden */
+:root[data-accent='gray'] {
+  --a-fill: #464b53;
+  --a-ink: #464b53;
+  --a-on: #ffffff;
+  --a-soft: #e9eaec;
+  --a-tip: #e3e4e7;
+  --a-bar: #9ca1a9;
+  --a-bg: #f3f3f4;
+  --a-surface-2: #e9eaeb;
+  --a-surface-3: #dddfe2;
+  --a-border: #dcdee1;
+  --a-dark-fill: #d2d5da;
+  --a-dark-on: #1b1d22;
+  --a-dark-ink: #d2d5da;
+  --a-dark-soft: #2b2f37;
+  --a-dark-bar: #b4b8bf;
+  --a-stage: #d9dce0;
+  --a-stage-soft: #1c1c20;
+}
+
 :root {
   --bg: var(--a-bg);
   --surface: #ffffff;
