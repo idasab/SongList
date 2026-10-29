@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { SongAttachment } from '../lib/model';
 import { loadPdfJs } from '../services/fileImport';
+import { enhanceCanvas, enhancedImageCanvas } from '../lib/enhance';
 
 /** En sida att visa: en bild, eller en sida ur en PDF som ritats till en bild. */
 export interface FilePage {
@@ -11,9 +12,9 @@ export interface FilePage {
 
 /**
  * Alla sidor i låtens filer (bilder och PDF:er) i tur och ordning. Sidorna kommer en i taget
- * medan PDF:erna ritas.
+ * medan PDF:erna ritas. enhance: sidorna görs skarpare (se lib/enhance).
  */
-export function useFilePages(files: SongAttachment[]): { pages: FilePage[]; status: string } {
+export function useFilePages(files: SongAttachment[], enhance = false): { pages: FilePage[]; status: string } {
   const [pages, setPages] = useState<FilePage[]>([]);
   const [status, setStatus] = useState('');
 
@@ -37,8 +38,18 @@ export function useFilePages(files: SongAttachment[]): { pages: FilePage[]; stat
         const of = files.length > 1 ? ` (fil ${i + 1} av ${files.length})` : '';
         try {
           if (a.kind === 'image') {
-            const { width, height } = await imageSize(a.dataUrl);
-            add({ src: a.dataUrl, width, height });
+            if (!enhance) {
+              const { width, height } = await imageSize(a.dataUrl);
+              add({ src: a.dataUrl, width, height });
+              continue;
+            }
+            setStatus(`Gör bilden skarpare${of}…`);
+            const canvas = await enhancedImageCanvas(a.dataUrl);
+            const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', 0.9));
+            if (!blob || cancelled) continue;
+            const src = URL.createObjectURL(blob);
+            urls.push(src);
+            add({ src, width: canvas.width, height: canvas.height });
             continue;
           }
           const pdfjs = await loadPdfJs();
@@ -66,6 +77,7 @@ export function useFilePages(files: SongAttachment[]): { pages: FilePage[]; stat
             ctx.fillStyle = '#fff';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+            if (enhance) enhanceCanvas(canvas);
             const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', 0.9));
             if (!blob || cancelled) continue;
             const src = URL.createObjectURL(blob);
@@ -83,7 +95,7 @@ export function useFilePages(files: SongAttachment[]): { pages: FilePage[]; stat
       destroy.forEach((d) => d());
       urls.forEach((u) => URL.revokeObjectURL(u));
     };
-  }, [files]);
+  }, [files, enhance]);
 
   return { pages, status };
 }

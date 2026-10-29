@@ -31,6 +31,7 @@ import {
 import { songFiles, type Setlist, type Song, type SongAttachment } from '../lib/model';
 import { safeFileName, saveBinaryFile, saveTextFile } from './files';
 import { loadPdfJs } from './fileImport';
+import { enhanceCanvas, enhancedImageCanvas } from '../lib/enhance';
 import { pdfSafe } from '../lib/pdfText';
 import { SHARE_EXTENSION, buildSharedSetlist } from './setlistShare';
 import { isCue, itemTitle, itemTranspose, liveItems, withItemCapo } from '../lib/setlist';
@@ -617,14 +618,18 @@ function drawFooters(doc: JsPdf, footer: string) {
 
 /** Ritar in en bifogad bild eller PDF (som bilder av sidorna) i exporten. */
 /** Låtens filer i tur och ordning, varje sida på en egen sida i PDF:en. */
-async function drawAttachments(c: PdfCtx, files: SongAttachment[]) {
+async function drawAttachments(c: PdfCtx, files: SongAttachment[], enhance = false) {
   const images: { data: string; w: number; h: number }[] = [];
-  for (const a of files) await renderAttachment(a, images);
+  for (const a of files) await renderAttachment(a, images, enhance);
   drawImages(c, images);
 }
 
-async function renderAttachment(a: SongAttachment, images: { data: string; w: number; h: number }[]) {
-  if (a.kind === 'image') {
+async function renderAttachment(a: SongAttachment, images: { data: string; w: number; h: number }[], enhance: boolean) {
+  if (a.kind === 'image' && enhance) {
+    // Skarpare bild, som i appen
+    const canvas = await enhancedImageCanvas(a.dataUrl);
+    images.push({ data: canvas.toDataURL('image/jpeg', 0.85), w: canvas.width, h: canvas.height });
+  } else if (a.kind === 'image') {
     const size = await imageSize(a.dataUrl);
     images.push({ data: await toJpeg(a.dataUrl, size), w: size.w, h: size.h });
   } else {
@@ -643,6 +648,7 @@ async function renderAttachment(a: SongAttachment, images: { data: string; w: nu
         ctx.fillStyle = '#fff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+        if (enhance) enhanceCanvas(canvas);
         images.push({ data: canvas.toDataURL('image/jpeg', 0.85), w: canvas.width, h: canvas.height });
       }
     } finally {
@@ -728,7 +734,7 @@ async function renderPdf(
     const tops: number[] = [];
     drawSongHeader(c, p, number, tops);
     if (p.song.attachment) {
-      await drawAttachments(c, songFiles(p.song));
+      await drawAttachments(c, songFiles(p.song), p.song.enhance);
       continue;
     }
     let n = 1;

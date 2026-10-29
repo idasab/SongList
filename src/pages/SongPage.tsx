@@ -17,6 +17,7 @@ import {
   ListMusic,
   Minus,
   Fullscreen,
+  Contrast,
   ArrowUpDown,
   Gauge,
   Metronome as MetronomeIcon,
@@ -215,7 +216,7 @@ export function SongPage() {
   // Jämförs på innehållet: att låten sparas (t.ex. ny artist) ger nya objekt men samma filer
   const filesKey = song ? songFiles(song).map((f) => `${f.name}:${f.dataUrl.length}:${f.dataUrl.slice(-24)}`).join('|') : '';
   const files = useMemo(() => (song ? songFiles(song) : []), [filesKey]);
-  const { pages, status: pagesStatus } = useFilePages(files);
+  const { pages, status: pagesStatus } = useFilePages(files, !!song?.enhance);
   const paged = !!song?.attachment && settings.filePaging !== false;
   const [pageState, setPage] = useState(0);
   useEffect(() => setPage(0), [id]);
@@ -880,6 +881,17 @@ export function SongPage() {
           )}
 
           <div className="tool-group">
+            {isFile && (
+              <button
+                className={`btn icon${song.enhance ? ' active' : ''}`}
+                aria-label="Skarpare bild"
+                title="Skarpare bild: vitt papper och svarta noter (t.ex. för ett grått foto)"
+                aria-pressed={!!song.enhance}
+                onClick={() => void updateSongPrefs(song.id, { enhance: !song.enhance || undefined })}
+              >
+                <Contrast size={18} />
+              </button>
+            )}
             {!isFile && (
             <>
             <button
