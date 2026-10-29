@@ -1,19 +1,151 @@
+/*
+ * Färger. Accentfärgen väljs i Inställningar (data-accent på <html>). Varje färg har egna
+ * nyanser (--a-*) för ljust läge, mörkt läge och scenläget, så att text och knappar alltid
+ * syns tydligt; lägena nedanför hämtar sina färger därifrån.
+ *   fill  knappar och markeringar     ink   text och ikoner i accentfärg
+ *   on    text på en knapp i accentfärg   soft/tip  ljusa ytor   bar  refrängens linje
+ *   bg/surface/border  ljust läges bakgrund med en svag ton av färgen
+ */
 :root {
-  --bg: #ecf0ec;
+  /* Grön (förval) */
+  --a-fill: #458268;
+  --a-ink: #458268;
+  --a-on: #ffffff;
+  --a-soft: #e1f1e9;
+  --a-tip: #d6eadd;
+  --a-bar: #68af90;
+  --a-bg: #ecf0ec;
+  --a-surface-2: #e2e9e2;
+  --a-surface-3: #d4ddd4;
+  --a-border: #d2dbd2;
+  --a-dark-fill: #458268;
+  --a-dark-on: #ffffff;
+  --a-dark-ink: #72c7a0;
+  --a-dark-soft: #1d3a2e;
+  --a-dark-bar: #8cc8ad;
+  --a-stage: #72c7a0;
+  --a-stage-soft: #12291f;
+}
+
+:root[data-accent='blue'] {
+  --a-fill: #2f6fb3;
+  --a-ink: #2f6fb3;
+  --a-on: #ffffff;
+  --a-soft: #e3edf8;
+  --a-tip: #d8e6f5;
+  --a-bar: #6b9fd6;
+  --a-bg: #ebeef2;
+  --a-surface-2: #e1e6ed;
+  --a-surface-3: #d3dae4;
+  --a-border: #d0d8e2;
+  --a-dark-fill: #3672b5;
+  --a-dark-on: #ffffff;
+  --a-dark-ink: #86b4e8;
+  --a-dark-soft: #1b2c42;
+  --a-dark-bar: #8db8e8;
+  --a-stage: #86b4e8;
+  --a-stage-soft: #112033;
+}
+
+:root[data-accent='purple'] {
+  --a-fill: #7056a8;
+  --a-ink: #7056a8;
+  --a-on: #ffffff;
+  --a-soft: #ece6f6;
+  --a-tip: #e3dbf2;
+  --a-bar: #9b85cf;
+  --a-bg: #eeecf2;
+  --a-surface-2: #e5e2ec;
+  --a-surface-3: #d8d3e2;
+  --a-border: #d6d1e0;
+  --a-dark-fill: #7559ae;
+  --a-dark-on: #ffffff;
+  --a-dark-ink: #b6a2e8;
+  --a-dark-soft: #2a2140;
+  --a-dark-bar: #b9a7e6;
+  --a-stage: #b6a2e8;
+  --a-stage-soft: #1f1830;
+}
+
+:root[data-accent='pink'] {
+  --a-fill: #b0456e;
+  --a-ink: #b0456e;
+  --a-on: #ffffff;
+  --a-soft: #f7e3eb;
+  --a-tip: #f2d8e2;
+  --a-bar: #d27fa0;
+  --a-bg: #f2ecee;
+  --a-surface-2: #ebe2e6;
+  --a-surface-3: #dfd3d9;
+  --a-border: #ded2d8;
+  --a-dark-fill: #b0456e;
+  --a-dark-on: #ffffff;
+  --a-dark-ink: #eb96b8;
+  --a-dark-soft: #3d1f2c;
+  --a-dark-bar: #e8a3bf;
+  --a-stage: #eb96b8;
+  --a-stage-soft: #2e1520;
+}
+
+:root[data-accent='orange'] {
+  --a-fill: #b5551f;
+  --a-ink: #a84d1a;
+  --a-on: #ffffff;
+  --a-soft: #fbe9dc;
+  --a-tip: #f7dfcd;
+  --a-bar: #e3925f;
+  --a-bg: #f2eee9;
+  --a-surface-2: #ebe5de;
+  --a-surface-3: #dfd7cd;
+  --a-border: #ddd5cb;
+  --a-dark-fill: #b5551f;
+  --a-dark-on: #ffffff;
+  --a-dark-ink: #f0a370;
+  --a-dark-soft: #3d2414;
+  --a-dark-bar: #eeab7f;
+  --a-stage: #f0a370;
+  --a-stage-soft: #2d1a0d;
+}
+
+/* Gul: ljus nog för svart text på knapparna, och en mörkare guldton för text på vitt */
+:root[data-accent='yellow'] {
+  --a-fill: #f2c230;
+  --a-ink: #8a6a00;
+  --a-on: #1b1d22;
+  --a-soft: #fbf1cf;
+  --a-tip: #f6eabb;
+  --a-bar: #e0b429;
+  --a-bg: #f2f0e8;
+  --a-surface-2: #ebe8dc;
+  --a-surface-3: #dfdbcc;
+  --a-border: #ddd9c8;
+  --a-dark-fill: #f2c230;
+  --a-dark-on: #1b1d22;
+  --a-dark-ink: #f2c94c;
+  --a-dark-soft: #3a3112;
+  --a-dark-bar: #e6c04a;
+  --a-stage: #ffd34d;
+  --a-stage-soft: #2a2410;
+}
+
+:root {
+  --bg: var(--a-bg);
   --surface: #ffffff;
-  --surface-2: #e2e9e2;
-  --surface-3: #d4ddd4;
+  --surface-2: var(--a-surface-2);
+  --surface-3: var(--a-surface-3);
   --text: #1b1d22;
   --text-muted: #6b6f78;
-  --border: #d2dbd2;
-  --accent: #458268;
-  --accent-text: #ffffff;
-  --accent-soft: #e1f1e9;
-  --tip-bg: #d6eadd;
-  --chord: #458268;
-  --chorus-bar: #68af90;
+  --border: var(--a-border);
+  --accent: var(--a-fill);
+  --accent-ink: var(--a-ink);
+  --accent-text: var(--a-on);
+  --accent-soft: var(--a-soft);
+  --tip-bg: var(--a-tip);
+  --chord: var(--a-ink);
+  --chorus-bar: var(--a-bar);
   --danger: #c62828;
-  --ok: #458268;
+  /* Påslagna brytare */
+  --ok: var(--a-fill);
   --shadow: 0 6px 24px rgba(20, 22, 30, 0.12);
   --radius: 12px;
   --tabbar-h: 58px;
@@ -36,14 +168,15 @@
     --text: #eceef2;
     --text-muted: #9aa0ab;
     --border: #2f3441;
-    --accent: #458268;
-    --accent-text: #ffffff;
-    --accent-soft: #1d3a2e;
-    --tip-bg: #1d3a2e;
-    --chord: #72c7a0;
-    --chorus-bar: #8cc8ad;
+    --accent: var(--a-dark-fill);
+    --accent-ink: var(--a-dark-ink);
+    --accent-text: var(--a-dark-on);
+    --accent-soft: var(--a-dark-soft);
+    --tip-bg: var(--a-dark-soft);
+    --chord: var(--a-dark-ink);
+    --chorus-bar: var(--a-dark-bar);
     --danger: #ff6b6b;
-    --ok: #8cc8ad;
+    --ok: var(--a-dark-bar);
     --shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
     color-scheme: dark;
   }
@@ -57,19 +190,20 @@
   --text: #eceef2;
   --text-muted: #9aa0ab;
   --border: #2f3441;
-  --accent: #458268;
-  --accent-text: #ffffff;
-  --accent-soft: #1d3a2e;
-  --tip-bg: #1d3a2e;
-  --chord: #72c7a0;
-  --chorus-bar: #8cc8ad;
+  --accent: var(--a-dark-fill);
+  --accent-ink: var(--a-dark-ink);
+  --accent-text: var(--a-dark-on);
+  --accent-soft: var(--a-dark-soft);
+  --tip-bg: var(--a-dark-soft);
+  --chord: var(--a-dark-ink);
+  --chorus-bar: var(--a-dark-bar);
   --danger: #ff6b6b;
-  --ok: #8cc8ad;
+  --ok: var(--a-dark-bar);
   --shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
   color-scheme: dark;
 }
 
-/* Scenläge: svart bakgrund, hög kontrast */
+/* Scenläge: svart bakgrund, hög kontrast; accentfärgen i en ljus nyans som syns mot svart */
 .stage {
   --bg: #000000;
   --surface: #0b0b0d;
@@ -78,12 +212,12 @@
   --text: #ffffff;
   --text-muted: #a3a3ad;
   --border: #26262c;
-  --chord: #72c7a0;
-  --chorus-bar: #72c7a0;
-  /* Appens gröna, ljusare så att den syns lika tydligt mot svart */
-  --accent: #72c7a0;
+  --chord: var(--a-stage);
+  --chorus-bar: var(--a-stage);
+  --accent: var(--a-stage);
+  --accent-ink: var(--a-stage);
   --accent-text: #000;
-  --accent-soft: #12291f;
+  --accent-soft: var(--a-stage-soft);
   color-scheme: dark;
 }
 
@@ -118,7 +252,7 @@ textarea {
 }
 
 a {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 /* --- Ramverk --- */
@@ -265,7 +399,7 @@ a {
 .btn.active {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .btn-row {
@@ -683,7 +817,7 @@ a {
   font-size: 11px;
   font-weight: 700;
   line-height: 1;
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .alpha-index span.off {
@@ -800,7 +934,7 @@ a {
 }
 
 .tool-group .btn.tool-pill.set {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .tool-value {
@@ -1262,7 +1396,7 @@ textarea.note-text {
 
 .sortable-item .cue-title {
   font-style: italic;
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 /* Mellanpunkt i en setlista, t.ex. "Tal" */
@@ -1601,7 +1735,7 @@ textarea.note-text {
 }
 
 .big-action svg {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .tip {
@@ -1620,7 +1754,7 @@ textarea.note-text {
 }
 
 .tip b svg {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .import-item {
@@ -1748,7 +1882,7 @@ textarea.note-text {
 
 .badge.review {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .progress {
@@ -2042,7 +2176,7 @@ textarea.note-text {
 }
 
 .btn.tap-tempo.tapping {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 /* --- Två spalter (bred skärm i liggande läge) --- */
@@ -2296,4 +2430,29 @@ label.btn.disabled {
   align-items: center;
   gap: 6px;
   font-weight: 600;
+}
+
+/* --- Färgval i Inställningar --- */
+
+.accent-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.accent-swatch {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+/* Den valda färgen: en ring utanför, i textfärgen så att den syns på alla färger */
+.accent-swatch.on {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--text);
 }

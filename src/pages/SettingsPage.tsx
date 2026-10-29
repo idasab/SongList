@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Cloud, CloudUpload, Download, FileArchive, Pencil, Plus, RefreshCw, Trash, Upload } from 'lucide-react';
 import { askText, Header, Segmented, Sheet, Switch, toast, toastError } from '../components/ui';
 import type { Instrument } from '../lib/chordShapes';
-import type { BackupFile, Theme } from '../lib/model';
+import { ACCENT_COLORS, type BackupFile, type Theme } from '../lib/model';
 import type { Notation } from '../lib/chords';
 import { hasNativePlugin } from '../native/songlistNative';
 import {
@@ -76,6 +76,26 @@ export function SettingsPage() {
                   { value: 'dark', label: 'Mörkt' },
                 ]}
               />
+            </div>
+            <div className="toggle-row choice-row">
+              <span>Färg</span>
+              <div className="accent-swatches" role="radiogroup" aria-label="Färg">
+                {ACCENT_COLORS.map((c) => {
+                  const on = (settings.accent ?? 'green') === c.value;
+                  return (
+                    <button
+                      key={c.value}
+                      role="radio"
+                      aria-checked={on}
+                      aria-label={c.label}
+                      title={c.label}
+                      className={`accent-swatch${on ? ' on' : ''}`}
+                      style={{ background: c.swatch }}
+                      onClick={() => update({ accent: c.value })}
+                    />
+                  );
+                })}
+              </div>
             </div>
             <div className="toggle-row">
               <span>Visa ackorddiagram ovanför låten</span>

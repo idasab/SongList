@@ -445,7 +445,9 @@ function drawBar(doc: JsPdf, page: number, y1: number, y2: number) {
   if (y2 <= y1) return;
   const current = doc.getCurrentPageInfo().pageNumber;
   doc.setPage(page);
-  doc.setFillColor(ACCENT);
+  // Refrängens linje i den valda accentfärgen (nyansen för ljust läge, eftersom sidan är vit)
+  const bar = getComputedStyle(document.documentElement).getPropertyValue('--a-bar').trim();
+  doc.setFillColor(bar || ACCENT);
   doc.rect(MARGIN_X, y1, 2.2, y2 - y1, 'F');
   doc.setPage(current);
 }

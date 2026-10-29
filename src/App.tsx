@@ -130,6 +130,13 @@ export function App() {
       .catch((e) => console.error('Uppstarten misslyckades', e));
   }, []);
 
+  const accent = useStore((s) => s.settings.accent);
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!accent || accent === 'green') root.removeAttribute('data-accent');
+    else root.setAttribute('data-accent', accent);
+  }, [accent]);
+
   useEffect(() => {
     const root = document.documentElement;
     if (theme === 'system') root.removeAttribute('data-theme');
