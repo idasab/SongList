@@ -158,10 +158,12 @@ interface PagedProps {
   onGestureStart: () => void;
   /** Zooma med knapparna: ett nytt id per tryck */
   zoomStep?: { id: number; factor: number };
+  /** Ett tryck med fingret på sidan (inget dubbeltryck, svep eller zoom) */
+  onTap?: () => void;
 }
 
 function PagedView(props: PagedProps & { pages: FilePage[]; status: string }) {
-  const { pages, status, page, drag, dragging, viewHeight, pageZoom, onZoom, onGestureStart, zoomStep } = props;
+  const { pages, status, page, drag, dragging, viewHeight, pageZoom, onZoom, onGestureStart, zoomStep, onTap } = props;
   const imgRef = useRef<HTMLImageElement>(null);
   const zoomRef = useRef(pageZoom);
   zoomRef.current = pageZoom;
@@ -170,6 +172,12 @@ function PagedView(props: PagedProps & { pages: FilePage[]; status: string }) {
   const gesture = useRef<{ z: PageZoom; mid: { x: number; y: number }; dist: number; b: DOMRect } | null>(null);
   const moved = useRef(false);
   const lastTap = useRef({ t: 0, x: 0, y: 0 });
+  const downAt = useRef({ x: 0, y: 0 });
+  // Ett tryck väntar på att se om det blir ett dubbeltryck
+  const tapTimer = useRef(0);
+  const onTapRef = useRef(onTap);
+  onTapRef.current = onTap;
+  useEffect(() => () => clearTimeout(tapTimer.current), []);
   const [active, setActive] = useState(false);
 
   // Zoomen som syns just nu: under övergången (0,2 s) är den på väg mot zoomRef
@@ -212,10 +220,17 @@ function PagedView(props: PagedProps & { pages: FilePage[]; status: string }) {
     };
   };
 
+  const pointerType = useRef('mouse');
   const onPointerDown = (e: ReactPointerEvent) => {
+    pointerType.current = e.pointerType;
     if (e.pointerType === 'mouse') return;
+    // Första fingret: inga gamla fingrar kvar (om ett släpp aldrig kom fram)
+    if (e.isPrimary) pointers.current.clear();
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pointers.current.size === 1) moved.current = false;
+    if (pointers.current.size === 1) {
+      moved.current = false;
+      downAt.current = { x: e.clientX, y: e.clientY };
+    }
     // Två fingrar zoomar; med en zoomad sida flyttar ett finger den (i stället för att byta sida)
     if (pointers.current.size >= 2 || zoomRef.current.s > 1) {
       if (pointers.current.size >= 2) onGestureStart();
@@ -228,6 +243,8 @@ function PagedView(props: PagedProps & { pages: FilePage[]; status: string }) {
   const onPointerMove = (e: ReactPointerEvent) => {
     if (!pointers.current.has(e.pointerId)) return;
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    // Ett svep för att byta sida är inget tryck
+    if (Math.hypot(e.clientX - downAt.current.x, e.clientY - downAt.current.y) > 10) moved.current = true;
     const g = gesture.current;
     if (!g) return;
     e.stopPropagation();
@@ -264,6 +281,7 @@ function PagedView(props: PagedProps & { pages: FilePage[]; status: string }) {
     const now = performance.now();
     const t = lastTap.current;
     if (now - t.t < DOUBLE_TAP_MS && Math.hypot(e.clientX - t.x, e.clientY - t.y) < 30) {
+      clearTimeout(tapTimer.current);
       lastTap.current = { t: 0, x: 0, y: 0 };
       const b = baseRect();
       if (!b) return;
@@ -272,6 +290,7 @@ function PagedView(props: PagedProps & { pages: FilePage[]; status: string }) {
       else onZoom(zoomAround(z, 2.5, e.clientX - b.left, e.clientY - b.top, b.width, b.height));
     } else {
       lastTap.current = { t: now, x: e.clientX, y: e.clientY };
+      tapTimer.current = window.setTimeout(() => onTapRef.current?.(), DOUBLE_TAP_MS);
     }
   };
 
@@ -292,9 +311,10 @@ function PagedView(props: PagedProps & { pages: FilePage[]; status: string }) {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
-      // Efter att ha flyttat eller zoomat ska trycket inte visa/dölja kontrollerna
+      // Tryck med fingret sköts av onTap (iOS skickar inte alltid något klick här, eftersom
+      // appen själv sköter gesterna); bara musklick går vidare
       onClickCapture={(e) => {
-        if (moved.current) e.stopPropagation();
+        if (pointerType.current !== 'mouse') e.stopPropagation();
       }}
     >
       {status && (!pages.length || !status.startsWith('Laddar')) && <p className="muted small-text">{status}</p>}

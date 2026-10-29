@@ -988,6 +988,7 @@ export function SongPage() {
                         onZoom: setPageZoom,
                         onGestureStart: swipe.cancel,
                         zoomStep,
+                        onTap: () => tapToHide && setControlsHidden((v) => !v),
                         // Låtytan minus luften ovanför och sidvisaren nedanför
                         viewHeight: (areaHeight || scrollRef.current?.clientHeight || 600) - (pages.length > 1 ? 76 : 36),
                       }
