@@ -95,6 +95,11 @@ export function SongPage() {
 
   const [stage, setStage] = useState(false);
   const [controlsHidden, setControlsHidden] = useState(false);
+  // Kontrollerna döljs med ett tryck bara i scenläge och setlistor: lämnar man dem (t.ex. med
+  // krysset i scenläget) visas kontrollerna igen, annars går de inte att få tillbaka
+  useEffect(() => {
+    if (!stage && !setlist) setControlsHidden(false);
+  }, [stage, setlist]);
   // Tonart, kapo och scrollfart visas hopfällda; ett tryck fäller ut minus och plus
   const [openTool, setOpenTool] = useState<'transpose' | 'capo' | 'speed' | null>(null);
   const toolClosedAt = useRef(0);
