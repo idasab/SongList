@@ -39,7 +39,7 @@ npm run build      # typkontroll + produktionsbygge till dist/
 
 ## Bygga iOS-appen (på Mac)
 
-Kräver Xcode 16 eller senare och ett Apple Developer-konto.
+Kräver Xcode 26 eller senare (Capacitor 8) och ett Apple Developer-konto.
 
 ```bash
 npm install
