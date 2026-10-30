@@ -7,12 +7,15 @@ export function TagInput({
   onChange,
   suggestions,
   onTextChange,
+  fixed = [],
 }: {
   value: string[];
   onChange: (tags: string[]) => void;
   suggestions: string[];
   /** Det som skrivits i fältet men inte blivit en tagg än */
   onTextChange?: (text: string) => void;
+  /** Taggar som redan gäller (t.ex. valda för alla låtar): visas först och kan inte tas bort här */
+  fixed?: string[];
 }) {
   const [text, setTextState] = useState('');
   const setText = (t: string) => {
@@ -21,16 +24,21 @@ export function TagInput({
   };
 
   const add = (t: string) => {
-    const next = normalizeTags([...value, ...t.split(',')]);
+    const next = normalizeTags([...value, ...t.split(',')]).filter((x) => !fixed.includes(x));
     onChange(next);
     setText('');
   };
 
-  const remaining = suggestions.filter((s) => !value.includes(s) && (!text || s.includes(text.toLowerCase())));
+  const remaining = suggestions.filter((s) => !value.includes(s) && !fixed.includes(s) && (!text || s.includes(text.toLowerCase())));
 
   return (
     <div>
       <div className="tag-input">
+        {fixed.map((t) => (
+          <span className="chip fixed" key={`fixed-${t}`} title="Gäller alla låtar">
+            {t}
+          </span>
+        ))}
         {value.map((t) => (
           <span className="chip" key={t}>
             {t}
@@ -41,7 +49,7 @@ export function TagInput({
         ))}
         <input
           value={text}
-          placeholder={value.length ? '' : 'Lägg till taggar…'}
+          placeholder={value.length || fixed.length ? '' : 'Lägg till taggar…'}
           autoCapitalize="none"
           autoCorrect="off"
           onChange={(e) => {

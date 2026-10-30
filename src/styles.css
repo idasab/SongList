@@ -1720,6 +1720,12 @@ textarea.note-text {
   cursor: default;
 }
 
+.tag-input .chip.fixed {
+  padding: 0 10px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+
 .tag-input .chip button {
   border: none;
   background: none;

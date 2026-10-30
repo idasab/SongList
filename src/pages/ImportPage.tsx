@@ -41,7 +41,7 @@ type ImportItem = ImportQueueItem;
 function resolveMeta(it: ImportItem, common: { tags: string[]; categoryId: string }) {
   return {
     categoryId: it.categoryId === undefined ? common.categoryId : it.categoryId,
-    tags: [...common.tags, ...(it.tags ?? [])],
+    tags: normalizeTags([...common.tags, ...(it.tags ?? [])]),
   };
 }
 
@@ -521,6 +521,7 @@ export function ImportPage() {
                   }
                   onEdit={() => openInEditor(it)}
                   commonCategoryName={categoryName(categoriesRec, categoryId)}
+                  commonTags={tags}
                   tagSuggestions={tagSuggestions}
                 />
               ))}
@@ -604,6 +605,7 @@ function ImportItemCard({
   onRemove,
   onEdit,
   commonCategoryName,
+  commonTags,
   tagSuggestions,
   join,
   pages,
@@ -621,6 +623,8 @@ function ImportItemCard({
   onRemove: () => void;
   onEdit: () => void;
   commonCategoryName?: string;
+  /** Taggarna som valts för alla låtar */
+  commonTags: string[];
   tagSuggestions: string[];
 }) {
   const [open, setOpen] = useState(false);
@@ -632,6 +636,9 @@ function ImportItemCard({
   const content = useMemo(() => savedContent(item), [item]);
   const parsed = useMemo(() => parseChordPro(content), [content]);
   const asFile = item.display === 'file';
+  // Låtens egna taggar, utom de som redan gäller för alla
+  const ownTags = (item.tags ?? []).filter((t) => !commonTags.includes(t));
+  const tagCount = commonTags.length + ownTags.length;
 
   const setDisplay = async (display: 'chordpro' | 'file') => {
     if (display === 'file' || item.interpreted || !item.original) {
@@ -769,15 +776,20 @@ function ImportItemCard({
             sameAsAllLabel={`Som för alla${commonCategoryName ? ` (${commonCategoryName})` : ''}`}
           />
         </label>
-        <button className={`btn small${showTags || item.tags?.length ? ' active' : ''}`} onClick={() => setShowTags((v) => !v)}>
-          Taggar{item.tags?.length ? ` (${item.tags.length})` : ''}
+        <button className={`btn small${showTags || tagCount ? ' active' : ''}`} onClick={() => setShowTags((v) => !v)}>
+          Taggar{tagCount ? ` (${tagCount})` : ''}
         </button>
         {!showTags && actions}
       </div>
       {showTags && (
         <>
           <div className="opts" style={{ display: 'block' }}>
-            <TagInput value={item.tags ?? []} onChange={(t) => onChange({ ...item, tags: t })} suggestions={tagSuggestions} />
+            <TagInput
+              value={ownTags}
+              fixed={commonTags}
+              onChange={(t) => onChange({ ...item, tags: t })}
+              suggestions={tagSuggestions}
+            />
           </div>
           {/* Knapparna står alltid närmast förhandsvisningen */}
           <div className="opts">{actions}</div>
