@@ -956,8 +956,8 @@ export function SongPage() {
             </div>
           )}
 
-          <div className="tool-group">
-            {isFile && (
+          {isFile && (
+            <div className="tool-group">
               <button
                 className={`btn tool-pill${song.enhance ? ' active' : ''}`}
                 title="Skarpare bild: vitt papper och svarta noter (t.ex. för ett grått foto)"
@@ -967,7 +967,10 @@ export function SongPage() {
                 <Contrast size={16} />
                 <span>Skärpa</span>
               </button>
-            )}
+            </div>
+          )}
+
+          <div className="tool-group">
             {!isFile && (
               <>
                 <button
