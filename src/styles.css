@@ -1721,9 +1721,12 @@ textarea.note-text {
 }
 
 .tag-input .chip.fixed {
-  padding: 0 10px;
   background: var(--surface-2);
   color: var(--text-muted);
+}
+
+.tag-input .chip.fixed.locked {
+  padding: 0 10px;
 }
 
 .tag-input .chip button {

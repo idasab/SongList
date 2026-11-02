@@ -43,6 +43,8 @@ export interface ImportQueueItem {
   categoryId?: string;
   /** Egna taggar som läggs till de gemensamma */
   tags?: string[];
+  /** Gemensamma taggar som inte ska läggas på den här låten */
+  skipTags?: string[];
   /** Originalfilen (PDF eller bild) */
   original?: SongAttachment;
   /** Liten bild av filen (första sidan) för förhandsvisning */

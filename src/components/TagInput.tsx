@@ -8,6 +8,7 @@ export function TagInput({
   suggestions,
   onTextChange,
   fixed = [],
+  onRemoveFixed,
 }: {
   value: string[];
   onChange: (tags: string[]) => void;
@@ -16,6 +17,8 @@ export function TagInput({
   onTextChange?: (text: string) => void;
   /** Taggar som redan gäller (t.ex. valda för alla låtar): visas först och kan inte tas bort här */
   fixed?: string[];
+  /** Tar bort en av de givna taggarna (bara här); utan den kan de inte tas bort */
+  onRemoveFixed?: (tag: string) => void;
 }) {
   const [text, setTextState] = useState('');
   const setText = (t: string) => {
@@ -35,8 +38,13 @@ export function TagInput({
     <div>
       <div className="tag-input">
         {fixed.map((t) => (
-          <span className="chip fixed" key={`fixed-${t}`} title="Gäller alla låtar">
+          <span className={`chip fixed${onRemoveFixed ? '' : ' locked'}`} key={`fixed-${t}`} title="Gäller alla låtar">
             {t}
+            {onRemoveFixed && (
+              <button aria-label={`Ta bort ${t}`} onClick={() => onRemoveFixed(t)}>
+                <X size={14} />
+              </button>
+            )}
           </span>
         ))}
         {value.map((t) => (

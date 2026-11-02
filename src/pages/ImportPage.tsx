@@ -41,7 +41,7 @@ type ImportItem = ImportQueueItem;
 function resolveMeta(it: ImportItem, common: { tags: string[]; categoryId: string }) {
   return {
     categoryId: it.categoryId === undefined ? common.categoryId : it.categoryId,
-    tags: normalizeTags([...common.tags, ...(it.tags ?? [])]),
+    tags: normalizeTags([...common.tags.filter((t) => !it.skipTags?.includes(t)), ...(it.tags ?? [])]),
   };
 }
 
@@ -128,7 +128,13 @@ export function ImportPage() {
   const { items, tags, categoryId } = queue;
   const setItems = (next: ImportItem[] | ((cur: ImportItem[]) => ImportItem[])) =>
     updateQueue((q) => ({ ...q, items: typeof next === 'function' ? next(q.items) : next }));
-  const setTags = (t: string[]) => updateQueue((q) => ({ ...q, tags: t }));
+  const setTags = (t: string[]) =>
+    updateQueue((q) => ({
+      ...q,
+      tags: t,
+      // En tagg som inte längre gäller för alla ska inte heller vara bortvald på någon låt
+      items: q.items.map((it) => (it.skipTags ? { ...it, skipTags: it.skipTags.filter((x) => t.includes(x)) } : it)),
+    }));
   const setCategoryId = (id: string) => updateQueue((q) => ({ ...q, categoryId: id }));
   const [pasting, setPasting] = useState(false);
   const [pasteText, setPasteText] = useState('');
@@ -442,7 +448,7 @@ export function ImportPage() {
               <div className="card">
                 <h2 style={{ marginBottom: 4 }}>För alla låtar</h2>
                 <p className="muted small-text" style={{ marginTop: 0 }}>
-                  Gäller alla låtar nedan. Du kan välja en annan kategori och lägga till fler taggar på varje låt.
+                  Gäller alla låtar nedan. Du kan välja en annan kategori och ändra taggarna på varje låt.
                 </p>
                 <div className="grid-2">
                   <label className="field">
@@ -638,7 +644,15 @@ function ImportItemCard({
   const asFile = item.display === 'file';
   // Låtens egna taggar, utom de som redan gäller för alla
   const ownTags = (item.tags ?? []).filter((t) => !commonTags.includes(t));
-  const tagCount = commonTags.length + ownTags.length;
+  // De gemensamma taggarna som låten får (några kan vara bortvalda på just den här låten)
+  const keptCommon = commonTags.filter((t) => !item.skipTags?.includes(t));
+  const tagCount = keptCommon.length + ownTags.length;
+  const setOwnTags = (t: string[]) => {
+    // En bortvald gemensam tagg som läggs till igen gäller som förut
+    const back = t.filter((x) => commonTags.includes(x));
+    const skip = item.skipTags?.filter((x) => !back.includes(x));
+    onChange({ ...item, tags: t.filter((x) => !commonTags.includes(x)), skipTags: skip?.length ? skip : undefined });
+  };
 
   const setDisplay = async (display: 'chordpro' | 'file') => {
     if (display === 'file' || item.interpreted || !item.original) {
@@ -786,8 +800,9 @@ function ImportItemCard({
           <div className="opts" style={{ display: 'block' }}>
             <TagInput
               value={ownTags}
-              fixed={commonTags}
-              onChange={(t) => onChange({ ...item, tags: t })}
+              fixed={keptCommon}
+              onRemoveFixed={(t) => onChange({ ...item, skipTags: [...(item.skipTags ?? []), t] })}
+              onChange={setOwnTags}
               suggestions={tagSuggestions}
             />
           </div>
