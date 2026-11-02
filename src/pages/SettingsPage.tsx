@@ -137,6 +137,10 @@ export function SettingsPage() {
                 ]}
               />
             </div>
+            <div className="toggle-row">
+              <span>Visa ackorddiagram ovanför låten</span>
+              <Switch label="Visa ackorddiagram" checked={settings.showDiagrams} onChange={(v) => update({ showDiagrams: v })} />
+            </div>
             <div className="toggle-row choice-row">
               <div>
                 <div>Notation</div>
@@ -150,10 +154,6 @@ export function SettingsPage() {
                   { value: 'swedish', label: 'H' },
                 ]}
               />
-            </div>
-            <div className="toggle-row">
-              <span>Visa ackorddiagram ovanför låten</span>
-              <Switch label="Visa ackorddiagram" checked={settings.showDiagrams} onChange={(v) => update({ showDiagrams: v })} />
             </div>
             <div className="toggle-row">
               <div>
