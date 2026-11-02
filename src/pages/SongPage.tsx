@@ -252,14 +252,16 @@ export function SongPage() {
   const wantColumns = wide && settings.twoColumns !== false && !song?.attachment;
   // Ryms låten inte i två spalter krymps texten (ner till FIT_MIN_FONT) tills den gör det;
   // annars en spalt i vald textstorlek. Inställningen för textstorlek ändras inte.
-  const [fit, setFit] = useState({ font: settings.fontSize, ok: true });
+  // Låtens egen textstorlek, annars inställningens
+  const baseFont = song?.fontSize ?? settings.fontSize;
+  const [fit, setFit] = useState({ font: baseFont, ok: true });
   const columns = wantColumns && fit.ok;
-  const fontSize = columns ? Math.min(fit.font, settings.fontSize) : settings.fontSize;
+  const fontSize = columns ? Math.min(fit.font, baseFont) : baseFont;
   // Ökar när låtytans höjd ändras (t.ex. när kontrollerna eller ackorddiagrammen visas)
   const [areaHeight, setAreaHeight] = useState(0);
   const lineMetrics = useLineMetrics(songRef, [parsed, showChords, fontSize, transpose, stage, song?.id, columns, settings.simplifyChords]);
   // En fil: anteckningarna sitter på sidorna (i sidled på sidan som visas)
-  const fileMetrics = useFileMetrics(songRef, !!song?.attachment, pages.length, paged ? page : null, [song?.id, stage, settings.fontSize]);
+  const fileMetrics = useFileMetrics(songRef, !!song?.attachment, pages.length, paged ? page : null, [song?.id, stage, baseFont]);
   const metrics = song?.attachment ? fileMetrics : lineMetrics;
 
   // Antecknar man på en sida i sidled flyttar och zoomar två fingrar sidan
@@ -412,7 +414,7 @@ export function SongPage() {
     song?.id,
     song?.content,
     showChords,
-    settings.fontSize,
+    baseFont,
     transpose,
     stage,
     wantColumns,
@@ -429,7 +431,7 @@ export function SongPage() {
     ro.observe(el);
     return () => ro.disconnect();
   }, [wantColumns, paged, id]);
-  useLayoutEffect(() => setFit({ font: settings.fontSize, ok: true }), [fitKey]);
+  useLayoutEffect(() => setFit({ font: baseFont, ok: true }), [fitKey]);
   // Mäts före ritningen: en mindre storlek i taget tills låten ryms (syns inte som flimmer)
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -437,8 +439,8 @@ export function SongPage() {
     if (!columns || !el || !songEl) return;
     const bottom = songEl.getBoundingClientRect().bottom - el.getBoundingClientRect().top + el.scrollTop;
     if (bottom <= el.clientHeight) return;
-    const min = Math.min(FIT_MIN_FONT, settings.fontSize);
-    setFit(fontSize - 1 >= min ? { font: fontSize - 1, ok: true } : { font: settings.fontSize, ok: false });
+    const min = Math.min(FIT_MIN_FONT, baseFont);
+    setFit(fontSize - 1 >= min ? { font: fontSize - 1, ok: true } : { font: baseFont, ok: false });
   }, [columns, fitKey, fontSize]);
 
   // Börja om från toppen när låten byts
@@ -638,10 +640,14 @@ export function SongPage() {
       {inSetlist ? 'I setlistan' : 'Överallt'}
     </button>
   );
-  const setFont = (n: number) => void updateSettings({ fontSize: Math.max(MIN_FONT, Math.min(MAX_FONT, n)) });
+  // Sparas på låten (överallt, även i en setlista); samma som inställningen = ingen egen storlek
+  const setFont = (n: number) => {
+    const v = Math.max(MIN_FONT, Math.min(MAX_FONT, n));
+    void updateSongPrefs(song.id, { fontSize: v === settings.fontSize ? undefined : v });
+  };
   // En fil i sidled: knapparna zoomar sidan (som med två fingrar), annars textstorlek/bredd
-  const zoomOut = () => (paged ? setZoomStep({ id: Date.now(), factor: 0.8 }) : setFont(settings.fontSize - 2));
-  const zoomIn = () => (paged ? setZoomStep({ id: Date.now(), factor: 1.25 }) : setFont(settings.fontSize + 2));
+  const zoomOut = () => (paged ? setZoomStep({ id: Date.now(), factor: 0.8 }) : setFont(baseFont - 2));
+  const zoomIn = () => (paged ? setZoomStep({ id: Date.now(), factor: 1.25 }) : setFont(baseFont + 2));
   const setSpeed = (n: number) => void updateSongPrefs(song.id, { scrollSpeed: Math.max(1, Math.min(10, n)) });
   const hasDuration = parseDuration(parsed.meta.duration) !== undefined;
   // Från låtens längd till en egen hastighet: börja från den nivå som ligger närmast
@@ -1091,7 +1097,7 @@ export function SongPage() {
             </div>
           )}
           {isFile ? (
-            <div className={`song file-song${paged ? ' paged' : ''}`} style={{ fontSize: settings.fontSize }}>
+            <div className={`song file-song${paged ? ' paged' : ''}`} style={{ fontSize: baseFont }}>
               {/* I sidled syns titeln redan överst; sidan får hela höjden */}
               {!paged && (
                 <div className="song-head">
@@ -1104,7 +1110,7 @@ export function SongPage() {
                 status={pagesStatus}
                 pageRef={songRef}
                 overlay={annotationLayers}
-                zoom={settings.fontSize / 20}
+                zoom={baseFont / 20}
                 paged={
                   paged
                     ? {

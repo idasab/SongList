@@ -29,6 +29,8 @@ export interface Song extends SyncRecord {
   transpose: number;
   /** Hastighet för automatisk scroll (1–10) */
   scrollSpeed?: number;
+  /** Egen textstorlek för låten (gäller överallt, även i setlistor); annars inställningens */
+  fontSize?: number;
   /** Post-it-lappar och handritade anteckningar */
   annotations?: Annotations;
   /** Låten visas som en bifogad fil (t.ex. noter) i stället för text och ackord */

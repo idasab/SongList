@@ -31,6 +31,12 @@ export function SettingsPage() {
   const update = useStore((s) => s.updateSettings);
   const songsRec = useStore((s) => s.songs);
   const songCount = useMemo(() => liveSongs(songsRec).length, [songsRec]);
+  const updateSongPrefs = useStore((s) => s.updateSongPrefs);
+  // Låtar med en egen textstorlek (ändrad med A-knapparna i låten)
+  const ownFont = useMemo(
+    () => liveSongs(songsRec).filter((s) => s.fontSize !== undefined && s.fontSize !== settings.fontSize),
+    [songsRec, settings.fontSize],
+  );
 
   return (
     <div className="screen">
@@ -89,7 +95,9 @@ export function SettingsPage() {
             <div className="toggle-row">
               <div>
                 <div>Textstorlek</div>
-                <div className="muted small-text">Kan också ändras med A-knapparna när man tittar på en låt</div>
+                <div className="muted small-text">
+                  För alla låtar. Med A-knapparna i en låt ändras bara den låten.
+                </div>
               </div>
               <div className="tool-group">
                 <button className="btn icon" onClick={() => update({ fontSize: Math.max(12, settings.fontSize - 2) })}>
@@ -101,6 +109,22 @@ export function SettingsPage() {
                 </button>
               </div>
             </div>
+            {ownFont.length > 0 && (
+              <div className="toggle-row">
+                <span className="muted small-text">
+                  {ownFont.length} {ownFont.length === 1 ? 'låt har' : 'låtar har'} en egen textstorlek
+                </span>
+                <button
+                  className="btn small"
+                  onClick={async () => {
+                    for (const s of ownFont) await updateSongPrefs(s.id, { fontSize: undefined });
+                    toast(ownFont.length === 1 ? 'Låten har nu samma textstorlek som de andra' : 'Alla låtar har nu samma textstorlek');
+                  }}
+                >
+                  Samma för alla
+                </button>
+              </div>
+            )}
             <div className="toggle-row choice-row">
               <span>Ackorddiagram för</span>
               <Segmented<Instrument>
