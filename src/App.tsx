@@ -4,6 +4,7 @@ import { FileUp, ListMusic, Music, Settings } from 'lucide-react';
 import { AskTextHost, Toaster, toast } from './components/ui';
 import { consumeUpdateNotice, prefetchLazyParts } from './appUpdate';
 import { preloadChordDb } from './lib/chordShapes';
+import { TEXT_SIZES } from './lib/model';
 import { EditorPage } from './pages/EditorPage';
 import { ImportPage } from './pages/ImportPage';
 import { LibraryPage } from './pages/LibraryPage';
@@ -136,6 +137,12 @@ export function App() {
     if (!accent || accent === 'green') root.removeAttribute('data-accent');
     else root.setAttribute('data-accent', accent);
   }, [accent]);
+
+  const textSize = useStore((s) => s.settings.textSize);
+  useEffect(() => {
+    const scale = TEXT_SIZES.find((t) => t.value === textSize)?.scale ?? 1;
+    document.documentElement.style.setProperty('--ui', String(scale));
+  }, [textSize]);
 
   useEffect(() => {
     const root = document.documentElement;

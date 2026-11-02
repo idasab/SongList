@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Cloud, CloudUpload, Download, FileArchive, Pencil, Plus, RefreshCw, Trash, Upload } from 'lucide-react';
 import { askText, Header, Segmented, Sheet, Switch, toast, toastError } from '../components/ui';
 import type { Instrument } from '../lib/chordShapes';
-import { ACCENT_COLORS, type BackupFile, type Theme } from '../lib/model';
+import { ACCENT_COLORS, TEXT_SIZES, type BackupFile, type TextSize, type Theme } from '../lib/model';
 import type { Notation } from '../lib/chords';
 import { hasNativePlugin } from '../native/songlistNative';
 import {
@@ -37,34 +37,8 @@ export function SettingsPage() {
       <Header title="Inställningar" />
       <div className="content narrow">
         <div>
-          <div className="section-title">Visning</div>
+          <div className="section-title">Visning i appen</div>
           <div className="card">
-            <div className="toggle-row choice-row">
-              <span>Ackorddiagram för</span>
-              <Segmented<Instrument>
-                value={settings.instrument}
-                onChange={(v) => update({ instrument: v })}
-                options={[
-                  { value: 'guitar', label: 'Gitarr' },
-                  { value: 'ukulele', label: 'Ukulele' },
-                  { value: 'piano', label: 'Piano' },
-                ]}
-              />
-            </div>
-            <div className="toggle-row choice-row">
-              <div>
-                <div>Notation</div>
-                <div className="muted small-text">Svensk notation skriver H istället för B, och B istället för Bb</div>
-              </div>
-              <Segmented<Notation>
-                value={settings.notation}
-                onChange={(v) => update({ notation: v })}
-                options={[
-                  { value: 'international', label: 'B' },
-                  { value: 'swedish', label: 'H' },
-                ]}
-              />
-            </div>
             <div className="toggle-row choice-row">
               <span>Utseende</span>
               <Segmented<Theme>
@@ -97,6 +71,62 @@ export function SettingsPage() {
                 })}
               </div>
             </div>
+            <div className="toggle-row choice-row">
+              <div>
+                <div>Textstorlek</div>
+                <div className="muted small-text">Menyer, knappar och listor. Låtarnas text ställs in nedanför.</div>
+              </div>
+              <Segmented<TextSize>
+                value={settings.textSize ?? 'normal'}
+                onChange={(v) => update({ textSize: v })}
+                options={TEXT_SIZES.map((t) => ({ value: t.value, label: t.label }))}
+              />
+            </div>
+          </div>
+
+          <div className="section-title">Visning av låtar</div>
+          <div className="card">
+            <div className="toggle-row">
+              <div>
+                <div>Textstorlek</div>
+                <div className="muted small-text">Kan också ändras med A-knapparna när man tittar på en låt</div>
+              </div>
+              <div className="tool-group">
+                <button className="btn icon" onClick={() => update({ fontSize: Math.max(12, settings.fontSize - 2) })}>
+                  −
+                </button>
+                <span className="tool-value">{settings.fontSize}</span>
+                <button className="btn icon" onClick={() => update({ fontSize: Math.min(44, settings.fontSize + 2) })}>
+                  +
+                </button>
+              </div>
+            </div>
+            <div className="toggle-row choice-row">
+              <span>Ackorddiagram för</span>
+              <Segmented<Instrument>
+                value={settings.instrument}
+                onChange={(v) => update({ instrument: v })}
+                options={[
+                  { value: 'guitar', label: 'Gitarr' },
+                  { value: 'ukulele', label: 'Ukulele' },
+                  { value: 'piano', label: 'Piano' },
+                ]}
+              />
+            </div>
+            <div className="toggle-row choice-row">
+              <div>
+                <div>Notation</div>
+                <div className="muted small-text">Svensk notation skriver H istället för B, och B istället för Bb</div>
+              </div>
+              <Segmented<Notation>
+                value={settings.notation}
+                onChange={(v) => update({ notation: v })}
+                options={[
+                  { value: 'international', label: 'B' },
+                  { value: 'swedish', label: 'H' },
+                ]}
+              />
+            </div>
             <div className="toggle-row">
               <span>Visa ackorddiagram ovanför låten</span>
               <Switch label="Visa ackorddiagram" checked={settings.showDiagrams} onChange={(v) => update({ showDiagrams: v })} />
@@ -121,18 +151,6 @@ export function SettingsPage() {
                 <div className="muted small-text">Visar t.ex. Cmaj7, Dsus4 och G/B som C, D och G. Låtarna ändras inte.</div>
               </div>
               <Switch label="Förenklade ackord" checked={!!settings.simplifyChords} onChange={(v) => update({ simplifyChords: v })} />
-            </div>
-            <div className="toggle-row">
-              <span>Textstorlek</span>
-              <div className="tool-group">
-                <button className="btn icon" onClick={() => update({ fontSize: Math.max(12, settings.fontSize - 2) })}>
-                  −
-                </button>
-                <span className="tool-value">{settings.fontSize}</span>
-                <button className="btn icon" onClick={() => update({ fontSize: Math.min(44, settings.fontSize + 2) })}>
-                  +
-                </button>
-              </div>
             </div>
           </div>
 

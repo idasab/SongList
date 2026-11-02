@@ -118,12 +118,25 @@ export const ACCENT_COLORS: { value: AccentColor; label: string; swatch: string 
   { value: 'gray', label: 'Grå', swatch: '#464b53' },
 ];
 
+/** Textstorlek i appen (inte låtarnas text, som har en egen storlek) */
+export type TextSize = 'small' | 'normal' | 'large' | 'larger';
+
+export const TEXT_SIZES: { value: TextSize; label: string; scale: number }[] = [
+  { value: 'small', label: 'Mindre', scale: 0.9 },
+  { value: 'normal', label: 'Normal', scale: 1 },
+  { value: 'large', label: 'Större', scale: 1.12 },
+  { value: 'larger', label: 'Störst', scale: 1.25 },
+];
+
 export interface Settings {
   instrument: Instrument;
   notation: Notation;
   theme: Theme;
   /** Accentfärg (förval: grön) */
   accent?: AccentColor;
+  /** Textstorlek i appen (förval: normal) */
+  textSize?: TextSize;
+  /** Textstorlek i låtarna */
   fontSize: number;
   showDiagrams: boolean;
   showAnnotations: boolean;
