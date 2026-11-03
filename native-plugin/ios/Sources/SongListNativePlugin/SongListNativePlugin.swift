@@ -321,6 +321,14 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
         controller.dismiss(animated: true)
         guard let call = scanCall else { return }
         scanCall = nil
+        // readText: false (t.ex. för noter): bara bilderna av alla sidor, ingen textigenkänning
+        if !(call.getBool("readText") ?? true) {
+            queue.async {
+                let pageImages = images.compactMap { self.jpegDataURL($0, maxSize: 2400) }
+                call.resolve(["pages": [] as [Any], "images": pageImages])
+            }
+            return
+        }
         queue.async {
             do {
                 var pages: [[String: Any]] = []

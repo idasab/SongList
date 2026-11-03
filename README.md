@@ -17,6 +17,10 @@ på iOS.
 - **Skanning**: fotografera ett papper med text och ackord. På iOS används Apples dokumentskanner och
   Vision (helt på enheten, gratis). I webbläsaren används Tesseract.js. Ackordens position i bilden
   avgör var de placeras i texten. Resultatet öppnas i editorn med originalbilden som referens.
+- **Noter**: noter i ABC-format inbäddade i ChordPro (`{start_of_abc}` … `{end_of_abc}`) visas som
+  notskrift med abcjs och transponeras med låten. **Läs in noter** (under Importera) skickar foton eller
+  PDF:er av notblad, även flerstämmiga, till Claude (Anthropics API) som skriver dem som ABC. Kräver
+  internet och en egen API-nyckel under Inställningar › Notläsning; nyckeln sparas bara på enheten.
 - **Editor**: ChordPro med förhandsvisning (sida vid sida på iPad), fält för titel/artist/tonart/kapo/tempo,
   knappar för sektioner och snabbknappar för låtens ackord, samt "Konvertera" för inklistrad text.
 - **Anteckningar**: post-it-lappar (flytta, snurra gradlöst och ändra storlek med fingrarna, egen

@@ -32,6 +32,42 @@ export function abcRanges(lines: string[]): [number, number][] {
   return ranges;
 }
 
+/** Värdet i ett fält i ABC-huvudet, t.ex. "T" för titeln */
+function abcField(abc: string, field: string): string | undefined {
+  const m = new RegExp(`^${field}:\\s*(.*)$`, 'm').exec(abc);
+  return m?.[1].trim() || undefined;
+}
+
+/** Tonarten i K: som ackordnamn (G, Em, Bb); kyrkotonarter och "none" ger ingen */
+export function abcKey(k: string | undefined): string | undefined {
+  const m = /^([A-G][#b]?)\s*(maj(?:or)?|min(?:or)?|m)?(?=\s|$)/i.exec(k?.trim() ?? '');
+  if (!m) return undefined;
+  const root = m[1][0].toUpperCase() + m[1].slice(1);
+  return /^m(in)?/i.test(m[2] ?? '') && !/^maj/i.test(m[2] ?? '') ? `${root}m` : root;
+}
+
+/** En ny låt (ChordPro) med noterna; titel, kompositör, tonart, takt och tempo hämtas ur noterna */
+export function abcToChordPro(abc: string, fallbackTitle = 'Noter'): string {
+  const body = abc.replace(/\r\n?/g, '\n').trim();
+  // Fälten i huvudet kommer först: ett senare K: eller M: är ett byte längre ner
+  const tempo = /(?:=\s*)?(\d{2,3})\s*$/.exec(abcField(body, 'Q') ?? '')?.[1];
+  const lines = [
+    `{title: ${abcField(body, 'T') ?? fallbackTitle}}`,
+    ...[
+      ['composer', abcField(body, 'C')],
+      ['key', abcKey(abcField(body, 'K'))],
+      ['time', abcField(body, 'M')],
+      ['tempo', tempo],
+    ]
+      .filter(([, v]) => v)
+      .map(([k, v]) => `{${k}: ${v}}`),
+    '{start_of_abc}',
+    body,
+    '{end_of_abc}',
+  ];
+  return lines.join('\n') + '\n';
+}
+
 /** Skriver in en transponering (i halvtoner) i noterna; resten av texten lämnas som den är */
 export async function transposeAbcSource(source: string, steps: number): Promise<string> {
   if (!steps || !hasAbc(source)) return source;

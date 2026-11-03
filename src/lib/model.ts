@@ -159,6 +159,8 @@ export interface Settings {
   transposeScope?: 'setlist' | 'global';
   /** Senast använda e-postadresser för export (sparas bara på enheten) */
   recentEmails?: string[];
+  /** API-nyckel till Claude för att läsa noter från foton (sparas bara på enheten) */
+  anthropicApiKey?: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {

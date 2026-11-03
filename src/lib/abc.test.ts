@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseChordPro, transposeSource } from './chordpro';
-import { abcRanges, hasAbc } from './abc';
+import { abcKey, abcRanges, abcToChordPro, hasAbc } from './abc';
 
 const SONG = `{title: Test}
 {key: G}
@@ -35,6 +35,26 @@ describe('noter (ABC)', () => {
     expect(out).toContain('[E]Efter');
     expect(out).toContain('{key: A}');
     expect(out).toContain('[V:S] "G"{g}G A B c |');
+  });
+
+  it('tonarten i K: blir ett ackordnamn', () => {
+    expect(abcKey('G')).toBe('G');
+    expect(abcKey('Em')).toBe('Em');
+    expect(abcKey('F#min clef=bass')).toBe('F#m');
+    expect(abcKey('Bbmaj')).toBe('Bb');
+    expect(abcKey('Ador')).toBeUndefined();
+    expect(abcKey('none')).toBeUndefined();
+  });
+
+  it('noter blir en ny låt med uppgifterna ur noterna', () => {
+    const song = abcToChordPro('X:1\nT:Psalm\nC:Okänd\nM:3/4\nL:1/4\nQ:1/4=96\nK:Dm\n"Dm"D E F |]\n');
+    expect(song).toBe(
+      '{title: Psalm}\n{composer: Okänd}\n{key: Dm}\n{time: 3/4}\n{tempo: 96}\n{start_of_abc}\nX:1\nT:Psalm\nC:Okänd\nM:3/4\nL:1/4\nQ:1/4=96\nK:Dm\n"Dm"D E F |]\n{end_of_abc}\n',
+    );
+    const p = parseChordPro(song);
+    expect(p.meta.title).toBe('Psalm');
+    expect(p.meta.key).toBe('Dm');
+    expect(abcToChordPro('X:1\nK:C\nC D E F|', 'Från fil')).toContain('{title: Från fil}');
   });
 
   it('hittar notblocken', () => {

@@ -19,7 +19,8 @@ export interface SongListNativePlugin {
   readFile(options: { scope: ICloudScope; path: string; base64?: boolean }): Promise<{ data: string }>;
   listFiles(options: { scope: ICloudScope; path: string }): Promise<{ files: ICloudFile[] }>;
   deleteFile(options: { scope: ICloudScope; path: string }): Promise<void>;
-  scanDocument(): Promise<{ pages: OcrPage[]; imageDataUrl?: string }>;
+  /** readText: false ger bara bilderna av alla sidor (images), utan textigenkänning */
+  scanDocument(options?: { readText?: boolean }): Promise<{ pages: OcrPage[]; imageDataUrl?: string; images?: string[] }>;
   recognizeImage(options: { image: string }): Promise<{ page: OcrPage }>;
   composeMail(options: {
     to: string[];

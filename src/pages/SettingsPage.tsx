@@ -178,6 +178,29 @@ export function SettingsPage() {
             </div>
           </div>
 
+          <div className="section-title">Notläsning</div>
+          <div className="card">
+            <p className="muted small-text" style={{ marginTop: 0 }}>
+              Med Läs in noter (under Importera) läser Claude från Anthropic noterna på ett foto eller en PDF, så att de kan
+              transponeras och spelas upp. Det kräver en API-nyckel från console.anthropic.com, och varje inläsning kostar en
+              mindre summa som betalas till Anthropic. Nyckeln sparas bara på den här enheten.
+            </p>
+            <label className="field">
+              <span>API-nyckel</span>
+              <input
+                className="input"
+                type="password"
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="sk-ant-…"
+                value={settings.anthropicApiKey ?? ''}
+                onChange={(e) => update({ anthropicApiKey: e.target.value.trim() || undefined })}
+              />
+            </label>
+          </div>
+
           <div className="section-title">Kategorier</div>
           <CategoriesCard />
 

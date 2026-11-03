@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, Check, ChevronDown, ChevronUp, ClipboardPaste, FileUp, Image as ImageIcon, Lightbulb, Pencil, X } from 'lucide-react';
+import { Camera, Check, ChevronDown, ChevronUp, ClipboardPaste, FileMusic, FileUp, Image as ImageIcon, Lightbulb, Pencil, X } from 'lucide-react';
 import { SongRenderer } from '../components/SongRenderer';
 import { TagInput } from '../components/TagInput';
 import { CategorySelect, SAME_AS_ALL } from '../components/CategorySelect';
@@ -21,7 +21,9 @@ import {
 import { newId, songFiles, type Song, type SongAttachment } from '../lib/model';
 import { groupHeads, joinsPrevious, pieceTitle, samePieceTitles, sortByPage } from '../lib/fileGroups';
 import { canUseDocumentScanner, recognizeImageFile, scanDocument } from '../services/ocr';
-import { pickFiles } from '../services/files';
+import { pickFiles, readFileAsDataUrl } from '../services/files';
+import { OmrError, imageFileToSource, readSheetMusic, type SheetSource } from '../services/omr';
+import { SongListNative } from '../native/songlistNative';
 import { attachmentToFile, expandFiles, interpretFile } from '../services/fileImport';
 import { allTags, categoryName, liveSongs, normalizeTags, useStore, type DuplicateAction, type ImportQueueItem } from '../store/useStore';
 import { findDuplicates, type Duplicate } from '../lib/duplicates';
@@ -138,7 +140,10 @@ export function ImportPage() {
   const setCategoryId = (id: string) => updateQueue((q) => ({ ...q, categoryId: id }));
   const [pasting, setPasting] = useState(false);
   const [pasteText, setPasteText] = useState('');
-  const [busy, setBusy] = useState<{ message: string; progress?: number } | null>(null);
+  /** cancel: kan avbrytas; omr: notläsning (inget om språkdata för textigenkänning) */
+  const [busy, setBusy] = useState<{ message: string; progress?: number; cancel?: () => void; omr?: boolean } | null>(null);
+  const [readingNotes, setReadingNotes] = useState(false);
+  const apiKey = useStore((s) => s.settings.anthropicApiKey);
   const [keepOriginals, setKeepOriginals] = useState(importPrefs.keepOriginals);
 
   // Förslag: taggar från sparade låtar och taggar som lagts till i importlistan
@@ -231,6 +236,53 @@ export function ImportPage() {
     } catch (e) {
       setBusy(null);
       toastError(e, 'Textigenkänningen misslyckades');
+    }
+  };
+
+  // --- Notläsning: Claude läser noterna på foton eller PDF:er ---
+  const readNotes = async (sources: SheetSource[], title?: string) => {
+    const ctrl = new AbortController();
+    const show = (message: string) => setBusy({ message, cancel: () => ctrl.abort(), omr: true });
+    try {
+      show('Läser noterna…');
+      const content = await readSheetMusic(sources, apiKey ?? '', { title, onProgress: show, signal: ctrl.signal });
+      setBusy(null);
+      setDraft({ content, tags });
+      navigate('/new');
+    } catch (e) {
+      setBusy(null);
+      if (e instanceof OmrError && e.message === 'Avbrutet') return;
+      toastError(e, 'Noterna kunde inte läsas');
+    }
+  };
+
+  const scanNotes = async () => {
+    setReadingNotes(false);
+    try {
+      const res = await SongListNative.scanDocument({ readText: false });
+      if (res.images?.length) await readNotes(res.images.map((dataUrl) => ({ kind: 'image', dataUrl })));
+    } catch (e) {
+      if ((e as { code?: string }).code !== 'CANCELLED') toastError(e, 'Skanningen misslyckades');
+    }
+  };
+
+  const pickNotes = async (capture: boolean) => {
+    setReadingNotes(false);
+    const files = await pickFiles({ accept: capture ? 'image/*' : 'application/pdf,image/*', multiple: !capture, capture });
+    if (!files.length) return;
+    try {
+      setBusy({ message: 'Förbereder…', omr: true });
+      const sources = await Promise.all(
+        files.map(async (f) =>
+          f.type === 'application/pdf' || /\.pdf$/i.test(f.name)
+            ? { kind: 'pdf' as const, dataUrl: await readFileAsDataUrl(f) }
+            : imageFileToSource(f),
+        ),
+      );
+      await readNotes(sources, files.length === 1 && !capture ? titleFromFileName(files[0].name) : undefined);
+    } catch (e) {
+      setBusy(null);
+      toastError(e, 'Filen kunde inte läsas');
     }
   };
 
@@ -423,7 +475,43 @@ export function ImportPage() {
               <b>Läs från bild</b>
               <span>Välj ett foto eller en skärmbild med text och ackord</span>
             </button>
+            <button className="big-action" onClick={() => setReadingNotes(true)}>
+              <FileMusic size={22} />
+              <b>Läs in noter</b>
+              <span>Fotografera noter, även flerstämmiga, och få dem som noter som går att transponera och spela upp</span>
+            </button>
           </div>
+
+          {readingNotes && (
+            <Sheet title="Läs in noter" onClose={() => setReadingNotes(false)}>
+              {apiKey ? (
+                <>
+                  <p className="muted small-text" style={{ marginTop: 0 }}>
+                    Noterna läses av Claude (Anthropic) och kan sedan rättas i editorn innan du sparar. Kräver internet. Flera
+                    sidor av samma stycke kan läsas på en gång.
+                  </p>
+                  <div className="btn-row">
+                    <button className="btn primary" onClick={nativeScanner ? scanNotes : () => void pickNotes(true)}>
+                      <Camera size={18} /> {nativeScanner ? 'Skanna notblad' : 'Fotografera'}
+                    </button>
+                    <button className="btn" onClick={() => void pickNotes(false)}>
+                      <ImageIcon size={18} /> Välj bilder eller PDF
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p style={{ marginTop: 0 }}>
+                    Noterna läses av Claude från Anthropic. För det behövs en API-nyckel, som du lägger in under Inställningar ›
+                    Notläsning.
+                  </p>
+                  <button className="btn primary" onClick={() => navigate('/settings')}>
+                    Till inställningarna
+                  </button>
+                </>
+              )}
+            </Sheet>
+          )}
 
           {busy && (
             <div className="card">
@@ -433,10 +521,22 @@ export function ImportPage() {
                   <div style={{ width: `${Math.round(busy.progress * 100)}%` }} />
                 </div>
               )}
-              {!nativeScanner && (
+              {!nativeScanner && !busy.omr && (
                 <p className="muted small-text" style={{ marginBottom: 0 }}>
                   Första gången laddas språkdata för textigenkänning ner (några MB).
                 </p>
+              )}
+              {busy.omr && (
+                <p className="muted small-text" style={{ marginBottom: 0 }}>
+                  Det kan ta ett par minuter, särskilt för flera sidor eller många stämmor.
+                </p>
+              )}
+              {busy.cancel && (
+                <div className="btn-row" style={{ marginTop: 8 }}>
+                  <button className="btn small" onClick={busy.cancel}>
+                    Avbryt
+                  </button>
+                </div>
               )}
             </div>
           )}
