@@ -217,9 +217,17 @@ export function EditorPage() {
     const moved = moveAbcPitch(text, noteSel.index, delta);
     const next = [...lines];
     next[pos.line] = next[pos.line].slice(0, pos.col) + moved + next[pos.line].slice(pos.col + text.length);
-    setContent(next.join('\n'));
+    const joined = next.join('\n');
+    noteContent.current = joined;
+    setContent(joined);
     setNoteSel({ ...noteSel, end: noteSel.start + moved.length });
   };
+
+  // Ändras texten på annat sätt (t.ex. i textfältet) stämmer inte notens position längre
+  const noteContent = useRef('');
+  useEffect(() => {
+    if (content !== noteContent.current) setNoteSel(null);
+  }, [content]);
 
   /** Till noten före (-1) eller efter (1) den markerade i samma notblock */
   const stepNote = async (dir: number) => {
