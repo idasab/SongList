@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronLeft, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { isChunkLoadError } from '../appUpdate';
@@ -68,7 +69,8 @@ export function Sheet({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
   const vp = useVisibleViewport();
-  return (
+  // Direkt i body: inuti sidans scrollyta (-webkit-overflow-scrolling) hamnar rutan annars bakom flikraden på iOS
+  return createPortal(
     <div
       className="backdrop"
       onClick={onClose}
@@ -90,7 +92,8 @@ export function Sheet({
         <div className="sheet-body">{children}</div>
         {footer && <div className="sheet-foot">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
