@@ -22,10 +22,12 @@ import {
   Gauge,
   Metronome as MetronomeIcon,
   MoreHorizontal,
+  Music,
   PenLine,
   Pause,
   Pencil,
   Scissors,
+  Square,
   StickyNote as NoteIcon,
   StickyNoteOff as NoteOffIcon,
   Play,
@@ -41,6 +43,7 @@ import { SongRenderer } from '../components/SongRenderer';
 import { Header, Sheet, toast, toastError } from '../components/ui';
 import { formatChord, formatKey, normalizeTranspose } from '../lib/chords';
 import { transposeAbcSource } from '../lib/abc';
+import { AbcPlayer } from '../lib/abcPlayer';
 import { filterSongs, songKey, sortSongs } from '../lib/search';
 import {
   capoOf,
@@ -409,6 +412,37 @@ export function SongPage() {
     setTicking(false);
   }, [id]);
   useEffect(() => () => metronome.current?.close(), []);
+
+  // Noterna i låten (de första, om det finns flera) kan spelas upp i vald tonart
+  const notes = useMemo(() => {
+    const sec = parsed.sections.find((s) => s.type === 'abc');
+    return sec?.lines.map((l) => (l.type === 'pre' ? l.text : '')).join('\n');
+  }, [parsed]);
+  const [playing, setPlaying] = useState<'loading' | 'playing' | null>(null);
+  const player = useRef<AbcPlayer | null>(null);
+  const togglePlay = () => {
+    if (!notes) return;
+    player.current ??= new AbcPlayer();
+    if (playing) {
+      player.current.stop();
+      setPlaying(null);
+      return;
+    }
+    setPlaying('loading');
+    const p = player.current;
+    p.play(notes, transpose, () => setPlaying(null))
+      .then(() => setPlaying((v) => (v === 'loading' ? 'playing' : v)))
+      .catch((e) => {
+        setPlaying(null);
+        toastError(e, 'Noterna kunde inte spelas upp (ljuden hämtas från internet första gången)');
+      });
+  };
+  // Tystnar när låten byts, tonarten ändras eller sidan lämnas
+  useEffect(() => {
+    player.current?.stop();
+    setPlaying(null);
+  }, [id, notes, transpose]);
+  useEffect(() => () => player.current?.close(), []);
 
   // Får låten inte plats i två spalter: mindre text, och till sist en spalt som vanligt (prövas
   // om när något ändras, även sådant ovanför låten som tipset om kapo och höjden på ytan)
@@ -943,6 +977,20 @@ export function SongPage() {
               </button>
             )}
           </div>
+          )}
+
+          {notes && (
+            <div className="tool-group">
+              <button
+                className={`btn tool-pill${playing ? ' active' : ''}`}
+                title="Spela upp noterna i vald tonart"
+                aria-pressed={!!playing}
+                onClick={togglePlay}
+              >
+                {playing ? <Square size={14} /> : <Music size={16} />}
+                <span>{playing === 'loading' ? 'Laddar…' : playing ? 'Stoppa' : 'Lyssna'}</span>
+              </button>
+            </div>
           )}
 
           {bpm && (
