@@ -40,6 +40,7 @@ import { ChordDiagram, ChordSheet } from '../components/ChordDiagram';
 import { SongRenderer } from '../components/SongRenderer';
 import { Header, Sheet, toast, toastError } from '../components/ui';
 import { formatChord, formatKey, normalizeTranspose } from '../lib/chords';
+import { transposeAbcSource } from '../lib/abc';
 import { filterSongs, songKey, sortSongs } from '../lib/search';
 import {
   capoOf,
@@ -249,7 +250,8 @@ export function SongPage() {
 
   // Två spalter på en bred skärm i liggande läge, men bara när hela låten då får plats
   const wide = useMediaQuery('(min-width: 900px) and (orientation: landscape)');
-  const wantColumns = wide && settings.twoColumns !== false && !song?.attachment;
+  // Noterna behöver hela bredden
+  const wantColumns = wide && settings.twoColumns !== false && !song?.attachment && !parsed.sections.some((s) => s.type === 'abc');
   // Ryms låten inte i två spalter krymps texten (ner till FIT_MIN_FONT) tills den gör det;
   // annars en spalt i vald textstorlek. Inställningen för textstorlek ändras inte.
   // Låtens egen textstorlek, annars inställningens
@@ -673,11 +675,13 @@ export function SongPage() {
     setMenu(false);
     if (!transpose) return;
     if (!confirm('Skriva in transponeringen permanent i låttexten? Ackorden i källtexten ändras.')) return;
-    const content = transposeSource(song.content, {
+    const chordsMoved = transposeSource(song.content, {
       transpose,
       preferFlats,
       notation: parsed.hNotation ? 'swedish' : 'international',
     });
+    // Noterna flyttas lika mycket
+    const content = await transposeAbcSource(chordsMoved, transpose);
     await saveSong({ id: song.id, content });
     // Låtens och setlistornas egna tonarter utgår från texten och flyttas lika mycket
     await updateSongPrefs(song.id, { transpose: normalizeTranspose(song.transpose - transpose) });

@@ -1,6 +1,7 @@
 import { memo, type CSSProperties, type ReactNode, type Ref } from 'react';
 import { capoOf, displayChordContext, isChordRow, midWordBreaks, splitWords, type Line, type ParsedSong, type Section } from '../lib/chordpro';
 import { formatChord, formatKey, isAnnotationChord, parseKey, type ChordContext } from '../lib/chords';
+import { AbcNotation } from './AbcNotation';
 
 export interface RenderOptions {
   /** Transponering av låten (som den klingar). Kapot räknas av automatiskt för ackorden. */
@@ -136,9 +137,16 @@ function SectionView({
           {section.label}
         </div>
       )}
-      {section.lines.map((l, i) => (
-        <LineView key={i} line={l} ctx={ctx} opts={opts} ln={first + i} />
-      ))}
+      {section.type === 'abc' ? (
+        <AbcNotation
+          abc={section.lines.map((l) => (l.type === 'pre' ? l.text : '')).join('\n')}
+          transpose={opts.transpose}
+          swedish={opts.notation === 'swedish'}
+          ln={first}
+        />
+      ) : (
+        section.lines.map((l, i) => <LineView key={i} line={l} ctx={ctx} opts={opts} ln={first + i} />)
+      )}
     </div>
   );
 }

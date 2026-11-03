@@ -14,6 +14,7 @@
     "ios:open": "npx cap open ios"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.4.0",
     "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.5.3",
     "@capacitor/filesystem": "^8.1.5",
@@ -22,6 +23,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@tombatossals/chords-db": "^0.5.1",
+    "abcjs": "^6.7.2",
     "fflate": "^0.8.3",
     "jspdf": "^4.2.1",
     "localforage": "^1.10.0",

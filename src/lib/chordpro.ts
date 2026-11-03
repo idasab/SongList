@@ -24,7 +24,8 @@ export type Line =
   | { type: 'empty' }
   | { type: 'pre'; text: string };
 
-export type SectionType = 'none' | 'verse' | 'chorus' | 'bridge' | 'tab' | 'grid' | 'other';
+/** abc: noter i ABC-format ({start_of_abc}), som visas som notskrift */
+export type SectionType = 'none' | 'verse' | 'chorus' | 'bridge' | 'tab' | 'grid' | 'abc' | 'other';
 
 export interface Section {
   type: SectionType;
@@ -199,6 +200,7 @@ const START_TYPES: Record<string, SectionType> = {
   start_of_bridge: 'bridge',
   start_of_tab: 'tab',
   start_of_grid: 'grid',
+  start_of_abc: 'abc',
 };
 
 const DEFAULT_LABELS: Partial<Record<SectionType, string>> = {
@@ -254,9 +256,15 @@ export function parseChordPro(source: string): ParsedSong {
   const versesLabeled = lines.some((l) => chordProHeader(l)?.kind === 'verse');
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li].replace(/\s+$/, '');
-    const inPre = current.type === 'tab' || current.type === 'grid';
+    const inPre = current.type === 'tab' || current.type === 'grid' || current.type === 'abc';
 
     if (/^\s*#/.test(line) && !inPre) continue; // kommentar i källfilen
+
+    // I noterna är bara {end_of_abc} ett direktiv; t.ex. {g}A är en förslagsnot
+    if (current.type === 'abc' && parseDirective(line)?.name !== 'end_of_abc') {
+      current.lines.push({ type: 'pre', text: line });
+      continue;
+    }
 
     const dir = line.trim().startsWith('{') ? parseDirective(line) : null;
     if (dir) {
@@ -514,10 +522,17 @@ export function upsertDirective(source: string, name: string, value: string): st
 export function transposeSource(source: string, ctx: ChordContext): string {
   const hNotation = detectHNotation(parseChordPro(source).chords);
   const c = { ...ctx, hNotation };
+  // Noterna ({start_of_abc}) skrivs inte om här: de transponeras med abcjs (se transposeAbc)
+  let inAbc = false;
   return source
     .split(/\r?\n/)
     .map((line) => {
       const dir = line.trim().startsWith('{') ? parseDirective(line) : null;
+      if (inAbc) {
+        if (dir?.name === 'end_of_abc') inAbc = false;
+        return line;
+      }
+      if (dir?.name === 'start_of_abc') inAbc = true;
       if (dir) {
         // Tonarten flyttas med, även skriven som "A moll" eller {meta: key A}
         const metaKey = dir.name === 'meta' ? /^key\s+(.+)$/i.exec(dir.value.trim())?.[1] : undefined;
