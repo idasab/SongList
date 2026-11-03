@@ -91,6 +91,7 @@ export function SongPage() {
   const settings = useStore((s) => s.settings);
   const updateSettings = useStore((s) => s.updateSettings);
   const updateSongPrefs = useStore((s) => s.updateSongPrefs);
+  const shiftSongTransposes = useStore((s) => s.shiftSongTransposes);
   const saveSong = useStore((s) => s.saveSong);
   const saveSetlist = useStore((s) => s.saveSetlist);
   const deleteSong = useStore((s) => s.deleteSong);
@@ -718,16 +719,7 @@ export function SongPage() {
     const content = await transposeAbcSource(chordsMoved, transpose);
     await saveSong({ id: song.id, content });
     // Låtens och setlistornas egna tonarter utgår från texten och flyttas lika mycket
-    await updateSongPrefs(song.id, { transpose: normalizeTranspose(song.transpose - transpose) });
-    for (const sl of Object.values(useStore.getState().setlists)) {
-      if (sl.deletedAt || !sl.items.some((x) => x.songId === song.id && x.transpose !== undefined)) continue;
-      await saveSetlist({
-        ...sl,
-        items: sl.items.map((x) =>
-          x.songId === song.id && x.transpose !== undefined ? { ...x, transpose: normalizeTranspose(x.transpose - transpose) } : x,
-        ),
-      });
-    }
+    await shiftSongTransposes(song.id, transpose);
     toast('Transponeringen är sparad i texten');
   };
 

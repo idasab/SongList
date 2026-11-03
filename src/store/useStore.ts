@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { parseChordPro, shapesToSounding } from '../lib/chordpro';
+import { normalizeTranspose } from '../lib/chords';
 import {
   DEFAULT_SETTINGS,
   filesFields,
@@ -108,6 +109,11 @@ interface State {
     contents: { content: string; tags?: string[]; categoryId?: string; files?: SongAttachment[] }[],
   ): Promise<Song[]>;
   updateSongPrefs(id: string, prefs: Partial<Pick<Song, 'transpose' | 'scrollSpeed' | 'annotations' | 'subtitleNotArtist' | 'enhance' | 'fontSize'>>): Promise<void>;
+  /**
+   * Låtens text har transponerats steps halvtoner: låtens och setlistornas egna tonarter utgår
+   * från texten och flyttas lika mycket tillbaka, så att låten spelas som förut där.
+   */
+  shiftSongTransposes(id: string, steps: number): Promise<void>;
   deleteSong(id: string): Promise<void>;
   /** Ändrar flera låtar på en gång: lägger till taggar och/eller sätter kategori (null = ingen). */
   editSongs(ids: string[], change: { addTags?: string[]; categoryId?: string | null }): Promise<number>;
@@ -267,6 +273,21 @@ export const useStore = create<State>((set, get) => ({
     const next = { ...song, ...prefs, updatedAt: Date.now() };
     set((s) => ({ songs: { ...s.songs, [id]: next }, revision: s.revision + 1 }));
     await db.songs.put(next);
+  },
+
+  async shiftSongTransposes(id, steps) {
+    const song = get().songs[id];
+    if (!song || !steps) return;
+    await get().updateSongPrefs(id, { transpose: normalizeTranspose(song.transpose - steps) });
+    for (const sl of Object.values(get().setlists)) {
+      if (sl.deletedAt || !sl.items.some((x) => x.songId === id && x.transpose !== undefined)) continue;
+      await get().saveSetlist({
+        ...sl,
+        items: sl.items.map((x) =>
+          x.songId === id && x.transpose !== undefined ? { ...x, transpose: normalizeTranspose(x.transpose - steps) } : x,
+        ),
+      });
+    }
   },
 
   async deleteSong(id) {

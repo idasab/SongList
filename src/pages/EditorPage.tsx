@@ -1,12 +1,13 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Hand, Image as ImageIcon, Wand2 } from 'lucide-react';
-import { abcNoteRanges, abcPitches, abcRanges, abcSourcePos, moveAbcPitch } from '../lib/abc';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Hand, Image as ImageIcon, Minus, Plus, Wand2 } from 'lucide-react';
+import { abcNoteRanges, abcPitches, abcRanges, abcSourcePos, hasAbc, moveAbcPitch, transposeAbcSource } from '../lib/abc';
+import { formatKey, parseKey } from '../lib/chords';
 import { TAP_RESET_MS, tapTempo } from '../lib/metronome';
 import { SongRenderer } from '../components/SongRenderer';
 import { TagInput } from '../components/TagInput';
 import { Header, Segmented, toast } from '../components/ui';
-import { parseChordPro, upsertDirective } from '../lib/chordpro';
+import { parseChordPro, songPrefersFlats, transposeSource, upsertDirective } from '../lib/chordpro';
 import { textToChordPro } from '../lib/textImport';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { allTags, categoryName, liveCategories, useStore } from '../store/useStore';
@@ -33,6 +34,7 @@ export function EditorPage() {
   const draft = useStore((s) => s.draft);
   const setDraft = useStore((s) => s.setDraft);
   const saveSong = useStore((s) => s.saveSong);
+  const shiftSongTransposes = useStore((s) => s.shiftSongTransposes);
   const songsRec = useStore((s) => s.songs);
   const categoriesRec = useStore((s) => s.categories);
   const settings = useStore((s) => s.settings);
@@ -52,9 +54,12 @@ export function EditorPage() {
   const [tags, setTags] = useState<string[]>(initial.current.tags);
   const [categoryId, setCategoryId] = useState(initial.current.categoryId);
   const [view, setView] = useState<'edit' | 'preview'>(!id && draft?.preview ? 'preview' : 'edit');
-  const [showMeta, setShowMeta] = useState(!(!id && draft?.preview));
+  // Med noter är det noterna man vill se: uppgifterna är dolda från början
+  const [showMeta, setShowMeta] = useState(!(!id && draft?.preview) && !hasAbc(initial.current.content));
   const [showImage, setShowImage] = useState(true);
   const [saved, setSaved] = useState(false);
+  /** Så många halvtoner låten har transponerats här (sedan editorn öppnades) */
+  const [shift, setShift] = useState(0);
   /** Noten som rättas: notblock, var den står i blocket och vilken ton i ett ackord */
   const [noteSel, setNoteSel] = useState<{ block: number; start: number; end: number; index: number } | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -119,12 +124,14 @@ export function EditorPage() {
       return;
     }
     const song = await saveSong({ id: existing?.id, content, tags, categoryId, attachment: draftAttachment });
+    // Låten är transponerad här: dess och setlistornas egna tonarter flyttas lika mycket tillbaka
+    if (existing && shift) await shiftSongTransposes(existing.id, shift);
     setSaved(true);
     toast('Sparat');
     if (importItemId) updateImportQueue((q) => ({ ...q, items: q.items.filter((x) => x.id !== importItemId) }));
     leavingAfterSave.current = true;
     navigate(`/song/${song.id}${setlistQuery}`, { replace: true });
-  }, [saveSong, existing?.id, content, tags, categoryId, draftAttachment, importItemId, updateImportQueue, setlistQuery, navigate]);
+  }, [saveSong, existing, content, tags, categoryId, draftAttachment, importItemId, updateImportQueue, setlistQuery, navigate, shift, shiftSongTransposes]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -190,6 +197,8 @@ export function EditorPage() {
 
   // --- Rätta noter: tryck på en not och flytta den upp eller ner ---
   const hasNotes = parsed.sections.some((s) => s.type === 'abc');
+  const parsedKey = parseKey(meta.key, { hNotation: parsed.hNotation });
+  const keyLabel = parsedKey ? formatKey(parsedKey, 0, settings.notation) : meta.key;
   /** Den markerade noten i källtexten och dess toner */
   const note = useMemo(() => {
     if (!noteSel) return null;
@@ -239,6 +248,18 @@ export function EditorPage() {
     const i = notes.findIndex(([s]) => s === noteSel.start);
     const next = notes[i < 0 ? 0 : i + dir];
     if (next) selectNote(noteSel.block, next[0], next[1]);
+  };
+
+  /** Transponerar hela låten: noterna, ackorden och tonarten */
+  const transposeAll = async (steps: number) => {
+    const song = parseChordPro(content);
+    const chordsMoved = transposeSource(content, {
+      transpose: steps,
+      preferFlats: songPrefersFlats(song, steps),
+      notation: song.hNotation ? 'swedish' : 'international',
+    });
+    setContent(await transposeAbcSource(chordsMoved, steps));
+    setShift((s) => s + steps);
   };
 
   // Ackordets toner nerifrån och upp
@@ -295,7 +316,20 @@ export function EditorPage() {
               </div>
             </>
           ) : (
-            <span className="muted">Tryck på en not för att flytta den upp eller ner.</span>
+            <>
+              <div className="note-fix-actions">
+                <button className="btn icon" aria-label="Transponera ner en halvton" onClick={() => void transposeAll(-1)}>
+                  <Minus size={18} />
+                </button>
+                <span className="note-fix-key">
+                  Tonart <b>{keyLabel ?? '–'}</b>
+                </span>
+                <button className="btn icon" aria-label="Transponera upp en halvton" onClick={() => void transposeAll(1)}>
+                  <Plus size={18} />
+                </button>
+              </div>
+              <span className="muted">Tryck på en not för att flytta den upp eller ner.</span>
+            </>
           )}
         </div>
       )}
@@ -419,17 +453,20 @@ export function EditorPage() {
                   ))}
                 </select>
               </label>
-              <label className="field">
-                <span>Kapo</span>
-                <select className="select" value={meta.capo ?? ''} onChange={(e) => setMeta('capo', e.target.value === '0' ? '' : e.target.value)}>
-                  <option value="">–</option>
-                  {Array.from({ length: 11 }, (_, i) => i + 1).map((n) => (
-                    <option key={n} value={String(n)}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {/* Kapo gäller ackordspel, inte noter */}
+              {!hasNotes && (
+                <label className="field">
+                  <span>Kapo</span>
+                  <select className="select" value={meta.capo ?? ''} onChange={(e) => setMeta('capo', e.target.value === '0' ? '' : e.target.value)}>
+                    <option value="">–</option>
+                    {Array.from({ length: 11 }, (_, i) => i + 1).map((n) => (
+                      <option key={n} value={String(n)}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
             <div className="grid-2 grid-meta">
               <label className="field">

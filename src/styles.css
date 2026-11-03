@@ -1732,6 +1732,11 @@ textarea.note-text {
   flex: 0 0 40px;
 }
 
+.note-fix-key {
+  align-self: center;
+  min-width: 110px;
+}
+
 .ref-image {
   /* Av den synliga höjden, så att textrutan under syns även när tangentbordet är uppe */
   max-height: calc(var(--app-height, 100vh) * 0.3);
