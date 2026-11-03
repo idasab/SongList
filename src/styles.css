@@ -1694,6 +1694,44 @@ textarea.note-text {
   padding: 16px 18px 40vh;
 }
 
+/* Rätta noter: under förhandsvisningen */
+.abc-editable .abcjs-note {
+  cursor: pointer;
+}
+
+.note-fix {
+  flex-shrink: 0;
+  display: grid;
+  gap: 8px;
+  padding: 10px calc(14px + var(--safe-right)) 10px calc(14px + var(--safe-left));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  text-align: center;
+}
+
+.note-fix-chord,
+.note-fix-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.note-fix-actions {
+  flex-wrap: nowrap;
+}
+
+.note-fix-actions .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 140px;
+  padding: 0 8px;
+}
+
+.note-fix-actions .btn.icon {
+  flex: 0 0 40px;
+}
+
 .ref-image {
   /* Av den synliga höjden, så att textrutan under syns även när tangentbordet är uppe */
   max-height: calc(var(--app-height, 100vh) * 0.3);

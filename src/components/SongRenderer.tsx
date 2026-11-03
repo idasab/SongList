@@ -16,6 +16,10 @@ export interface RenderOptions {
   /** Förenklade ackord (inställning) */
   simplify?: boolean;
   onChordClick?: (chord: string) => void;
+  /** Noterna går att trycka på (för att rättas): notblockets nummer och var noten står i det */
+  onNoteClick?: (block: number, start: number, end: number) => void;
+  /** Den markerade noten */
+  selectedNote?: { block: number; start: number; end: number } | null;
 }
 
 /** Varje renderad rad får ett index (data-ln) som anteckningar fästs vid. 0 = låthuvudet. */
@@ -122,11 +126,14 @@ function SectionView({
   ctx,
   opts,
   start,
+  block,
 }: {
   section: Section;
   ctx: ChordContext;
   opts: RenderOptions;
   start: number;
+  /** Notblockets nummer (för noter) */
+  block: number;
 }) {
   const first = start + (section.label ? 1 : 0);
   const cls = ['sec', section.type, section.isRepeat ? 'repeat' : ''].filter(Boolean).join(' ');
@@ -143,6 +150,8 @@ function SectionView({
           transpose={opts.transpose}
           swedish={opts.notation === 'swedish'}
           ln={first}
+          onNoteClick={opts.onNoteClick && ((s, e) => opts.onNoteClick!(block, s, e))}
+          selected={opts.selectedNote?.block === block ? [opts.selectedNote.start, opts.selectedNote.end] : null}
         />
       ) : (
         section.lines.map((l, i) => <LineView key={i} line={l} ctx={ctx} opts={opts} ln={first + i} />)
@@ -170,6 +179,8 @@ export const SongRenderer = memo(function SongRenderer({
   const capo = capoOf(song);
   const style: CSSProperties = { fontSize: opts.fontSize };
   const starts = sectionStarts(song.sections);
+  let blocks = 0;
+  const blockOf = song.sections.map((s) => (s.type === 'abc' ? blocks++ : -1));
 
   return (
     <div className={`song${opts.showChords ? '' : ' no-chords'}${opts.columns === 2 ? ' wide-song' : ''}`} style={style} ref={containerRef}>
@@ -212,7 +223,7 @@ export const SongRenderer = memo(function SongRenderer({
       )}
       <div className={`song-body${opts.columns === 2 ? ' two-col' : ''}`}>
         {song.sections.map((s, i) => (
-          <SectionView key={i} section={s} ctx={ctx} opts={opts} start={starts[i]} />
+          <SectionView key={i} section={s} ctx={ctx} opts={opts} start={starts[i]} block={blockOf[i]} />
         ))}
       </div>
       {overlay}

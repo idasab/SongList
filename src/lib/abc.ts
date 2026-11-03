@@ -17,13 +17,87 @@ export function loadAbcjs(): Promise<Abcjs> {
 }
 
 /**
- * Noterna som de ritas: titel och kompositör står redan i låtens huvud, så de tas bort ur
- * ABC-huvudet (före första K:) i stället för att ta plats ovanför noterna.
+ * Noterna som de ritas: titel och kompositör står redan i låtens huvud, så de görs om till
+ * kommentarer i ABC-huvudet (före första K:) i stället för att ta plats ovanför noterna.
+ * Texten blir lika lång, så att abcjs teckenpositioner stämmer med originalet.
  */
 export function abcForDisplay(abc: string): string {
   const lines = abc.split('\n');
   const k = lines.findIndex((l) => /^K:/.test(l));
-  return lines.filter((l, i) => !(i < k && /^[TC]:/.test(l))).join('\n');
+  return lines.map((l, i) => (i < k && /^[TC]:/.test(l) ? '%' + l.slice(1) : l)).join('\n');
+}
+
+/** En ton i ABC-texten: var den står och hur hög den är (diatoniskt steg, mellersta C = 28) */
+export interface AbcPitch {
+  start: number;
+  end: number;
+  step: number;
+}
+
+/** Tonerna i ett stycke ABC (en not eller ett ackord som [GBd]2); ackordnamn, dekorationer och förslag räknas inte */
+export function abcPitches(text: string): AbcPitch[] {
+  // "Am", !p!, +fermata+ och {förslag} blankas ut (lika långt), så att bokstäverna i dem inte räknas
+  const masked = text.replace(/"[^"]*"|![^!]*!|\+[^+]*\+|\{[^}]*\}/g, (m) => ' '.repeat(m.length));
+  const out: AbcPitch[] = [];
+  for (const m of masked.matchAll(/(\^\^|\^|__|_|=)?([A-Ga-g])([,']*)/g)) {
+    const letter = m[2];
+    const octave = (letter === letter.toLowerCase() ? 5 : 4) + (m[3].match(/'/g)?.length ?? 0) - (m[3].match(/,/g)?.length ?? 0);
+    out.push({ start: m.index, end: m.index + m[0].length, step: octave * 7 + 'CDEFGAB'.indexOf(letter.toUpperCase()) });
+  }
+  return out;
+}
+
+/** Tonen som ABC (utan förtecken), t.ex. C, c', B,, */
+export function abcPitchName(step: number): string {
+  const octave = Math.floor(step / 7);
+  const letter = 'CDEFGAB'[step - octave * 7];
+  return octave >= 5 ? letter.toLowerCase() + "'".repeat(octave - 5) : letter + ','.repeat(4 - octave);
+}
+
+/**
+ * Flyttar ton nummer index i stycket delta tonsteg (upp är plus). Ett förtecken på tonen tas bort:
+ * det gällde den gamla tonen.
+ */
+export function moveAbcPitch(text: string, index: number, delta: number): string {
+  const p = abcPitches(text)[index];
+  if (!p) return text;
+  return text.slice(0, p.start) + abcPitchName(p.step + delta) + text.slice(p.end);
+}
+
+/** Noterna (med toner, inte pauser) i ett notblock: start och slut i texten, i den ordning de står */
+export async function abcNoteRanges(abc: string): Promise<[number, number][]> {
+  const lib = await loadAbcjs();
+  const [tune] = lib.renderAbc('*', abcForDisplay(abc));
+  const out: [number, number][] = [];
+  for (const line of tune?.lines ?? []) {
+    for (const staff of line.staff ?? []) {
+      for (const voice of staff.voices ?? []) {
+        for (const el of voice) {
+          const at = el as { el_type?: string; startChar?: number; endChar?: number; pitches?: unknown[] };
+          if (at.el_type === 'note' && at.pitches?.length && at.startChar !== undefined && at.endChar !== undefined) {
+            out.push([at.startChar, at.endChar]);
+          }
+        }
+      }
+    }
+  }
+  return out.sort((a, b) => a[0] - b[0]);
+}
+
+/**
+ * Var i källtexten (rad och kolumn) ett tecken i notblock nummer block står. at räknas som abcjs
+ * gör: i blockets rader (utan blanksteg i slutet) ihopsatta med radbrytningar.
+ */
+export function abcSourcePos(lines: string[], block: number, at: number): { line: number; col: number } | null {
+  const range = abcRanges(lines)[block];
+  if (!range) return null;
+  let col = at;
+  for (let i = range[0]; i < range[1]; i++) {
+    const len = lines[i].replace(/\s+$/, '').length;
+    if (col <= len) return { line: i, col };
+    col -= len + 1;
+  }
+  return null;
 }
 
 /** Sant om källtexten har noter */

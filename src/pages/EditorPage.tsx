@@ -1,6 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ChevronDown, ChevronUp, Hand, Image as ImageIcon, Wand2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Hand, Image as ImageIcon, Wand2 } from 'lucide-react';
+import { abcNoteRanges, abcPitches, abcRanges, abcSourcePos, moveAbcPitch } from '../lib/abc';
 import { TAP_RESET_MS, tapTempo } from '../lib/metronome';
 import { SongRenderer } from '../components/SongRenderer';
 import { TagInput } from '../components/TagInput';
@@ -54,6 +55,8 @@ export function EditorPage() {
   const [showMeta, setShowMeta] = useState(!(!id && draft?.preview));
   const [showImage, setShowImage] = useState(true);
   const [saved, setSaved] = useState(false);
+  /** Noten som rättas: notblock, var den står i blocket och vilken ton i ett ackord */
+  const [noteSel, setNoteSel] = useState<{ block: number; start: number; end: number; index: number } | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const wide = useMediaQuery('(min-width: 900px)');
 
@@ -185,13 +188,110 @@ export function EditorPage() {
   // Alla ackord i låten, i den ordning de först förekommer
   const quickChords = parsed.chords.filter((c) => !c.startsWith('*'));
 
+  // --- Rätta noter: tryck på en not och flytta den upp eller ner ---
+  const hasNotes = parsed.sections.some((s) => s.type === 'abc');
+  /** Den markerade noten i källtexten och dess toner */
+  const note = useMemo(() => {
+    if (!noteSel) return null;
+    const lines = content.replace(/\r\n?/g, '\n').split('\n');
+    const pos = abcSourcePos(lines, noteSel.block, noteSel.start);
+    if (!pos) return null;
+    const text = lines[pos.line].slice(pos.col, pos.col + noteSel.end - noteSel.start);
+    const pitches = abcPitches(text);
+    return pitches.length ? { lines, pos, text, pitches } : null;
+  }, [content, noteSel]);
+
+  const selectNote = (block: number, start: number, end: number) => {
+    const lines = content.replace(/\r\n?/g, '\n').split('\n');
+    const pos = abcSourcePos(lines, block, start);
+    const pitches = pos ? abcPitches(lines[pos.line].slice(pos.col, pos.col + end - start)) : [];
+    if (!pitches.length) return;
+    // I ett ackord väljs den översta tonen (oftast melodin)
+    const top = pitches.reduce((best, p, i) => (p.step > pitches[best].step ? i : best), 0);
+    setNoteSel({ block, start, end, index: top });
+  };
+
+  const moveNote = (delta: number) => {
+    if (!noteSel || !note) return;
+    const { lines, pos, text } = note;
+    const moved = moveAbcPitch(text, noteSel.index, delta);
+    const next = [...lines];
+    next[pos.line] = next[pos.line].slice(0, pos.col) + moved + next[pos.line].slice(pos.col + text.length);
+    setContent(next.join('\n'));
+    setNoteSel({ ...noteSel, end: noteSel.start + moved.length });
+  };
+
+  /** Till noten före (-1) eller efter (1) den markerade i samma notblock */
+  const stepNote = async (dir: number) => {
+    if (!noteSel) return;
+    const lines = content.replace(/\r\n?/g, '\n').split('\n');
+    const range = abcRanges(lines)[noteSel.block];
+    if (!range) return;
+    const notes = await abcNoteRanges(lines.slice(range[0], range[1]).map((l) => l.replace(/\s+$/, '')).join('\n'));
+    const i = notes.findIndex(([s]) => s === noteSel.start);
+    const next = notes[i < 0 ? 0 : i + dir];
+    if (next) selectNote(noteSel.block, next[0], next[1]);
+  };
+
+  // Ackordets toner nerifrån och upp
+  const chordOrder = note && note.pitches.length > 1 ? note.pitches.map((p, i) => ({ ...p, i })).sort((a, b) => a.step - b.step) : [];
+
   const preview = (
-    <div className="preview">
-      <SongRenderer
-        song={parsed}
-        opts={{ transpose: 0, notation: settings.notation, showChords: true, fontSize: Math.min(settings.fontSize, 20) }}
-      />
-    </div>
+    <>
+      <div className="preview">
+        <SongRenderer
+          song={parsed}
+          opts={{
+            transpose: 0,
+            notation: settings.notation,
+            showChords: true,
+            fontSize: Math.min(settings.fontSize, 20),
+            onNoteClick: selectNote,
+            selectedNote: note ? noteSel : null,
+          }}
+        />
+      </div>
+      {hasNotes && (
+        <div className="note-fix">
+          {note && noteSel ? (
+            <>
+              {chordOrder.length > 0 && (
+                <div className="note-fix-chord">
+                  {chordOrder.map((p, n) => (
+                    <button
+                      key={p.i}
+                      className={`btn small${p.i === noteSel.index ? ' primary' : ''}`}
+                      onClick={() => setNoteSel({ ...noteSel, index: p.i })}
+                    >
+                      {n === 0 ? 'Nedersta' : n === chordOrder.length - 1 ? 'Översta' : `Ton ${n + 1}`}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="note-fix-actions">
+                <button className="btn icon" aria-label="Noten före" onClick={() => void stepNote(-1)}>
+                  <ChevronLeft size={20} />
+                </button>
+                <button className="btn" onClick={() => moveNote(1)}>
+                  <ArrowUp size={18} /> Upp
+                </button>
+                <button className="btn" onClick={() => moveNote(-1)}>
+                  <ArrowDown size={18} /> Ner
+                </button>
+                <button className="btn icon" aria-label="Noten efter" onClick={() => void stepNote(1)}>
+                  <ChevronRight size={20} />
+                </button>
+                <button className="btn" onClick={() => setNoteSel(null)}>
+                  Klar
+                </button>
+              </div>
+            </>
+          ) : (
+            <span className="muted">Tryck på en not för att flytta den upp eller ner.</span>
+          )}
+        </div>
+      )}
+    </>
   );
 
   const editor = (
