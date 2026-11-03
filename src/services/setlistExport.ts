@@ -22,6 +22,7 @@ import { formatChord, formatKey, isAnnotationChord, parseKey, type ChordContext,
 import {
   NOTE_COLORS,
   anchorToPx,
+  lineUnit,
   mergeAnnotations,
   strokeToPx,
   type Annotations,
@@ -29,6 +30,7 @@ import {
   type LineMetrics,
 } from '../lib/annotations';
 import { songFiles, type Setlist, type Song, type SongAttachment } from '../lib/model';
+import { ABC_STAFF_WIDTH, ABC_WIDTH_EM, renderAbcImages, transposeAbcSource } from '../lib/abc';
 import { safeFileName, saveBinaryFile, saveTextFile } from './files';
 import { loadPdfJs } from './fileImport';
 import { enhanceCanvas, enhancedImageCanvas } from '../lib/enhance';
@@ -188,8 +190,8 @@ export function buildTextExport(setlist: Setlist, songs: Record<string, Song>, n
 
 // --- ChordPro ---
 
-/** En låts ChordPro-källa med transponeringen inskriven. */
-function songChordPro(p: PreparedSong): string {
+/** En låts ChordPro-källa med transponeringen inskriven (även i noterna). */
+async function songChordPro(p: PreparedSong): Promise<string> {
   if (p.song.attachment) return `${p.song.content.trim()}\n{comment: Bifogad fil: ${fileNames(p.song)}}\n`;
   const src = p.transpose
     ? transposeSource(p.song.content, {
@@ -199,17 +201,20 @@ function songChordPro(p: PreparedSong): string {
         notation: p.parsed.hNotation ? 'swedish' : 'international',
       })
     : p.song.content;
+  const withNotes = await transposeAbcSource(src, p.transpose);
   // Setlistans eget kapo skrivs in i filen
   const capo = capoOf(p.parsed);
-  const withCapo = capo === capoOf(parseChordPro(p.song.content)) ? src : upsertDirective(src, 'capo', capo ? String(capo) : '');
+  const withCapo =
+    capo === capoOf(parseChordPro(p.song.content)) ? withNotes : upsertDirective(withNotes, 'capo', capo ? String(capo) : '');
   return withCapo.trim() + '\n';
 }
 
-export function buildChordProExport(setlist: Setlist, songs: Record<string, Song>, notation: Notation): string {
+export async function buildChordProExport(setlist: Setlist, songs: Record<string, Song>, notation: Notation): Promise<string> {
   const list = prepare(setlist, songs, notation);
   const header = [`# Setlista: ${setlist.name}`];
   if (setlist.date) header.push(`# Datum: ${setlist.date}`);
-  return header.join('\n') + '\n\n' + list.map((p) => songChordPro(p).trim()).join('\n\n{new_song}\n\n') + '\n';
+  const bodies = await Promise.all(list.map(async (p) => (await songChordPro(p)).trim()));
+  return header.join('\n') + '\n\n' + bodies.join('\n\n{new_song}\n\n') + '\n';
 }
 
 // --- PDF ---
@@ -442,6 +447,43 @@ function drawSection(c: PdfCtx, sec: Section, start: number, ctx: ChordContext, 
   c.y += M.sectionGap * EM;
 }
 
+/** Noterna som bilder, lika breda (i em) som på skärmen så att anteckningarna hamnar rätt */
+async function drawAbcSection(c: PdfCtx, sec: Section, start: number, p: PreparedSong, tops: number[], scales: number[]) {
+  const doc = c.doc;
+  let ln = start;
+  if (sec.label) {
+    ensureSpace(c, M.label * EM + M.plain * EM);
+    tops[ln] = virtualY(c);
+    setFont(doc, 'bold', 0.75 * EM, MUTED);
+    doc.text(sec.label.toUpperCase(), MARGIN_X, c.y, { baseline: 'top' });
+    c.y += M.label * EM;
+    ln++;
+  }
+  const abc = sec.lines.map((l) => (l.type === 'pre' ? l.text : '')).join('\n');
+  const opts = { transpose: p.transpose, swedish: p.ctx.notation === 'swedish' };
+  const width = Math.min(ABC_WIDTH_EM * EM, PAGE_W - 2 * MARGIN_X);
+  const k = width / ABC_STAFF_WIDTH;
+  const pageH = CONTENT_BOTTOM - MARGIN_TOP;
+  let images = await renderAbcImages(abc, opts);
+  const height = images.reduce((h, im) => h + im.h * k, 0);
+  // Ryms noterna på en sida hålls de ihop; annars delas de mellan sidorna rad för rad
+  if (height > pageH) images = await renderAbcImages(abc, { ...opts, perSystem: true });
+  if (!images.length) return;
+  ensureSpace(c, height > pageH ? images[0].h * k : height);
+  const top = virtualY(c);
+  for (let i = ln; i < start + (sec.label ? 1 : 0) + sec.lines.length; i++) {
+    tops[i] = top;
+    scales[i] = width / (ABC_WIDTH_EM * EM);
+  }
+  for (const im of images) {
+    ensureSpace(c, im.h * k);
+    // Komprimerad: annars läggs bilden in okomprimerad (flera MB per sida)
+    doc.addImage(im.data, 'PNG', MARGIN_X, c.y, im.w * k, im.h * k, undefined, 'FAST');
+    c.y += im.h * k;
+  }
+  c.y += M.sectionGap * EM;
+}
+
 function drawBar(doc: JsPdf, page: number, y1: number, y2: number) {
   if (y2 <= y1) return;
   const current = doc.getCurrentPageInfo().pageNumber;
@@ -474,9 +516,9 @@ function drawSongHeader(c: PdfCtx, p: PreparedSong, index: number, tops: number[
   c.y += 1.1 * EM;
 }
 
-function drawAnnotations(doc: JsPdf, ann: Annotations, tops: number[]) {
+function drawAnnotations(doc: JsPdf, ann: Annotations, tops: number[], scales: number[]) {
   // Ankarnas x räknas från låtens vänsterkant, y från radens överkant (virtuella koordinater)
-  const metrics: LineMetrics = { tops, fontPx: EM };
+  const metrics: LineMetrics = { tops, fontPx: EM, scales };
   const toPage = (vy: number) => {
     const page = Math.floor(vy / PAGE_H) + 1;
     return { page, y: vy - (page - 1) * PAGE_H };
@@ -491,7 +533,7 @@ function drawAnnotations(doc: JsPdf, ann: Annotations, tops: number[]) {
     const offset = (page - 1) * PAGE_H;
     doc.setPage(page);
     doc.setDrawColor(INK_PDF[s.color]);
-    doc.setLineWidth(Math.max(0.4, s.width * EM));
+    doc.setLineWidth(Math.max(0.4, s.width * lineUnit(metrics, s.anchor.line)));
     doc.setLineCap('round');
     doc.setLineJoin('round');
     const x0 = MARGIN_X + px[0];
@@ -732,6 +774,8 @@ async function renderPdf(
       c.y = MARGIN_TOP;
     }
     const tops: number[] = [];
+    // Rader i en annan skala än texten (noter), se LineMetrics
+    const scales: number[] = [];
     drawSongHeader(c, p, number, tops);
     if (p.song.attachment) {
       await drawAttachments(c, songFiles(p.song), p.song.enhance);
@@ -739,11 +783,15 @@ async function renderPdf(
     }
     let n = 1;
     for (const sec of p.parsed.sections) {
-      drawSection(c, sec, n, p.ctx, tops);
+      if (sec.type === 'abc') await drawAbcSection(c, sec, n, p, tops, scales);
+      else drawSection(c, sec, n, p.ctx, tops);
       n += (sec.label ? 1 : 0) + sec.lines.length;
     }
-    for (let i = 0; i < tops.length; i++) if (tops[i] === undefined) tops[i] = i ? tops[i - 1] : 0;
-    if (opts.withAnnotations && p.annotations) drawAnnotations(doc, p.annotations, tops);
+    for (let i = 0; i < tops.length; i++) {
+      if (tops[i] === undefined) tops[i] = i ? tops[i - 1] : 0;
+      scales[i] ??= 1;
+    }
+    if (opts.withAnnotations && p.annotations) drawAnnotations(doc, p.annotations, tops, scales);
   }
 
   drawFooters(doc, opts.footer);
@@ -798,7 +846,7 @@ export async function buildSongFiles(
     if (format === 'text') {
       files.push({ name: `${base}.txt`, mime: 'text/plain', blob: textBlob(songText(p)) });
     } else if (format === 'chordpro') {
-      files.push({ name: `${base}.txt`, mime: 'text/plain', blob: textBlob(songChordPro(p)) });
+      files.push({ name: `${base}.txt`, mime: 'text/plain', blob: textBlob(await songChordPro(p)) });
     } else {
       const blob = await renderPdf([{ p, number: i + 1 }], {
         title: p.song.title,
@@ -848,7 +896,7 @@ export async function exportSetlist(
     case 'text':
       return saveTextFile(`${base}.txt`, buildTextExport(setlist, songs, notation));
     case 'chordpro':
-      return saveTextFile(`${base} (ChordPro).txt`, buildChordProExport(setlist, songs, notation));
+      return saveTextFile(`${base} (ChordPro).txt`, await buildChordProExport(setlist, songs, notation));
     case 'songlist':
       return saveBinaryFile(`${base}${SHARE_EXTENSION}`, sharedFile(setlist, songs), 'application/json');
     case 'pdf-annotated':

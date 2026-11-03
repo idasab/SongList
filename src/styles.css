@@ -1371,13 +1371,6 @@ textarea.note-text {
   display: block;
 }
 
-/* Titel och kompositör står redan överst i låten */
-.abc-block .abcjs-title,
-.abc-block .abcjs-subtitle,
-.abc-block .abcjs-composer {
-  display: none;
-}
-
 .no-chords .abc-block .abcjs-chord {
   display: none;
 }

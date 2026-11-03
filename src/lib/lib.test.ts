@@ -467,8 +467,8 @@ describe('export av setlista', () => {
     expect(isValidEmail('namn exempel.se')).toBe(false);
   });
 
-  it('ChordPro med transponering och new_song', () => {
-    const t = buildChordProExport(setlist, songs, 'international');
+  it('ChordPro med transponering och new_song', async () => {
+    const t = await buildChordProExport(setlist, songs, 'international');
     expect(t).toContain('# Setlista: Spelning');
     expect(t).toContain('{new_song}');
     expect(t).toContain('[G]Solen går [C]upp');

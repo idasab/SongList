@@ -6,9 +6,24 @@ type Abcjs = typeof import('abcjs');
 
 let abcjs: Promise<Abcjs> | null = null;
 
+/** Notbildens bredd i em (som låtens text). Får den inte plats trycks den ihop. */
+export const ABC_WIDTH_EM = 36;
+/** Notraderna ritas så här breda (abcjs-enheter) och skalas sedan till ABC_WIDTH_EM */
+export const ABC_STAFF_WIDTH = 740;
+
 export function loadAbcjs(): Promise<Abcjs> {
   abcjs ??= import('abcjs').then((m) => ((m as { default?: Abcjs }).default ?? m) as Abcjs);
   return abcjs;
+}
+
+/**
+ * Noterna som de ritas: titel och kompositör står redan i låtens huvud, så de tas bort ur
+ * ABC-huvudet (före första K:) i stället för att ta plats ovanför noterna.
+ */
+export function abcForDisplay(abc: string): string {
+  const lines = abc.split('\n');
+  const k = lines.findIndex((l) => /^K:/.test(l));
+  return lines.filter((l, i) => !(i < k && /^[TC]:/.test(l))).join('\n');
 }
 
 /** Sant om källtexten har noter */
@@ -83,4 +98,69 @@ export async function transposeAbcSource(source: string, steps: number): Promise
     lines.splice(from, to - from, ...moved.split('\n'));
   }
   return lines.join('\n');
+}
+
+/** Noterna som bilder (PNG), t.ex. för en PDF. w och h i abcjs-enheter (bredden ABC_STAFF_WIDTH). */
+export interface AbcImage {
+  data: string;
+  w: number;
+  h: number;
+}
+
+/**
+ * Ritar noterna som bilder: en bild med alla noter, eller (perSystem) en bild per notrad, så
+ * att de kan delas mellan sidor. Svart på vitt.
+ */
+export async function renderAbcImages(
+  abc: string,
+  opts: { transpose: number; swedish: boolean; perSystem?: boolean },
+): Promise<AbcImage[]> {
+  const lib = await loadAbcjs();
+  // abcjs mäter texten, så noterna ritas i dokumentet (utom synhåll)
+  const host = document.createElement('div');
+  host.style.cssText = `position:absolute;left:-10000px;top:0;width:${ABC_STAFF_WIDTH}px;color:#000`;
+  document.body.appendChild(host);
+  try {
+    lib.renderAbc(host, abcForDisplay(abc), {
+      visualTranspose: opts.transpose,
+      germanAlphabet: opts.swedish,
+      foregroundColor: '#000000',
+      staffwidth: ABC_STAFF_WIDTH,
+      oneSvgPerLine: !!opts.perSystem,
+      paddingtop: 0,
+      paddingbottom: 0,
+      paddingleft: 0,
+      paddingright: 0,
+    });
+    const out: AbcImage[] = [];
+    for (const svg of host.querySelectorAll('svg')) {
+      const box = svg.getBoundingClientRect();
+      if (!box.width || !box.height) continue;
+      out.push({ data: await svgToPng(svg, box.width, box.height), w: box.width, h: box.height });
+    }
+    return out;
+  } finally {
+    host.remove();
+  }
+}
+
+async function svgToPng(svg: SVGSVGElement, w: number, h: number): Promise<string> {
+  const copy = svg.cloneNode(true) as SVGSVGElement;
+  copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  copy.setAttribute('width', String(w));
+  copy.setAttribute('height', String(h));
+  const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(copy));
+  const img = new Image();
+  img.src = url;
+  await img.decode();
+  // Dubbel upplösning, så att noterna blir skarpa i utskrift
+  const k = 3;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(w * k);
+  canvas.height = Math.ceil(h * k);
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/png');
 }
