@@ -8,7 +8,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { abcToChordPro } from '../lib/abc';
 import { enhancePixels } from '../lib/enhance';
-import { type Staff, findStaves, lineGap, pitchName } from '../lib/staffLines';
+import { type Staff, type StaffPart, findStaves, lineGap, lineY, pitchName } from '../lib/staffLines';
 import { loadPdfJs } from './fileImport';
 import { loadImageToCanvas } from './ocr';
 
@@ -43,7 +43,7 @@ Transcribe exactly what is written; never arrange, simplify or complete the musi
 - Accidentals, ties, slurs, triplets, rests, repeats, voltas (|1 :|2), fermatas, dynamics (!p!, !f!), and inline key or meter changes ([K:D], [M:3/4]).
 Keep one ABC line per printed system, in the same order, so that line breaks match the original. Multiple images or pages are consecutive pages of the same piece unless they are clearly different pieces; transcribe them as one tune.
 
-What you get: each page as a whole, followed by every staff found on it as a separate, sharpened, larger crop, top to bottom. In a crop, the staff's five lines are traced in red and the ledger-line positions (two above and two below) are dashed in blue. The left margin names the pitch of every line and space for a treble clef, the right margin for a bass clef. Use the page to see the layout (systems, clefs, title, tempo) and the crops to read the notes. If a crop has no red lines, or a red line does not lie on a printed staff line, read that staff without the guides. A page without crops must be read from the page itself.
+What you get: each page as a whole, followed by every staff found on it as a separate, sharpened, larger crop, top to bottom. In a crop, the staff's five lines are traced in red and the ledger-line positions (two above and two below) are dashed in blue. The left margin names the pitch of every line and space for a treble clef, the right margin for a bass clef. Use the page to see the layout (systems, clefs, title, tempo) and the crops to read the notes. The lyrics of a staff are below it; text cut off at the top edge of a crop belongs to the staff above. If a crop has no red lines, or a red line does not lie on a printed staff line, read that staff without the guides. A page without crops must be read from the page itself.
 
 Reading the pitches is the hard part, so work like this:
 1. Look at the whole page first: layout, systems, clefs, key and time signatures, voices.
@@ -145,8 +145,8 @@ function inkOf(canvas: HTMLCanvasElement): Uint8Array {
   return ink;
 }
 
-const top = (st: Staff) => Math.min(...st.parts.map((p) => p.lines[0]));
-const bottom = (st: Staff) => Math.max(...st.parts.map((p) => p.lines[4]));
+const top = (st: Staff) => Math.min(...st.parts.flatMap((p) => [lineY(p, 0, p.x0), lineY(p, 0, p.x1)]));
+const bottom = (st: Staff) => Math.max(...st.parts.flatMap((p) => [lineY(p, 4, p.x0), lineY(p, 4, p.x1)]));
 
 /** Varje notrad på sidan som en egen bild, uppifrån och ner, med plats för text och hjälplinjer */
 function staffCrops(page: Page): HTMLCanvasElement[] {
@@ -155,13 +155,12 @@ function staffCrops(page: Page): HTMLCanvasElement[] {
   const staves = findStaves(inkOf(small), small.width, small.height);
   return staves.map((staff, n) => {
     const gap = lineGap(staff.parts[0]);
-    // Upp till grannraderna, men inte in i dem
-    const y0 = Math.max(0, top(staff) - 6 * gap, n > 0 ? bottom(staves[n - 1]) + gap : 0);
-    const y1 = Math.min(small.height, bottom(staff) + 8 * gap, n < staves.length - 1 ? top(staves[n + 1]) - gap : Infinity);
-    const x0 = Math.max(0, staff.parts[0].x0 - 2 * gap);
-    const x1 = Math.min(small.width, staff.parts[staff.parts.length - 1].x1 + 2 * gap);
+    // Hjälplinjer och ackord ovanför, texten under, men inte in i grannraderna. Hela bredden:
+    // linjerna kan saknas där t.ex. en skugga ligger.
+    const y0 = Math.max(0, top(staff) - 4 * gap, n > 0 ? bottom(staves[n - 1]) + gap : 0);
+    const y1 = Math.min(small.height, bottom(staff) + 7 * gap, n < staves.length - 1 ? top(staves[n + 1]) - gap : Infinity);
     // Ur originalet, förstorat högst två gånger (med plats för marginalerna)
-    return withGuides(scaled(page.full, x0 * k, y0 * k, (x1 - x0) * k, (y1 - y0) * k, SEND_MAX - 2 * MARGIN, 2));
+    return withGuides(scaled(page.full, 0, y0 * k, page.full.width, (y1 - y0) * k, SEND_MAX - 2 * MARGIN, 2));
   });
 }
 
@@ -180,10 +179,12 @@ function withGuides(crop: HTMLCanvasElement): HTMLCanvasElement {
   g.fillStyle = '#fff';
   g.fillRect(0, 0, canvas.width, canvas.height);
   g.drawImage(crop, MARGIN, 0);
-  const stroke = (x0: number, x1: number, y: number) => {
+  // En linje step halva linjeavstånd ovanför den nedersta, längs delens lutning
+  const stroke = (part: StaffPart, step: number) => {
+    const y = (x: number) => lineY(part, 4, x) - (step * lineGap(part)) / 2;
     g.beginPath();
-    g.moveTo(MARGIN + x0, y);
-    g.lineTo(MARGIN + x1, y);
+    g.moveTo(MARGIN + part.x0, y(part.x0));
+    g.lineTo(MARGIN + part.x1, y(part.x1));
     g.stroke();
   };
   staves.forEach((staff, n) => {
@@ -192,22 +193,24 @@ function withGuides(crop: HTMLCanvasElement): HTMLCanvasElement {
       g.lineWidth = Math.max(1, gap * 0.07);
       g.strokeStyle = 'rgba(230, 0, 0, 0.6)';
       g.setLineDash([]);
-      for (const y of part.lines) stroke(part.x0, part.x1, y);
+      for (const step of [0, 2, 4, 6, 8]) stroke(part, step);
       g.strokeStyle = 'rgba(0, 90, 255, 0.45)';
       g.setLineDash([gap * 0.5, gap * 0.4]);
-      for (const step of [-2, -4, 10, 12]) stroke(part.x0, part.x1, part.lines[4] - (step * gap) / 2);
+      for (const step of [-2, -4, 10, 12]) stroke(part, step);
     }
-    // Tonnamnen till vänster och höger, men inte in över grannraderna
+    // Tonnamnen till vänster och höger, vid notradens kant, men inte in över grannraderna
+    const first = staff.parts[0];
+    const last = staff.parts[staff.parts.length - 1];
     const sides = [
-      { part: staff.parts[0], clef: 'treble', x: MARGIN - 6, align: 'right' as const, at: 0 },
-      { part: staff.parts[staff.parts.length - 1], clef: 'bass', x: MARGIN + crop.width + 6, align: 'left' as const, at: -1 },
+      { part: first, edge: first.x0, clef: 'treble', x: MARGIN - 6, align: 'right' as const, at: 0 },
+      { part: last, edge: last.x1, clef: 'bass', x: MARGIN + crop.width + 6, align: 'left' as const, at: -1 },
     ];
-    for (const { part, clef, x, align, at } of sides) {
+    for (const { part, edge, clef, x, align, at } of sides) {
       const gap = lineGap(part);
-      const above = staves[n - 1]?.parts.at(at)?.lines[4];
-      const below = staves[n + 1]?.parts.at(at)?.lines[0];
-      const minY = above === undefined ? 0 : (above + part.lines[0]) / 2;
-      const maxY = below === undefined ? canvas.height : (below + part.lines[4]) / 2;
+      const prev = staves[n - 1]?.parts.at(at);
+      const next = staves[n + 1]?.parts.at(at);
+      const minY = prev ? (lineY(prev, 4, edge) + lineY(part, 0, edge)) / 2 : 0;
+      const maxY = next ? (lineY(next, 0, edge) + lineY(part, 4, edge)) / 2 : canvas.height;
       const size = Math.max(9, Math.min(18, gap * 0.48));
       g.font = `bold ${size}px monospace`;
       g.textAlign = align;
@@ -215,7 +218,7 @@ function withGuides(crop: HTMLCanvasElement): HTMLCanvasElement {
       for (let step = -4; step <= 12; step++) {
         // Är raderna för tätt står bara linjernas namn
         if (gap / 2 < size * 0.9 && step % 2) continue;
-        const y = part.lines[4] - (step * gap) / 2;
+        const y = lineY(part, 4, edge) - (step * gap) / 2;
         if (y < minY || y > maxY || y < size / 2 || y > canvas.height - size / 2) continue;
         g.fillStyle = step % 2 ? '#333' : step >= 0 && step <= 8 ? '#d00000' : '#0050e0';
         g.fillText(pitchName(clef, step), x, y);
