@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, Check, ChevronDown, ChevronUp, ClipboardPaste, FileMusic, FileUp, Image as ImageIcon, Lightbulb, Pencil, X } from 'lucide-react';
+import { Camera, Check, ChevronDown, ChevronUp, ClipboardPaste, FileMusic, FileUp, Image as ImageIcon, Lightbulb, Loader2, Pencil, X } from 'lucide-react';
 import { SongRenderer } from '../components/SongRenderer';
 import { TagInput } from '../components/TagInput';
 import { CategorySelect, SAME_AS_ALL } from '../components/CategorySelect';
@@ -145,6 +145,8 @@ export function ImportPage() {
   /** cancel: kan avbrytas; omr: notläsning (inget om språkdata för textigenkänning) */
   const [busy, setBusy] = useState<{ message: string; progress?: number; cancel?: () => void; omr?: boolean } | null>(null);
   const [readingNotes, setReadingNotes] = useState(false);
+  /** Varför notläsningen misslyckades; visas i rutan, som är öppen under hela läsningen */
+  const [notesError, setNotesError] = useState('');
   const apiKey = useStore((s) => s.settings.anthropicApiKey);
   const [keepOriginals, setKeepOriginals] = useState(importPrefs.keepOriginals);
 
@@ -242,6 +244,11 @@ export function ImportPage() {
   };
 
   // --- Notläsning: Claude läser noterna på foton eller PDF:er ---
+  const failNotes = (e: unknown, prefix: string) => {
+    setBusy(null);
+    setNotesError(`${prefix}: ${e instanceof Error ? e.message : String(e)}`);
+  };
+
   const readNotes = async (sources: SheetSource[], title?: string) => {
     const ctrl = new AbortController();
     const show = (message: string) => setBusy({ message, cancel: () => ctrl.abort(), omr: true });
@@ -250,27 +257,29 @@ export function ImportPage() {
       const { readSheetMusic } = await loadOmr();
       const content = await readSheetMusic(sources, apiKey ?? '', { title, onProgress: show, signal: ctrl.signal });
       setBusy(null);
+      setReadingNotes(false);
       setDraft({ content, tags });
       navigate('/new');
     } catch (e) {
-      setBusy(null);
-      if (ctrl.signal.aborted) return;
-      toastError(e, 'Noterna kunde inte läsas');
+      if (ctrl.signal.aborted) setBusy(null);
+      else failNotes(e, 'Noterna kunde inte läsas');
     }
   };
 
   const scanNotes = async () => {
-    setReadingNotes(false);
+    setNotesError('');
     try {
       const res = await SongListNative.scanDocument({ readText: false });
       if (res.images?.length) await readNotes(res.images.map((dataUrl) => ({ kind: 'image', dataUrl })));
+      // En äldre version av appen läser texten i stället för att ge bilderna
+      else if (res.pages.length) setNotesError('Skannern gav inga bilder. Appen behöver uppdateras (byggas om i Xcode).');
     } catch (e) {
-      if ((e as { code?: string }).code !== 'CANCELLED') toastError(e, 'Skanningen misslyckades');
+      if ((e as { code?: string }).code !== 'CANCELLED') failNotes(e, 'Skanningen misslyckades');
     }
   };
 
   const pickNotes = async (capture: boolean) => {
-    setReadingNotes(false);
+    setNotesError('');
     const files = await pickFiles({ accept: capture ? 'image/*' : 'application/pdf,image/*', multiple: !capture, capture });
     if (!files.length) return;
     try {
@@ -284,8 +293,7 @@ export function ImportPage() {
       );
       await readNotes(sources, files.length === 1 && !capture ? titleFromFileName(files[0].name) : undefined);
     } catch (e) {
-      setBusy(null);
-      toastError(e, 'Filen kunde inte läsas');
+      failNotes(e, 'Filen kunde inte läsas');
     }
   };
 
@@ -478,7 +486,13 @@ export function ImportPage() {
               <b>Läs från bild</b>
               <span>Välj ett foto eller en skärmbild med text och ackord</span>
             </button>
-            <button className="big-action" onClick={() => setReadingNotes(true)}>
+            <button
+              className="big-action"
+              onClick={() => {
+                setNotesError('');
+                setReadingNotes(true);
+              }}
+            >
               <FileMusic size={22} />
               <b>Läs in noter</b>
               <span>Fotografera noter, även flerstämmiga, och få dem som noter som går att transponera och spela upp</span>
@@ -486,21 +500,59 @@ export function ImportPage() {
           </div>
 
           {readingNotes && (
-            <Sheet title="Läs in noter" onClose={() => setReadingNotes(false)}>
-              {apiKey ? (
-                <>
-                  <p className="muted small-text" style={{ marginTop: 0 }}>
-                    Noterna läses av Claude (Anthropic) och kan sedan rättas i editorn innan du sparar. Kräver internet. Flera
-                    sidor av samma stycke kan läsas på en gång.
-                  </p>
-                  <div className="btn-row">
+            <Sheet
+              title="Läs in noter"
+              onClose={() => {
+                // Att stänga rutan avbryter läsningen
+                busy?.cancel?.();
+                setReadingNotes(false);
+              }}
+              footer={
+                // Knapparna står fast nederst, så att de syns även när texten är stor
+                apiKey &&
+                !busy?.omr && (
+                  <div className="notes-actions">
                     <button className="btn primary" onClick={nativeScanner ? scanNotes : () => void pickNotes(true)}>
-                      <Camera size={18} /> {nativeScanner ? 'Skanna notblad' : 'Fotografera'}
+                      <Camera size={18} /> Fotografera
                     </button>
                     <button className="btn" onClick={() => void pickNotes(false)}>
                       <ImageIcon size={18} /> Välj bilder eller PDF
                     </button>
                   </div>
+                )
+              }
+            >
+              {busy?.omr ? (
+                <div className="notes-busy">
+                  <Loader2 size={28} className="spin" aria-hidden />
+                  <b>{busy.message}</b>
+                  <p className="muted small-text">
+                    Claude läser noterna. Det tar oftast en till ett par minuter, längre för flera sidor eller många stämmor.
+                    Låt appen vara öppen så länge.
+                  </p>
+                  {busy.cancel && (
+                    <button className="btn small" onClick={busy.cancel}>
+                      Avbryt
+                    </button>
+                  )}
+                </div>
+              ) : apiKey ? (
+                <>
+                  <ol className="notes-steps">
+                    <li>
+                      <b>Fotografera notbladet</b>
+                      {nativeScanner && ' (kameran hittar papperets kanter och rätar upp det)'} eller{' '}
+                      <b>välj bilder eller en PDF</b> som du redan har. Flera sidor av samma stycke kan läsas på en gång.
+                    </li>
+                    <li>
+                      <b>Claude läser noterna</b>, oftast på en till ett par minuter. Kräver internet.
+                    </li>
+                    <li>
+                      <b>Kontrollera i editorn</b>: lyssna, rätta om något blev fel och spara låten. Sedan kan den
+                      transponeras som vanligt.
+                    </li>
+                  </ol>
+                  {notesError && <p className="notes-error">{notesError}</p>}
                 </>
               ) : (
                 <>
@@ -516,7 +568,8 @@ export function ImportPage() {
             </Sheet>
           )}
 
-          {busy && (
+          {/* Notläsningen visas i sin egen ruta */}
+          {busy && !busy.omr && (
             <div className="card">
               <b>{busy.message}</b>
               {busy.progress !== undefined && (
@@ -524,14 +577,9 @@ export function ImportPage() {
                   <div style={{ width: `${Math.round(busy.progress * 100)}%` }} />
                 </div>
               )}
-              {!nativeScanner && !busy.omr && (
+              {!nativeScanner && (
                 <p className="muted small-text" style={{ marginBottom: 0 }}>
                   Första gången laddas språkdata för textigenkänning ner (några MB).
-                </p>
-              )}
-              {busy.omr && (
-                <p className="muted small-text" style={{ marginBottom: 0 }}>
-                  Det kan ta ett par minuter, särskilt för flera sidor eller många stämmor.
                 </p>
               )}
               {busy.cancel && (
