@@ -76,10 +76,20 @@ export interface LineMetrics {
   tops: number[];
   fontPx: number;
   lefts?: number[];
+  /**
+   * Rader som ritas i en annan skala än texten (t.ex. noter som trycks ihop på en smal skärm):
+   * 1 em på raden = fontPx * scale. Saknas = 1.
+   */
+  scales?: number[];
 }
 
 function leftOf(m: LineMetrics, line: number): number {
   return m.lefts?.[Math.min(line, m.lefts.length - 1)] ?? 0;
+}
+
+/** Hur många px 1 em är på raden */
+export function lineUnit(m: LineMetrics, line: number): number {
+  return m.fontPx * (m.scales?.[Math.min(line, m.scales.length - 1)] ?? 1);
 }
 
 /** Hittar raden som en punkt (px relativt låten) hör till och räknar ut ankaret. */
@@ -96,33 +106,38 @@ export function anchorAt(m: LineMetrics, x: number, y: number): Anchor {
   }
   if (line < 0) line = 0;
   const top = m.tops[line] ?? 0;
-  return { line, dx: (x - leftOf(m, line)) / m.fontPx, dy: (y - top) / m.fontPx };
+  const u = lineUnit(m, line);
+  return { line, dx: (x - leftOf(m, line)) / u, dy: (y - top) / u };
 }
 
 /** Ankarets position i px relativt låten. */
 export function anchorToPx(m: LineMetrics, a: Anchor): { x: number; y: number } {
   const top = m.tops[Math.min(a.line, m.tops.length - 1)] ?? 0;
-  return { x: leftOf(m, a.line) + a.dx * m.fontPx, y: top + a.dy * m.fontPx };
+  const u = lineUnit(m, a.line);
+  return { x: leftOf(m, a.line) + a.dx * u, y: top + a.dy * u };
 }
 
 /** Skapar ett streck av punkter i px. */
 export function strokeFromPx(m: LineMetrics, px: number[], color: InkColor, width: number, id: string): Stroke {
   const anchor = anchorAt(m, px[0], px[1]);
   const origin = anchorToPx(m, anchor);
+  const u = lineUnit(m, anchor.line);
   const points: number[] = [];
   for (let i = 0; i < px.length; i += 2) {
-    points.push(round((px[i] - origin.x) / m.fontPx), round((px[i + 1] - origin.y) / m.fontPx));
+    points.push(round((px[i] - origin.x) / u), round((px[i + 1] - origin.y) / u));
   }
-  return { id, anchor, points, color, width };
+  // Bredden räknas i radens em, så att strecket ser likadant ut när det ritas
+  return { id, anchor, points, color, width: round((width * m.fontPx) / u) };
 }
 
 /** Streckets punkter i px relativt låten. */
 export function strokeToPx(m: LineMetrics, s: Stroke): number[] {
   const o = anchorToPx(m, s.anchor);
+  const u = lineUnit(m, s.anchor.line);
   const out = new Array<number>(s.points.length);
   for (let i = 0; i < s.points.length; i += 2) {
-    out[i] = o.x + s.points[i] * m.fontPx;
-    out[i + 1] = o.y + s.points[i + 1] * m.fontPx;
+    out[i] = o.x + s.points[i] * u;
+    out[i + 1] = o.y + s.points[i + 1] * u;
   }
   return out;
 }

@@ -4,6 +4,7 @@ import {
   NOTE_COLORS,
   anchorToPx,
   clampNoteCenter,
+  lineUnit,
   smoothPath,
   strokeToPx,
   type Annotations,
@@ -19,8 +20,11 @@ export function useLineMetrics(ref: RefObject<HTMLDivElement | null>, deps: unkn
     if (!el) return;
     const measure = () => {
       const box = el.getBoundingClientRect();
+      const fontPx = parseFloat(getComputedStyle(el).fontSize) || 16;
       const tops: number[] = [];
       const lefts: number[] = [];
+      // Rader som ska vara en viss bredd i em men kan tryckas ihop (data-em-width, t.ex. noter)
+      const scales: number[] = [];
       // Spalter: radens spalt räknas fram från var raden börjar
       const body = el.querySelector<HTMLElement>('.song-body.two-col');
       const bodyBox = body?.getBoundingClientRect();
@@ -31,17 +35,23 @@ export function useLineMetrics(ref: RefObject<HTMLDivElement | null>, deps: unkn
         const i = Number(n.dataset.ln);
         tops[i] = r.top - box.top;
         lefts[i] = step && bodyBox ? (bodyBox.left - box.left) + Math.floor((r.left - bodyBox.left + 1) / step) * step : 0;
+        const em = Number(n.dataset.emWidth);
+        scales[i] = em > 0 && r.width > 0 ? Math.min(1, r.width / (em * fontPx)) : 1;
       });
       for (let i = 0; i < tops.length; i++) {
         if (tops[i] === undefined) tops[i] = i ? tops[i - 1] : 0;
         if (lefts[i] === undefined) lefts[i] = i ? lefts[i - 1] : 0;
+        // Rader utan eget element (t.ex. resten av noterna) hör till raden före
+        if (scales[i] === undefined) scales[i] = i ? scales[i - 1] : 1;
       }
-      const fontPx = parseFloat(getComputedStyle(el).fontSize) || 16;
+      const scaled = scales.some((s) => s !== 1);
       const same = (a: number[] | undefined, b: number[]) => !!a && a.length === b.length && a.every((t, i) => Math.abs(t - b[i]) < 0.5);
+      const sameScale = (a: number[] | undefined) =>
+        scaled ? !!a && a.length === scales.length && a.every((v, i) => Math.abs(v - scales[i]) < 0.001) : !a;
       setMetrics((prev) =>
-        prev && prev.fontPx === fontPx && same(prev.tops, tops) && same(prev.lefts ?? tops.map(() => 0), lefts)
+        prev && prev.fontPx === fontPx && same(prev.tops, tops) && same(prev.lefts ?? tops.map(() => 0), lefts) && sameScale(prev.scales)
           ? prev
-          : { tops, fontPx, ...(step ? { lefts } : {}) },
+          : { tops, fontPx, ...(step ? { lefts } : {}), ...(scaled ? { scales } : {}) },
       );
     };
     measure();
@@ -149,7 +159,7 @@ export function AnnotationLayer({
             key={s.id}
             d={smoothPath(strokeToPx(metrics, s))}
             stroke={INK_COLORS[s.color]}
-            strokeWidth={s.width * fp}
+            strokeWidth={s.width * lineUnit(metrics, s.anchor.line)}
             fill="none"
             strokeLinecap="round"
             strokeLinejoin="round"

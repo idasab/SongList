@@ -13,6 +13,7 @@ import {
   clamp,
   clampNoteCenter,
   hitStroke,
+  lineUnit,
   strokeFromPx,
   strokeToPx,
   type Annotations,
@@ -225,7 +226,7 @@ export function useAnnotationGestures(options: GestureOptions) {
     if (!m) return;
     const ann = current();
     const tol = Math.max(14, m.fontPx * 0.6);
-    const keep = ann.strokes.filter((s) => !hitStroke(strokeToPx(m, s), x, y, tol + (s.width * m.fontPx) / 2));
+    const keep = ann.strokes.filter((s) => !hitStroke(strokeToPx(m, s), x, y, tol + (s.width * lineUnit(m, s.anchor.line)) / 2));
     if (keep.length !== ann.strokes.length) {
       st.current.changed = true;
       push({ ...ann, strokes: keep }, false);

@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { loadAbcjs } from '../lib/abc';
 
+/** Notbildens bredd i em. Får den inte plats trycks den ihop; anteckningarna följer med (data-em-width). */
+const WIDTH_EM = 36;
+
 /** Noter i ABC-format som notskrift. Bredden följer textstorleken (em), så att anteckningar ligger kvar. */
 export function AbcNotation({ abc, transpose, swedish, ln }: { abc: string; transpose: number; swedish: boolean; ln: number }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -31,7 +34,7 @@ export function AbcNotation({ abc, transpose, swedish, ln }: { abc: string; tran
     };
   }, [abc, transpose, swedish]);
   return (
-    <div className="abc-wrap" data-ln={ln}>
+    <div className="abc-wrap" data-ln={ln} data-em-width={WIDTH_EM} style={{ width: `${WIDTH_EM}em` }}>
       <div className="abc-block" ref={ref} />
       {error && <div className="muted small-text">{error}</div>}
     </div>

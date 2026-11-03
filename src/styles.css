@@ -1361,10 +1361,9 @@ textarea.note-text {
   line-height: 1.3;
 }
 
-/* Noter (ABC). Bredden i em: följer textstorleken, så att anteckningar ligger kvar på noterna */
+/* Noter (ABC). Bredden (i em) sätts i AbcNotation */
 .abc-wrap {
   margin: 0.4em 0 0.8em;
-  width: 36em;
   max-width: 100%;
 }
 
