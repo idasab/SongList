@@ -324,7 +324,8 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
         // readText: false (t.ex. för noter): bara bilderna av alla sidor, ingen textigenkänning
         if !(call.getBool("readText") ?? true) {
             queue.async {
-                let pageImages = images.compactMap { self.jpegDataURL($0, maxSize: 2400) }
+                // Stora och skarpa: Claude zoomar in på notraderna
+                let pageImages = images.compactMap { self.jpegDataURL($0, maxSize: 3600, quality: 0.9) }
                 call.resolve(["pages": [] as [Any], "images": pageImages])
             }
             return
@@ -513,7 +514,7 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
         }
     }
 
-    private func jpegDataURL(_ image: UIImage, maxSize: CGFloat) -> String? {
+    private func jpegDataURL(_ image: UIImage, maxSize: CGFloat, quality: CGFloat = 0.7) -> String? {
         let size = image.size
         let scale = min(1, maxSize / max(size.width, size.height))
         let target = CGSize(width: size.width * scale, height: size.height * scale)
@@ -522,7 +523,7 @@ public class SongListNativePlugin: CAPPlugin, CAPBridgedPlugin, VNDocumentCamera
         let resized = UIGraphicsImageRenderer(size: target, format: format).image { _ in
             image.draw(in: CGRect(origin: .zero, size: target))
         }
-        guard let data = resized.jpegData(compressionQuality: 0.7) else { return nil }
+        guard let data = resized.jpegData(compressionQuality: quality) else { return nil }
         return "data:image/jpeg;base64," + data.base64EncodedString()
     }
 }
