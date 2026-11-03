@@ -4,8 +4,9 @@
 //
 // Claude ser varje sida i sin helhet och kan sedan zooma in (verktyget zoom) på notraderna:
 // utsnitten tas ur originalbilden i högre upplösning, så att notlinjerna går att räkna.
+// Med verktyget render ritas Claudes egna noter upp, så att de kan jämföras med originalet.
 import Anthropic from '@anthropic-ai/sdk';
-import { abcToChordPro } from '../lib/abc';
+import { abcToChordPro, loadAbcjs, renderAbcImages } from '../lib/abc';
 import { loadPdfJs } from './fileImport';
 import { loadImageToCanvas } from './ocr';
 
@@ -20,8 +21,8 @@ const MODEL = 'claude-opus-5-5';
 const SEND_MAX = 2576;
 /** Originalet sparas så här stort, så att utsnitten blir skarpare än översikten (inom iOS gräns för canvas) */
 const FULL_MAX = 3600;
-/** Så många gånger Claude kan be om utsnitt innan noterna måste skrivas */
-const MAX_ROUNDS = 8;
+/** Så många gånger Claude kan använda verktygen innan noterna måste skrivas */
+const MAX_ROUNDS = 12;
 
 const SYSTEM = `You transcribe printed or handwritten sheet music from photos and PDFs into ABC notation (ABC standard 2.1, as rendered by abcjs).
 
@@ -37,7 +38,11 @@ Reading the pitches is the hard part, so work like this:
 1. Look at the whole page first: layout, systems, clefs, key and time signatures, voices.
 2. Use the zoom tool on every system before you write its notes: one zoom per system covering all its staves with a little margin. Ask for the zooms of several systems in the same turn. Zoom further into any passage that is still unclear (crowded chords, ledger lines, small accidentals).
 3. Read each note from its position on the staff: count the lines and spaces (and ledger lines) from the clef, then apply the key signature and any accidental earlier in the same bar. Never fill in a melody from the lyrics, the title or a tune you recognise; the printed notes always win.
-4. Handwritten music: noteheads vary in size and shape, and staff lines may be uneven, slanted or curved across a photo. Judge each notehead by its centre relative to the nearest lines at that point of the staff (not by a straight line across the page), and compare it with its neighbours: is it on the same line, a step up or down, or a leap? Stems may sit to either side and be uneven; read the pitch from the head, not the stem.
+4. Handwritten music: noteheads vary in size and shape and are often just a small dot or a tiny circle at the end of the stem; staff lines may be uneven, slanted or curved across a photo. The pitch is where that dot sits: at the bottom of a stem that goes up, at the top of a stem that goes down, and at the end opposite the beam for beamed notes. Never read the pitch from where the stem or beam ends. Judge each dot by its centre relative to the nearest lines at that point of the staff (not by a straight line across the page), and compare it with its neighbours: is it on the same line, a step up or down, or a leap?
+5. Several dots on one stem are a chord in one voice: write it as [GBd]. Use separate voices only where stems point in opposite directions with different rhythms.
+6. A clef or key signature that has been redrawn or scribbled over at the start of a staff normally repeats the key signature of the other staves; only change key when a new signature is clearly written, usually after a double bar. Ignore the paper's own printing, such as the publisher name on blank manuscript paper.
+7. Use the lyrics to count the notes (one syllable per note, except under slurs and melismas), but never to guess pitches.
+8. Check your work before you answer: call the render tool with your complete ABC, then compare each rendered system note by note with the zoomed original (zoom again where needed) and correct every difference in pitch, rhythm, accidentals and chords. Render again after larger corrections.
 ABC pitch names are absolute and do not change with the clef. Treble clef lines from the bottom are E G B d f, spaces F A c e; middle C (first ledger line below) is C. Bass clef lines from the bottom are G,, B,, D, F, A,, spaces A,, C, E, G,; middle C (first ledger line above) is C. For a treble clef with an 8 below (tenor), use clef=treble-8 and write the notes as they appear on the staff, as for an ordinary treble clef.
 Check every bar: the durations in each voice must add up to the meter (allowing pickup bars). Where something is unreadable, write your best reading and add a % comment on the line before it describing the uncertainty.
 
@@ -60,6 +65,19 @@ const ZOOM_TOOL: Anthropic.Beta.BetaTool = {
     additionalProperties: false,
   },
   // Inmatningen strömmas direkt; den kontrolleras innan utsnittet tas
+  eager_input_streaming: true,
+};
+
+const RENDER_TOOL: Anthropic.Beta.BetaTool = {
+  name: 'render',
+  description:
+    'Renders ABC notation the way the app will show it and returns one image per system, plus any parser warnings. Use it to compare your transcription with the original.',
+  input_schema: {
+    type: 'object',
+    properties: { abc: { type: 'string', description: 'The complete ABC tune' } },
+    required: ['abc'],
+    additionalProperties: false,
+  },
   eager_input_streaming: true,
 };
 
@@ -148,7 +166,40 @@ async function loadPages(sources: SheetSource[]): Promise<Page[]> {
 }
 
 function imageBlock(dataUrl: string): Anthropic.Beta.BetaImageBlockParam {
-  return { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64Of(dataUrl).data } };
+  const { mime, data } = base64Of(dataUrl);
+  return { type: 'image', source: { type: 'base64', media_type: mime === 'image/png' ? 'image/png' : 'image/jpeg', data } };
+}
+
+/** abcjs varningar är HTML */
+function plainText(html: string): string {
+  return new DOMParser().parseFromString(html, 'text/html').body.textContent ?? html;
+}
+
+/** Claudes noter uppritade, en bild per notrad, och varningarna från tolkningen */
+async function render(block: Anthropic.Beta.BetaToolUseBlock): Promise<Anthropic.Beta.BetaToolResultBlockParam> {
+  const abc = (block.input as Record<string, unknown> | null)?.abc;
+  if (typeof abc !== 'string' || !/^K:/m.test(abc)) {
+    return { type: 'tool_result', tool_use_id: block.id, is_error: true, content: 'abc must be a complete ABC tune with a K: line.' };
+  }
+  const lib = await loadAbcjs();
+  const warnings = lib.renderAbc('*', abc)[0]?.warnings ?? [];
+  const images = await renderAbcImages(abc, { transpose: 0, swedish: false, perSystem: true });
+  return {
+    type: 'tool_result',
+    tool_use_id: block.id,
+    content: [
+      {
+        type: 'text',
+        text: warnings.length
+          ? `Parser warnings:\n${warnings.map((w) => `- ${plainText(w)}`).join('\n')}`
+          : 'No parser warnings.',
+      },
+      ...images.flatMap((im, i): (Anthropic.Beta.BetaTextBlockParam | Anthropic.Beta.BetaImageBlockParam)[] => [
+        { type: 'text', text: `Rendered system ${i + 1}:` },
+        imageBlock(im.data),
+      ]),
+    ],
+  };
 }
 
 /** Utsnittet Claude bad om, eller ett fel om rutan inte går att använda */
@@ -231,7 +282,7 @@ export async function readSheetMusic(
           // Bilderna skickas om varje varv; cachen gör det billigare
           cache_control: { type: 'ephemeral' },
           system: SYSTEM,
-          tools: [ZOOM_TOOL],
+          tools: [ZOOM_TOOL, RENDER_TOOL],
           messages,
         },
         { signal: opts.signal },
@@ -251,12 +302,21 @@ export async function readSheetMusic(
         return abcToChordPro(abcFromReply(text), opts.title);
       }
       if (round > MAX_ROUNDS) throw new OmrError('Noterna tog för lång tid att läsa. Prova med färre sidor.');
-      zooms += asks.length;
-      opts.onProgress?.(`Zoomar in… (${zooms} utsnitt)`);
-      // Svaret läggs till oförändrat (med tankarna), sedan utsnitten
+      const checking = asks.some((b) => b.name === 'render');
+      zooms += asks.filter((b) => b.name === 'zoom').length;
+      opts.onProgress?.(checking ? 'Jämför noterna med originalet…' : `Zoomar in… (${zooms} utsnitt)`);
+      // Svaret läggs till oförändrat (med tankarna), sedan resultaten
       messages.push({ role: 'assistant', content: msg.content });
-      const results: Anthropic.Beta.BetaContentBlockParam[] = asks.map((b) => zoom(pages, b));
-      if (round === MAX_ROUNDS) results.push({ type: 'text', text: 'No more zooms are available. Write the final ABC now.' });
+      const results: Anthropic.Beta.BetaContentBlockParam[] = await Promise.all(
+        asks.map((b) =>
+          b.name === 'render'
+            ? render(b)
+            : b.name === 'zoom'
+              ? zoom(pages, b)
+              : { type: 'tool_result' as const, tool_use_id: b.id, is_error: true, content: `Unknown tool ${b.name}` },
+        ),
+      );
+      if (round === MAX_ROUNDS) results.push({ type: 'text', text: 'The tools are no longer available. Write the final ABC now.' });
       messages.push({ role: 'user', content: results });
     }
   } catch (e) {
