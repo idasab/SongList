@@ -50,8 +50,8 @@ export function EditorPage() {
   const [content, setContent] = useState(initial.current.content);
   const [tags, setTags] = useState<string[]>(initial.current.tags);
   const [categoryId, setCategoryId] = useState(initial.current.categoryId);
-  const [view, setView] = useState<'edit' | 'preview'>('edit');
-  const [showMeta, setShowMeta] = useState(true);
+  const [view, setView] = useState<'edit' | 'preview'>(!id && draft?.preview ? 'preview' : 'edit');
+  const [showMeta, setShowMeta] = useState(!(!id && draft?.preview));
   const [showImage, setShowImage] = useState(true);
   const [saved, setSaved] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);

@@ -258,7 +258,7 @@ export function ImportPage() {
       const { content, cost } = await readSheetMusic(sources, apiKey ?? '', { title, onProgress: show, signal: ctrl.signal });
       setBusy(null);
       setReadingNotes(false);
-      setDraft({ content, tags });
+      setDraft({ content, tags, preview: true });
       navigate('/new');
       toast(`Noterna är inlästa. Det kostade ungefär ${cost.toLocaleString('sv-SE', { maximumFractionDigits: 2, minimumFractionDigits: 2 })} $.`);
     } catch (e) {

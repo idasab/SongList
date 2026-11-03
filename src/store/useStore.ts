@@ -27,6 +27,8 @@ export interface Draft {
   importItemId?: string;
   /** Originalfil som ska sparas med låten */
   attachment?: SongAttachment;
+  /** Editorn öppnas i Visa med uppgifterna dolda (t.ex. inlästa noter, som ska ses i sin helhet) */
+  preview?: boolean;
 }
 
 /** En låt som väntar i importlistan. */
