@@ -53,9 +53,10 @@ export function EditorPage() {
   const [content, setContent] = useState(initial.current.content);
   const [tags, setTags] = useState<string[]>(initial.current.tags);
   const [categoryId, setCategoryId] = useState(initial.current.categoryId);
-  const [view, setView] = useState<'edit' | 'preview'>(!id && draft?.preview ? 'preview' : 'edit');
-  // Med noter är det noterna man vill se: uppgifterna är dolda från början
-  const [showMeta, setShowMeta] = useState(!(!id && draft?.preview) && !hasAbc(initial.current.content));
+  // Med noter är det noterna man vill se och rätta: Visa, med uppgifterna dolda från början
+  const notesFirst = (!id && !!draft?.preview) || hasAbc(initial.current.content);
+  const [view, setView] = useState<'edit' | 'preview'>(notesFirst ? 'preview' : 'edit');
+  const [showMeta, setShowMeta] = useState(!notesFirst);
   const [showImage, setShowImage] = useState(true);
   const [saved, setSaved] = useState(false);
   /** Så många halvtoner låten har transponerats här (sedan editorn öppnades) */
