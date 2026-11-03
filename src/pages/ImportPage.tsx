@@ -497,6 +497,9 @@ export function ImportPage() {
               <FileMusic size={22} />
               <b>Läs in noter</b>
               <span>Fotografera noter, även flerstämmiga, och få dem som noter som går att transponera och spela upp</span>
+              <span>
+                <i>OBS! Detta är en grov inläsning, justeringar kan behövas.</i>
+              </span>
             </button>
           </div>
 
