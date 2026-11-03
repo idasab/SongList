@@ -255,11 +255,12 @@ export function ImportPage() {
     try {
       show('Läser noterna…');
       const { readSheetMusic } = await loadOmr();
-      const content = await readSheetMusic(sources, apiKey ?? '', { title, onProgress: show, signal: ctrl.signal });
+      const { content, cost } = await readSheetMusic(sources, apiKey ?? '', { title, onProgress: show, signal: ctrl.signal });
       setBusy(null);
       setReadingNotes(false);
       setDraft({ content, tags });
       navigate('/new');
+      toast(`Noterna är inlästa. Det kostade ungefär ${cost.toLocaleString('sv-SE', { maximumFractionDigits: 2, minimumFractionDigits: 2 })} $.`);
     } catch (e) {
       if (ctrl.signal.aborted) setBusy(null);
       else failNotes(e, 'Noterna kunde inte läsas');
