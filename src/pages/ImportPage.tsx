@@ -22,7 +22,9 @@ import { newId, songFiles, type Song, type SongAttachment } from '../lib/model';
 import { groupHeads, joinsPrevious, pieceTitle, samePieceTitles, sortByPage } from '../lib/fileGroups';
 import { canUseDocumentScanner, recognizeImageFile, scanDocument } from '../services/ocr';
 import { pickFiles, readFileAsDataUrl } from '../services/files';
-import { OmrError, imageFileToSource, readSheetMusic, type SheetSource } from '../services/omr';
+// Notläsningen (med Anthropics SDK) laddas först när den används
+import type { SheetSource } from '../services/omr';
+const loadOmr = () => import('../services/omr');
 import { SongListNative } from '../native/songlistNative';
 import { attachmentToFile, expandFiles, interpretFile } from '../services/fileImport';
 import { allTags, categoryName, liveSongs, normalizeTags, useStore, type DuplicateAction, type ImportQueueItem } from '../store/useStore';
@@ -245,13 +247,14 @@ export function ImportPage() {
     const show = (message: string) => setBusy({ message, cancel: () => ctrl.abort(), omr: true });
     try {
       show('Läser noterna…');
+      const { readSheetMusic } = await loadOmr();
       const content = await readSheetMusic(sources, apiKey ?? '', { title, onProgress: show, signal: ctrl.signal });
       setBusy(null);
       setDraft({ content, tags });
       navigate('/new');
     } catch (e) {
       setBusy(null);
-      if (e instanceof OmrError && e.message === 'Avbrutet') return;
+      if (ctrl.signal.aborted) return;
       toastError(e, 'Noterna kunde inte läsas');
     }
   };
@@ -276,7 +279,7 @@ export function ImportPage() {
         files.map(async (f) =>
           f.type === 'application/pdf' || /\.pdf$/i.test(f.name)
             ? { kind: 'pdf' as const, dataUrl: await readFileAsDataUrl(f) }
-            : imageFileToSource(f),
+            : (await loadOmr()).imageFileToSource(f),
         ),
       );
       await readNotes(sources, files.length === 1 && !capture ? titleFromFileName(files[0].name) : undefined);
