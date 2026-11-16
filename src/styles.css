@@ -2248,7 +2248,24 @@ textarea.note-text {
 }
 
 .select-bar .btn {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Smal skärm: ikonen ovanför texten, så att alla knappar får plats */
+@media (max-width: 520px) {
+  .select-bar {
+    gap: 6px;
+  }
+
+  .select-bar .btn {
+    flex-direction: column;
+    gap: 2px;
+    min-height: 50px;
+    padding: 4px 2px;
+    border-radius: 12px;
+    font-size: calc(12px * var(--ui));
+  }
 }
 
 /* --- Metronom --- */

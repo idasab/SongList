@@ -1,8 +1,9 @@
 import { memo, useCallback, useDeferredValue, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Check, Files, Folder, ListChecks, ListMusic, Music, Plus, Search, SlidersHorizontal, Tag, Tags, User, X } from 'lucide-react';
+import { Check, Files, Folder, ListChecks, ListMusic, Music, Plus, Search, Share, SlidersHorizontal, Tag, Tags, User, X } from 'lucide-react';
 import { Header, Sheet, toast } from '../components/ui';
 import { TagInput } from '../components/TagInput';
+import { ExportSheet } from '../components/ExportSheet';
 import { CategorySelect } from '../components/CategorySelect';
 import { NO_ARTIST_GROUP, NO_CATEGORY, filterSongs, groupLetter, keyIdLabel, keysInLibrary, songKey, sortSongs } from '../lib/search';
 import { formatKey } from '../lib/chords';
@@ -83,7 +84,7 @@ export function LibraryPage() {
   // Markera låtar: i den ordning de valdes (blir ordningen i en ny setlista)
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
-  const [sheet, setSheet] = useState<'tags' | 'category' | null>(null);
+  const [sheet, setSheet] = useState<'tags' | 'category' | 'share' | null>(null);
   const toggleSelected = useCallback(
     (id: string) => setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id])),
     [],
@@ -374,6 +375,9 @@ export function LibraryPage() {
           <button className="btn" disabled={!selected.length} onClick={() => setSheet('category')}>
             <Tag size={18} /> Kategori
           </button>
+          <button className="btn" disabled={!selected.length} onClick={() => setSheet('share')}>
+            <Share size={18} /> Dela
+          </button>
           <button
             className="btn primary"
             disabled={!selected.length}
@@ -382,6 +386,19 @@ export function LibraryPage() {
             <ListMusic size={18} /> Setlista
           </button>
         </div>
+      )}
+      {sheet === 'share' && (
+        <ExportSheet
+          songs
+          setlist={{
+            id: 'valda',
+            name: 'Låtar från SongList',
+            createdAt: 0,
+            updatedAt: 0,
+            items: selected.map((songId) => ({ id: songId, songId })),
+          }}
+          onClose={() => setSheet(null)}
+        />
       )}
       {showArtists && <SubtitleArtistSheet songs={artistSuggestions} onClose={() => setShowArtists(false)} />}
       {showMerge && (

@@ -10,7 +10,7 @@ import { Directory, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { hasNativePlugin, SongListNative } from '../native/songlistNative';
 import type { ExportFile } from './setlistExport';
-import { readFileAsDataUrl, saveBinaryFile } from './files';
+import { readFileAsDataUrl, saveBinaryFile, shareFilesInBrowser } from './files';
 
 export interface MailRequest {
   to: string[];
@@ -73,15 +73,6 @@ export async function composeNativeMail(req: MailRequest): Promise<MailOutcome> 
   }
 }
 
-function asFiles(files: ExportFile[]): File[] {
-  return files.map((f) => new File([f.blob], f.name, { type: f.mime }));
-}
-
-/** Sant om webbläsaren kan dela filer via systemets delningsmeny (t.ex. Safari på iPhone/iPad). */
-export function canShareFiles(files: ExportFile[]): boolean {
-  return typeof navigator.canShare === 'function' && navigator.canShare({ files: asFiles(files) });
-}
-
 /**
  * Webben: delar filerna via delningsmenyn. Måste anropas direkt från ett tryck, annars kan
  * Safari neka. Mottagarna kopieras samtidigt så att de kan klistras in i Mail.
@@ -89,13 +80,7 @@ export function canShareFiles(files: ExportFile[]): boolean {
 export async function shareFilesWeb(req: MailRequest): Promise<MailOutcome> {
   // Starta kopieringen utan att vänta, så att delningen sker inom samma tryck
   void copyRecipients(req.to);
-  try {
-    await navigator.share({ files: asFiles(req.files), title: req.subject, text: req.body });
-    return 'shared';
-  } catch (e) {
-    if ((e as Error).name === 'AbortError') return 'cancelled';
-    throw e;
-  }
+  return (await shareFilesInBrowser(req.files, { title: req.subject, text: req.body })) ? 'shared' : 'cancelled';
 }
 
 /** Öppnar ett nytt mejl med mottagare, ämne och text ifyllda (utan bilagor). */

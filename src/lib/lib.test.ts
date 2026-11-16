@@ -461,6 +461,15 @@ describe('export av setlista', () => {
     expect(await texts[0].blob.text()).toContain('Solen går upp');
   });
 
+  it('valda låtar: utan nummer, samma namn skriver inte över, en bild blir originalfilen', async () => {
+    const img = { kind: 'image' as const, name: 'noter.png', mime: 'image/png', dataUrl: 'data:image/png;base64,iVBORw0KGgo=' };
+    const many = { ...songs, c: { ...mk('c', '{title: a}\n[G]Igen'), title: 'a' }, d: { ...mk('d', '{title: Bild}'), title: 'Bild', attachment: img } };
+    const pick = { ...setlist, items: ['a', 'c', 'd'].map((songId) => ({ id: songId, songId })) };
+    const files = await buildSongFiles('pdf-clean', pick, many, 'international', { numbered: false });
+    expect(files.map((f) => f.name)).toEqual(['a.pdf', 'a (2).pdf', 'Bild.png']);
+    expect(files[2].mime).toBe('image/png');
+  });
+
   it('kontrollerar e-postadresser', () => {
     expect(isValidEmail('namn@exempel.se')).toBe(true);
     expect(isValidEmail('namn@exempel')).toBe(false);

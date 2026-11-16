@@ -31,7 +31,7 @@ import {
 } from '../lib/annotations';
 import { songFiles, type Setlist, type Song, type SongAttachment } from '../lib/model';
 import { ABC_STAFF_WIDTH, ABC_WIDTH_EM, renderAbcImages, transposeAbcSource } from '../lib/abc';
-import { safeFileName, saveBinaryFile, saveTextFile } from './files';
+import { safeFileName, type FileToSave } from './files';
 import { loadPdfJs } from './fileImport';
 import { enhanceCanvas, enhancedImageCanvas } from '../lib/enhance';
 import { pdfSafe } from '../lib/pdfText';
@@ -41,10 +41,10 @@ import { isCue, itemTitle, itemTranspose, liveItems, withItemCapo } from '../lib
 export type SetlistExportFormat = 'text' | 'pdf-annotated' | 'pdf-clean' | 'chordpro' | 'songlist';
 
 export const EXPORT_FORMATS: { value: SetlistExportFormat; label: string; description: string }[] = [
-  { value: 'text', label: 'Texter', description: 'Sångtexterna utan ackord, i setlistans ordning (.txt)' },
+  { value: 'text', label: 'Texter', description: 'Sångtexterna utan ackord (.txt)' },
   { value: 'pdf-annotated', label: 'PDF med anteckningar', description: 'Ackord ovanför texten, med lappar och det du ritat' },
   { value: 'pdf-clean', label: 'PDF utan anteckningar', description: 'Ackord ovanför texten, utan lappar och ritningar' },
-  { value: 'chordpro', label: 'ChordPro', description: 'Alla låtar i en ChordPro-fil (.txt)' },
+  { value: 'chordpro', label: 'ChordPro', description: 'Låtarna som ChordPro, med ackorden i texten (.txt)' },
   {
     value: 'songlist',
     label: 'SongList-fil',
@@ -495,11 +495,11 @@ function drawBar(doc: JsPdf, page: number, y1: number, y2: number) {
   doc.setPage(current);
 }
 
-function drawSongHeader(c: PdfCtx, p: PreparedSong, index: number, tops: number[]) {
+function drawSongHeader(c: PdfCtx, p: PreparedSong, index: number | undefined, tops: number[]) {
   const doc = c.doc;
   tops[0] = virtualY(c);
   setFont(doc, 'bold', 1.5 * EM);
-  const title = doc.splitTextToSize(`${index}. ${p.song.title}`, PAGE_W - 2 * MARGIN_X) as string[];
+  const title = doc.splitTextToSize(index ? `${index}. ${p.song.title}` : p.song.title, PAGE_W - 2 * MARGIN_X) as string[];
   title.forEach((t, i) => doc.text(t, MARGIN_X, c.y + i * 1.5 * EM * 1.2, { baseline: 'top' }));
   c.y += title.length * 1.5 * EM * 1.2;
   // Långa rader radbryts i stället för att gå ut i marginalen
@@ -755,7 +755,7 @@ function safeText(doc: JsPdf) {
 }
 
 async function renderPdf(
-  entries: { p: PreparedSong; number: number }[],
+  entries: { p: PreparedSong; number?: number }[],
   opts: { title: string; footer: string; cover?: { setlist: Setlist; rows: OverviewRow[] }; withAnnotations: boolean },
 ): Promise<Blob> {
   const { jsPDF } = await import('jspdf');
@@ -811,19 +811,20 @@ export async function buildPdfExport(
   );
 }
 
-// --- En fil per låt (för e-post) ---
+// --- En fil per låt ---
 
-export interface ExportFile {
-  name: string;
-  mime: string;
-  blob: Blob;
-}
+export type ExportFile = FileToSave;
 
+/**
+ * En fil per låt (låtar som sparats som bild eller PDF blir originalfilen). Setlistans låtar
+ * numreras i ordning; med numbered: false (t.ex. låtar valda i biblioteket) heter filerna som låtarna.
+ */
 export async function buildSongFiles(
   format: SetlistExportFormat,
   setlist: Setlist,
   songs: Record<string, Song>,
   notation: Notation,
+  { numbered = true }: { numbered?: boolean } = {},
 ): Promise<ExportFile[]> {
   // En enda fil med setlistan och alla låtar
   if (format === 'songlist') {
@@ -832,28 +833,36 @@ export async function buildSongFiles(
   const list = prepare(setlist, songs, notation);
   const width = String(list.length).length < 2 ? 2 : String(list.length).length;
   const files: ExportFile[] = [];
+  // Två låtar med samma namn får inte skriva över varandras filer
+  const used = new Set<string>();
+  const push = (base: string, ext: string, mime: string, blob: Blob) => {
+    let name = `${base}${ext}`;
+    for (let n = 2; used.has(name.toLowerCase()); n++) name = `${base} (${n})${ext}`;
+    used.add(name.toLowerCase());
+    files.push({ name, mime, blob });
+  };
   for (let i = 0; i < list.length; i++) {
     const p = list[i];
-    const base = `${String(i + 1).padStart(width, '0')} ${safeFileName(p.song.title)}`;
+    const base = numbered ? `${String(i + 1).padStart(width, '0')} ${safeFileName(p.song.title)}` : safeFileName(p.song.title);
     if (p.song.attachment) {
-      // Låtar som sparats som fil (t.ex. noter) bifogas som originalfilen (eller filerna)
+      // Låtar som sparats som fil (t.ex. noter) blir originalfilen (eller filerna)
       for (const [n, a] of songFiles(p.song).entries()) {
         const ext = /\.[^.]+$/.exec(a.name)?.[0] ?? (a.kind === 'pdf' ? '.pdf' : '.jpg');
-        files.push({ name: `${base}${n ? ` (sida ${n + 1})` : ''}${ext}`, mime: a.mime, blob: await (await fetch(a.dataUrl)).blob() });
+        push(`${base}${n ? ` (sida ${n + 1})` : ''}`, ext, a.mime, await (await fetch(a.dataUrl)).blob());
       }
       continue;
     }
     if (format === 'text') {
-      files.push({ name: `${base}.txt`, mime: 'text/plain', blob: textBlob(songText(p)) });
+      push(base, '.txt', 'text/plain', textBlob(songText(p)));
     } else if (format === 'chordpro') {
-      files.push({ name: `${base}.txt`, mime: 'text/plain', blob: textBlob(await songChordPro(p)) });
+      push(base, '.txt', 'text/plain', textBlob(await songChordPro(p)));
     } else {
-      const blob = await renderPdf([{ p, number: i + 1 }], {
+      const blob = await renderPdf([{ p, number: numbered ? i + 1 : undefined }], {
         title: p.song.title,
-        footer: `${setlist.name} · ${p.song.title}`,
+        footer: numbered ? `${setlist.name} · ${p.song.title}` : p.song.title,
         withAnnotations: format === 'pdf-annotated',
       });
-      files.push({ name: `${base}.pdf`, mime: 'application/pdf', blob });
+      push(base, '.pdf', 'application/pdf', blob);
     }
   }
   return files;
@@ -881,28 +890,4 @@ export function mailBody(setlist: Setlist, songs: Record<string, Song>, notation
     'Skickat från SongList',
   );
   return out.join('\n');
-}
-
-// --- Spara ---
-
-export async function exportSetlist(
-  format: SetlistExportFormat,
-  setlist: Setlist,
-  songs: Record<string, Song>,
-  notation: Notation,
-): Promise<void> {
-  const base = fileBase(setlist);
-  switch (format) {
-    case 'text':
-      return saveTextFile(`${base}.txt`, buildTextExport(setlist, songs, notation));
-    case 'chordpro':
-      return saveTextFile(`${base} (ChordPro).txt`, await buildChordProExport(setlist, songs, notation));
-    case 'songlist':
-      return saveBinaryFile(`${base}${SHARE_EXTENSION}`, sharedFile(setlist, songs), 'application/json');
-    case 'pdf-annotated':
-    case 'pdf-clean': {
-      const blob = await buildPdfExport(setlist, songs, notation, format === 'pdf-annotated');
-      return saveBinaryFile(`${base}.pdf`, blob, 'application/pdf');
-    }
-  }
 }

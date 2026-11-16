@@ -13,25 +13,8 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Header, Segmented, Sheet, askText, toast, toastError } from '../components/ui';
-import { EmailInput, rememberEmails } from '../components/EmailInput';
-import {
-  EXPORT_FORMATS,
-  buildSongFiles,
-  exportSetlist,
-  mailBody,
-  mailSubject,
-  type SetlistExportFormat,
-} from '../services/setlistExport';
-import {
-  canComposeNatively,
-  canShareFiles,
-  composeNativeMail,
-  downloadAndOpenMail,
-  shareFilesWeb,
-  type MailOutcome,
-  type MailRequest,
-} from '../services/mail';
+import { Header, Sheet, askText, toast } from '../components/ui';
+import { ExportSheet } from '../components/ExportSheet';
 import { filterSongs, songKey, sortSongs } from '../lib/search';
 import { formatKey } from '../lib/chords';
 import { newId, type SetlistItem, type Song } from '../lib/model';
@@ -191,7 +174,7 @@ export function SetlistPage() {
         />
       )}
 
-      {exporting && <ExportSheet setlistId={setlist.id} onClose={() => setExporting(false)} />}
+      {exporting && <ExportSheet setlist={setlist} onClose={() => setExporting(false)} />}
 
       {editing && (
         <EditSetlistSheet
@@ -424,163 +407,6 @@ function EditSetlistSheet(props: {
         <span>Anteckningar</span>
         <textarea className="textarea" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
       </label>
-    </Sheet>
-  );
-}
-
-const MAIL_MESSAGES: Record<MailOutcome, string> = {
-  sent: 'Mejlet är skickat',
-  saved: 'Mejlet är sparat som utkast',
-  cancelled: '',
-  shared: 'Filerna är delade',
-  downloaded: 'Filerna är nedladdade – bifoga dem i mejlet som öppnades',
-};
-
-function ExportSheet({ setlistId, onClose }: { setlistId: string; onClose: () => void }) {
-  const setlist = useStore((s) => s.setlists[setlistId]);
-  const songs = useStore((s) => s.songs);
-  const notation = useStore((s) => s.settings.notation);
-  const recentEmails = useStore((s) => s.settings.recentEmails);
-  const updateSettings = useStore((s) => s.updateSettings);
-  const [mode, setMode] = useState<'file' | 'mail'>('file');
-  const [format, setFormat] = useState<SetlistExportFormat>('pdf-annotated');
-  const [to, setTo] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
-  /** Webben: färdiga filer som väntar på att delas med ett nytt tryck */
-  const [prepared, setPrepared] = useState<MailRequest | null>(null);
-
-  const finish = (outcome: MailOutcome) => {
-    if (MAIL_MESSAGES[outcome]) toast(MAIL_MESSAGES[outcome]);
-    if (outcome !== 'cancelled') onClose();
-  };
-
-  const fail = (e: unknown) => {
-    // Användaren stängde delningsmenyn
-    if ((e as Error)?.message?.toLowerCase().includes('cancel')) return;
-    toastError(e, mode === 'mail' ? 'Mejlet kunde inte skapas' : 'Exporten misslyckades');
-  };
-
-  const run = async () => {
-    setBusy(true);
-    try {
-      if (mode === 'file') {
-        await exportSetlist(format, setlist, songs, notation);
-        onClose();
-        return;
-      }
-      const files = await buildSongFiles(format, setlist, songs, notation);
-      void updateSettings({ recentEmails: rememberEmails(recentEmails, to) });
-      const req: MailRequest = { to, subject: mailSubject(setlist), body: mailBody(setlist, songs, notation, format), files };
-      if (canComposeNatively()) finish(await composeNativeMail(req));
-      else setPrepared(req);
-    } catch (e) {
-      fail(e);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const webAction = async (action: (r: MailRequest) => Promise<MailOutcome>) => {
-    if (!prepared) return;
-    try {
-      finish(await action(prepared));
-    } catch (e) {
-      fail(e);
-    }
-  };
-
-  // Webben, steg 2: dela med ett eget tryck (Safari kräver det) och kopiera mottagarna
-  if (prepared) {
-    const shareable = canShareFiles(prepared.files);
-    return (
-      <Sheet
-        title="Mejlet är klart"
-        onClose={onClose}
-        footer={
-          <button className="btn" onClick={() => setPrepared(null)}>
-            Tillbaka
-          </button>
-        }
-      >
-        <p style={{ marginTop: 0 }}>
-          {prepared.files.length} {prepared.files.length === 1 ? 'fil' : 'filer'} till {prepared.to.join(', ')}.
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {shareable && (
-            <>
-              <button className="btn primary" onClick={() => webAction(shareFilesWeb)}>
-                Dela till Mail
-              </button>
-              <p className="muted small-text" style={{ margin: 0 }}>
-                Välj Mail i delningsmenyn. Mottagarna kopieras när du trycker, så att du kan klistra in dem i
-                Till-fältet. I webbläsaren går det inte att fylla i mottagare när filer bifogas – det gör iOS-appen.
-              </p>
-            </>
-          )}
-          <button
-            className={`btn${shareable ? '' : ' primary'}`}
-            onClick={() => webAction(downloadAndOpenMail)}
-          >
-            Ladda ner filerna och öppna mejl
-          </button>
-          <p className="muted small-text" style={{ margin: 0 }}>
-            Mejlet öppnas med mottagare, ämne och setlistan ifyllda. Bifoga sedan de nedladdade filerna.
-          </p>
-        </div>
-      </Sheet>
-    );
-  }
-
-  const canRun = mode === 'file' || to.length > 0;
-
-  return (
-    <Sheet
-      title="Exportera setlistan"
-      onClose={onClose}
-      footer={
-        <>
-          <button className="btn" onClick={onClose}>
-            Avbryt
-          </button>
-          <button className="btn primary" disabled={busy || !canRun} onClick={run}>
-            {busy ? 'Skapar…' : mode === 'mail' ? 'Skapa mejl' : 'Exportera'}
-          </button>
-        </>
-      }
-    >
-      <div style={{ marginBottom: 12 }}>
-        <Segmented
-          value={mode}
-          onChange={setMode}
-          options={[
-            { value: 'file', label: 'Spara fil' },
-            { value: 'mail', label: 'Skicka med e-post' },
-          ]}
-        />
-      </div>
-
-      {mode === 'mail' && (
-        <div className="field">
-          <span>Mottagare</span>
-          <EmailInput value={to} onChange={setTo} suggestions={recentEmails ?? []} />
-        </div>
-      )}
-
-      {EXPORT_FORMATS.map((f) => (
-        <label key={f.value} className="check-item">
-          <input type="radio" name="export-format" checked={format === f.value} onChange={() => setFormat(f.value)} />
-          <div>
-            <div style={{ fontWeight: 600 }}>{f.label}</div>
-            <div className="muted small-text">{f.description}</div>
-          </div>
-        </label>
-      ))}
-      <p className="muted small-text" style={{ marginBottom: 0 }}>
-        {mode === 'mail' && format !== 'songlist'
-          ? 'Varje låt bifogas som en egen fil. Hela setlistan med titel och artist står i mejlet. '
-          : ''}
-        Ackorden exporteras med låtarnas transponering, precis som de visas i appen.
-      </p>
     </Sheet>
   );
 }

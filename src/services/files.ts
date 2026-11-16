@@ -52,6 +52,58 @@ export async function saveBinaryFile(fileName: string, blob: Blob, mime: string)
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
+export interface FileToSave {
+  name: string;
+  mime: string;
+  blob: Blob;
+}
+
+/** Sparar eller delar flera filer: delningsmenyn med alla filerna på iOS, en nedladdning per fil på webben. */
+export async function saveFiles(files: FileToSave[]): Promise<void> {
+  if (isNative) {
+    const uris: string[] = [];
+    for (const f of files) {
+      const dataUrl = await readFileAsDataUrl(f.blob);
+      const { uri } = await Filesystem.writeFile({
+        path: f.name,
+        data: dataUrl.slice(dataUrl.indexOf(',') + 1),
+        directory: Directory.Cache,
+      });
+      uris.push(uri);
+    }
+    await Share.share({ title: files.length === 1 ? files[0].name : `${files.length} filer`, files: uris });
+    return;
+  }
+  for (const f of files) {
+    await saveBinaryFile(f.name, f.blob, f.mime);
+    // Webbläsaren hinner starta varje nedladdning
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+
+function asFiles(files: FileToSave[]): File[] {
+  return files.map((f) => new File([f.blob], f.name, { type: f.mime }));
+}
+
+/** Sant om webbläsaren kan dela filerna via systemets delningsmeny (t.ex. Safari på iPhone/iPad). */
+export function canShareFiles(files: FileToSave[]): boolean {
+  return typeof navigator.canShare === 'function' && navigator.canShare({ files: asFiles(files) });
+}
+
+/**
+ * Webben: delar filerna via delningsmenyn. Måste anropas direkt från ett tryck, annars kan
+ * Safari neka. Falskt om delningen avbröts.
+ */
+export async function shareFilesInBrowser(files: FileToSave[], extra: { title?: string; text?: string } = {}): Promise<boolean> {
+  try {
+    await navigator.share({ files: asFiles(files), ...extra });
+    return true;
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') return false;
+    throw e;
+  }
+}
+
 /** Öppnar filväljaren och returnerar valda filer. */
 export function pickFiles(options: { accept?: string; multiple?: boolean; capture?: boolean } = {}): Promise<File[]> {
   return new Promise((resolve) => {
