@@ -2650,6 +2650,8 @@ label.btn.disabled {
   display: grid;
   grid-template-columns: max-content max-content;
   align-items: center;
+  /* Knapparna i sin egen bredd, inte utsträckta till den bredaste */
+  justify-items: start;
   gap: 8px 16px;
   margin-left: 34px;
   padding: 0 4px 12px;
