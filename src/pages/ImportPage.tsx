@@ -532,17 +532,17 @@ export function ImportPage() {
             <button className="big-action" onClick={chooseFiles}>
               <FileUp size={22} />
               <b>Välj filer</b>
-              <span>ChordPro, textfiler, PDF, bilder eller en zip-fil med flera</span>
+              <span>ChordPro, textfiler, PDF, bilder eller en zip-fil med flera.</span>
             </button>
             <button className="big-action" onClick={() => setChoosingPhoto(true)}>
               <Camera size={22} />
               <b>Välj foto</b>
-              <span>Fotografera ett papper eller välj en bild med text och ackord – texten tolkas direkt på enheten</span>
+              <span>Fotografera ett papper eller välj en bild med text och ackord – texten tolkas direkt på enheten.</span>
             </button>
             <button className="big-action" onClick={() => setPasting(true)}>
               <ClipboardPaste size={22} />
               <b>Klistra in text</b>
-              <span>Från en webbsida, ett dokument eller ett mejl</span>
+              <span>Från en webbsida, ett dokument eller ett mejl.</span>
             </button>
             <button
               className="big-action"
@@ -555,7 +555,7 @@ export function ImportPage() {
               <b>
                 Läs in noter <span className="badge review beta">Beta</span>
               </b>
-              <span>Fotografera noter, även flerstämmiga, och få dem som noter som går att transponera och spela upp</span>
+              <span>Fotografera noter, även flerstämmiga, och få dem som noter som går att transponera och spela upp.</span>
             </button>
           </div>
 
