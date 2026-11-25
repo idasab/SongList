@@ -20,7 +20,7 @@ import {
 } from '../lib/textImport';
 import { newId, songFiles, type Song, type SongAttachment } from '../lib/model';
 import { groupHeads, joinsPrevious, pieceTitle, samePieceTitles, sortByPage } from '../lib/fileGroups';
-import { canUseDocumentScanner, recognizeImageFile, scanDocument } from '../services/ocr';
+import { canUseDocumentScanner, recognizeImageFiles, scanDocument } from '../services/ocr';
 import { pickFiles, readFileAsDataUrl } from '../services/files';
 // Notläsningen (med Anthropics SDK) laddas först när den används
 import type { SheetSource } from '../services/omr';
@@ -237,14 +237,15 @@ export function ImportPage() {
   };
 
   const scanImage = async (capture: boolean) => {
-    const [file] = await pickFiles({ accept: 'image/*', capture });
-    if (!file) return;
+    // Flera bilder blir sidor i samma låt, som när kameran skannar flera sidor
+    const files = await pickFiles({ accept: 'image/*', capture, multiple: !capture });
+    if (!files.length) return;
     try {
       setBusy({ message: 'Förbereder…' });
-      const res = await recognizeImageFile(file, (message, progress) => setBusy({ message, progress }));
+      const res = await recognizeImageFiles(files, (message, progress) => setBusy({ message, progress }));
       setBusy(null);
       if (!res.content.trim()) {
-        toast('Hittade ingen text i bilden', { error: true });
+        toast(files.length > 1 ? 'Hittade ingen text i bilderna' : 'Hittade ingen text i bilden', { error: true });
         return;
       }
       openScanResult(res.content, res.imageDataUrl);
@@ -458,7 +459,7 @@ export function ImportPage() {
     <div className="screen">
       <Header title="Importera" />
       <div className="content narrow" ref={scrollRef}>
-        <div>
+        <div className="import-page">
           <div className="toggle-row choice-row import-mode">
             <div>
               <div>PDF och bilder</div>
@@ -537,7 +538,7 @@ export function ImportPage() {
                 {nativeScanner
                   ? 'Kameran hittar papperets kanter och rätar upp det. '
                   : ''}
-                Ett foto eller en skärmbild med text och ackord. Texten tolkas direkt på enheten och öppnas i editorn.
+                Välj ett eller flera foton eller skärmbilder med text och ackord. Flera bilder blir sidor i samma låt. Texten tolkas direkt på enheten och öppnas i editorn.
               </p>
             </Sheet>
           )}

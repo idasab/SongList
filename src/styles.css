@@ -1806,11 +1806,23 @@ textarea.note-text {
 
 /* --- Import --- */
 
+/* Importsidan mäts själv, så att korten följer ytan och inte hela fönstret */
+.import-page {
+  container-type: inline-size;
+}
+
+/* Alltid två eller fyra kolumner, aldrig tre (fyra kort) */
 .import-actions {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
+}
+
+@container (min-width: 680px) {
+  .import-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .big-action {
