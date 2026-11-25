@@ -2646,19 +2646,18 @@ label.btn.disabled {
 }
 
 .check-sub {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  /* Rubrikerna i en kolumn och knapparna direkt efter, i linje med varandra */
+  display: grid;
+  grid-template-columns: max-content max-content;
+  align-items: center;
+  gap: 8px 16px;
   margin-left: 34px;
   padding: 0 4px 12px;
   border-bottom: 1px solid var(--border);
 }
 
 .check-sub-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  display: contents;
 }
 
 .check-sub-row > span {
