@@ -556,9 +556,6 @@ export function ImportPage() {
                 Läs in noter <span className="badge review beta">Beta</span>
               </b>
               <span>Fotografera noter, även flerstämmiga, och få dem som noter som går att transponera och spela upp</span>
-              <span>
-                <i>OBS! Justeringar kan behövas.</i>
-              </span>
             </button>
           </div>
 
