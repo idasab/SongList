@@ -1831,10 +1831,10 @@ textarea.note-text {
   }
 }
 
-/* iPhone: alltid en kolumn, även liggande (pekskärm och låg höjd; iPad är aldrig så låg) */
+/* Liggande iPhone: två kolumner (pekskärm och låg höjd; iPad är aldrig så låg) */
 @media (pointer: coarse) and (max-height: 500px) {
   .import-actions {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
