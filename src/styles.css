@@ -1811,17 +1811,30 @@ textarea.note-text {
   container-type: inline-size;
 }
 
-/* Alltid två eller fyra kolumner, aldrig tre (fyra kort) */
+/* En, två eller fyra kolumner, aldrig tre (fyra kort) */
 .import-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   margin-bottom: 16px;
+}
+
+@container (min-width: 440px) {
+  .import-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @container (min-width: 680px) {
   .import-actions {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* iPhone: alltid en kolumn, även liggande (pekskärm och låg höjd; iPad är aldrig så låg) */
+@media (pointer: coarse) and (max-height: 500px) {
+  .import-actions {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
