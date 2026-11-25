@@ -534,7 +534,7 @@ export function ImportPage() {
               </b>
               <span>Fotografera noter, även flerstämmiga, och få dem som noter som går att transponera och spela upp</span>
               <span>
-                <i>OBS! Detta är en grov inläsning, justeringar kan behövas.</i>
+                <i>OBS! Justeringar kan behövas.</i>
               </span>
             </button>
           </div>
