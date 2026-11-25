@@ -20,7 +20,7 @@ import {
 } from '../lib/textImport';
 import { newId, songFiles, type Song, type SongAttachment } from '../lib/model';
 import { groupHeads, joinsPrevious, pieceTitle, samePieceTitles, sortByPage } from '../lib/fileGroups';
-import { canUseDocumentScanner, recognizeImageFile, scanDocument } from '../services/ocr';
+import { canUseDocumentScanner, recognizeImageFile } from '../services/ocr';
 import { pickFiles, readFileAsDataUrl } from '../services/files';
 // Notläsningen (med Anthropics SDK) laddas först när den används
 import type { SheetSource } from '../services/omr';
@@ -187,8 +187,11 @@ export function ImportPage() {
 
   const chooseFiles = async () => addFiles(await pickFiles({ accept: ACCEPT, multiple: true }));
 
-  /** interpret: bilder och PDF:er tolkas till text och ackord, oavsett valet överst (t.ex. foton) */
-  const addFiles = async (picked: File[], { interpret = false }: { interpret?: boolean } = {}) => {
+  /**
+   * interpret: bilder och PDF:er tolkas till text och ackord, oavsett valet överst (t.ex. foton).
+   * oneSong: förvalt är att alla hör till samma låt (sidor av ett papper); kan ändras i listan.
+   */
+  const addFiles = async (picked: File[], { interpret = false, oneSong = false }: { interpret?: boolean; oneSong?: boolean } = {}) => {
     // En delad setlista (.songlist) importeras för sig
     const shared = picked.filter((f) => isSharedSetlistFile(f.name));
     if (shared.length) await receiveSharedText(await shared[0].text());
@@ -201,8 +204,9 @@ export function ImportPage() {
       });
       // I namnordning, så att sidor av samma noter ("Låt (1)", "Låt (2)") hamnar efter varandra
       const sorted = [...found].sort((a, b) => a.fileName.localeCompare(b.fileName, 'sv', { numeric: true }));
-      for (const c of sorted)
+      for (const [k, c] of sorted.entries())
         addRaw(c.fileName, c.raw, {
+          joinPrev: oneSong && k > 0 ? true : undefined,
           kind: c.kind,
           origin: c.origin,
           imageDataUrl: c.imageDataUrl,
@@ -216,6 +220,8 @@ export function ImportPage() {
         toast(`${skipped.length} ${skipped.length === 1 ? 'fil' : 'filer'} hoppades över: ${list}${skipped.length > 3 ? ' …' : ''}`, {
           error: true,
         });
+      } else if (found.length > 1 && oneSong) {
+        toast(`${found.length} sidor lades till i listan som en låt. Du kan dela upp dem i listan.`);
       } else if (found.length > 1) {
         toast(`${found.length} låtar lades till i listan`);
       }
@@ -239,23 +245,35 @@ export function ImportPage() {
     navigate('/new');
   };
 
+  // Kameran (iOS): alla sidor som bilder. En sida öppnas i editorn; flera hamnar i importlistan
+  // som samma låt, och kan delas upp där.
   const scanWithCamera = async () => {
     try {
-      setBusy({ message: 'Läser text…' });
-      const res = await scanDocument();
-      setBusy(null);
-      if (res) openScanResult(res.content, res.imageDataUrl);
+      const res = await SongListNative.scanDocument({ readText: false });
+      const images = res.images ?? [];
+      if (!images.length) return;
+      const files = await Promise.all(
+        images.map(
+          async (url, i) =>
+            new File([await (await fetch(url)).blob()], `Sida ${String(i + 1).padStart(2, '0')}.jpg`, { type: 'image/jpeg' }),
+        ),
+      );
+      await readPhotos(files);
     } catch (e) {
       setBusy(null);
-      toastError(e, 'Skanningen misslyckades');
+      if ((e as { code?: string }).code !== 'CANCELLED') toastError(e, 'Kameran kunde inte läsa sidorna');
     }
   };
 
   const scanImage = async (capture: boolean) => {
     const files = await pickFiles({ accept: 'image/*', capture, multiple: !capture });
+    await readPhotos(files);
+  };
+
+  // Ett foto öppnas i editorn. Flera hamnar i importlistan som samma låt, och kan delas upp där.
+  const readPhotos = async (files: File[]) => {
     if (!files.length) return;
-    // Flera bilder hamnar i importlistan, där man väljer vilka som är samma låt
-    if (files.length > 1) return addFiles(files, { interpret: true });
+    if (files.length > 1) return addFiles(files, { interpret: true, oneSong: true });
     try {
       setBusy({ message: 'Förbereder…' });
       const res = await recognizeImageFile(files[0], (message, progress) => setBusy({ message, progress }));
@@ -565,7 +583,7 @@ export function ImportPage() {
                 {nativeScanner
                   ? 'Kameran hittar papperets kanter och rätar upp det. '
                   : ''}
-                Välj ett eller flera foton eller skärmbilder med text och ackord. Texten tolkas direkt på enheten. Ett foto öppnas i editorn; flera hamnar i importlistan, där du väljer vilka som är samma låt.
+                Ett eller flera foton eller skärmbilder med text och ackord. Texten tolkas direkt på enheten. Ett foto öppnas i editorn; flera hamnar i importlistan som samma låt, och där kan du dela upp dem i flera låtar.
               </p>
             </Sheet>
           )}
