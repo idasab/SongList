@@ -504,7 +504,9 @@ export function ImportPage() {
               }}
             >
               <FileMusic size={22} />
-              <b>Läs in noter</b>
+              <b>
+                Läs in noter <span className="badge review beta">Beta</span>
+              </b>
               <span>Fotografera noter, även flerstämmiga, och få dem som noter som går att transponera och spela upp</span>
               <span>
                 <i>OBS! Detta är en grov inläsning, justeringar kan behövas.</i>
@@ -514,7 +516,11 @@ export function ImportPage() {
 
           {readingNotes && (
             <Sheet
-              title="Läs in noter"
+              title={
+                <>
+                  Läs in noter <span className="badge review beta">Beta</span>
+                </>
+              }
               onClose={() => {
                 // Att stänga rutan avbryter läsningen
                 busy?.cancel?.();

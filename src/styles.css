@@ -2038,6 +2038,14 @@ textarea.note-text {
   color: var(--accent-ink);
 }
 
+/* Funktioner som inte är helt klara, t.ex. Läs in noter */
+.badge.beta,
+.big-action .badge.beta {
+  margin-left: 6px;
+  font-size: calc(11px * var(--ui));
+  vertical-align: middle;
+}
+
 .progress {
   height: 6px;
   border-radius: 3px;
