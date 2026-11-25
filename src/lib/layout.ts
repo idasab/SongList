@@ -270,6 +270,7 @@ export function assembleChordPro(rows: SourceRow[], opts: AssembleOptions = {}):
     }
   };
 
+  const headerRows = new Set<number>();
   for (; i < rows.length; i++) {
     const row = rows[i];
     if (row === null) {
@@ -284,7 +285,13 @@ export function assembleChordPro(rows: SourceRow[], opts: AssembleOptions = {}):
       continue;
     }
 
-    const header = chordFlags[i] ? null : parseHeader(text);
+    const candidate = chordFlags[i] ? null : parseHeader(text);
+    // En rubrik kan inte ligga mitt i en text: direkt under en textrad är "Sa hon:" en textrad
+    const prev = rows[i - 1];
+    const afterText =
+      i > 0 && !!prev && !chordFlags[i - 1] && !headerRows.has(i - 1) && !/^\{.*\}$|^\(.*\)$/.test(prev.text.trim());
+    const header = candidate && (candidate.trailing || /^\[.*\]$/.test(text) || !afterText) ? candidate : null;
+    if (header) headerRows.add(i);
     if (header) {
       closeEnv();
       const next = rows[i + 1];

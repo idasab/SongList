@@ -70,6 +70,20 @@ export function chordProHeader(line: string): Header | null {
   return null;
 }
 
+/**
+ * En rubrik kan inte ligga mitt i en text: står raden direkt under en textrad (utan tomrad
+ * emellan) är "Sa hon:" en textrad. Rubriker i hakparentes ("[Chorus]") och med ackord efter
+ * ("Intro: G C D") är alltid rubriker, och efter en ackordrad, en annan rubrik eller ett direktiv
+ * går det bra.
+ */
+function midText(header: Header, line: string, prev: string | undefined, prevHeader: Header | null | undefined): boolean {
+  if (header.trailing || /^\s*\[.*\]\s*$/.test(line)) return false;
+  const p = prev?.trim();
+  if (!p || prevHeader || /^[{#]/.test(p) || /^\(.*\)$/.test(p)) return false;
+  const words = p.replace(/\[[^\]]*\]/g, ' ').split(/\s+/).filter(Boolean);
+  return words.some((w) => /\p{L}/u.test(w) && !isChordLike(w) && !/^\(?(x\d+|\d+x)\)?$/i.test(w));
+}
+
 /** Ackorden efter en rubrik ("G C D" eller "[G] [C]") som en ChordPro-rad. */
 function trailingChordLine(trailing: string): string {
   return trailing
@@ -229,6 +243,13 @@ export function parseChordPro(source: string): ParsedSong {
   };
 
   const lines = source.replace(/\r\n?/g, '\n').split('\n');
+  // En rubrik kan inte ligga mitt i en text: direkt efter en textrad är "Sa hon:" en textrad
+  const headers: (Header | null)[] = [];
+  lines.forEach((l, j) => {
+    const h = chordProHeader(l);
+    headers.push(h && !midText(h, l, lines[j - 1], headers[j - 1]) ? h : null);
+  });
+  const chordProHeaderAt = (j: number) => headers[j] ?? null;
   const nextFilled = (from: number) => {
     let j = from;
     while (j < lines.length && !lines[j].trim()) j++;
@@ -238,13 +259,13 @@ export function parseChordPro(source: string): ParsedSong {
   const isChorusRepeat = (j: number) => {
     const t = lines[j]?.trim() ?? '';
     if (/^\{chorus\b/i.test(t)) return true;
-    const h = chordProHeader(t);
+    const h = chordProHeaderAt(j);
     const after = lines[j + 1]?.trim();
     return !!h && h.kind === 'chorus' && !h.trailing && (after === undefined || after === '' || after.startsWith('{'));
   };
   const isHeaderOrDirective = (j: number) => {
     const t = lines[j]?.trim() ?? '';
-    return t.startsWith('{') || !!chordProHeader(t);
+    return t.startsWith('{') || !!chordProHeaderAt(j);
   };
   // Stycket som börjar på rad j följs av en upprepad refräng: då är stycket en vers
   const stanzaBeforeRepeat = (j: number) => {
@@ -253,7 +274,7 @@ export function parseChordPro(source: string): ParsedSong {
     return isChorusRepeat(nextFilled(k));
   };
   // Har låten rubriker på verserna? Annars är stycken utan rubrik verser (bara refrängen har rubrik)
-  const versesLabeled = lines.some((l) => chordProHeader(l)?.kind === 'verse');
+  const versesLabeled = headers.some((h) => h?.kind === 'verse');
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li].replace(/\s+$/, '');
     const inPre = current.type === 'tab' || current.type === 'grid' || current.type === 'abc';
@@ -350,7 +371,7 @@ export function parseChordPro(source: string): ParsedSong {
       continue;
     }
 
-    const header = chordProHeader(line);
+    const header = chordProHeaderAt(li);
     if (header) {
       if (header.kind === 'comment') {
         // "Outro:" efter en tomrad hör inte till delen ovanför
