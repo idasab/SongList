@@ -78,6 +78,46 @@
 				<string>se.otimo.songlist.setlist</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Låtar och noter</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.adobe.pdf</string>
+				<string>public.image</string>
+				<string>public.plain-text</string>
+				<string>public.zip-archive</string>
+				<string>se.otimo.songlist.chordpro</string>
+			</array>
+		</dict>
+	</array>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>se.otimo.songlist.chordpro</string>
+			<key>UTTypeDescription</key>
+			<string>ChordPro</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.plain-text</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>cho</string>
+					<string>chopro</string>
+					<string>chordpro</string>
+					<string>crd</string>
+					<string>pro</string>
+				</array>
+			</dict>
+		</dict>
 	</array>
 	<key>UTExportedTypeDeclarations</key>
 	<array>

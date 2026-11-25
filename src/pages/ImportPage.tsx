@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Camera, Check, ChevronDown, ChevronUp, ClipboardPaste, FileMusic, FileUp, Image as ImageIcon, Lightbulb, Loader2, Pencil, X } from 'lucide-react';
 import { SongRenderer } from '../components/SongRenderer';
@@ -169,8 +169,9 @@ export function ImportPage() {
     setItems((cur) => [...cur, { id: newId(), fileName, raw, font, ...extra, kind }]);
   };
 
-  const chooseFiles = async () => {
-    const picked = await pickFiles({ accept: ACCEPT, multiple: true });
+  const chooseFiles = async () => addFiles(await pickFiles({ accept: ACCEPT, multiple: true }));
+
+  const addFiles = async (picked: File[]) => {
     // En delad setlista (.songlist) importeras för sig
     const shared = picked.filter((f) => isSharedSetlistFile(f.name));
     if (shared.length) await receiveSharedText(await shared[0].text());
@@ -207,6 +208,14 @@ export function ImportPage() {
       setBusy(null);
     }
   };
+
+  // Filer som öppnats med SongList från en annan app (t.ex. Mail eller Filer)
+  const incoming = useIncomingShare((s) => s.files.length);
+  useEffect(() => {
+    if (!incoming) return;
+    const files = useIncomingShare.getState().takeFiles();
+    if (files.length) void addFiles(files);
+  }, [incoming]);
 
   const openScanResult = (content: string, imageDataUrl?: string) => {
     setDraft({ content, imageDataUrl, tags });

@@ -170,11 +170,30 @@ export async function importSharedSetlist(shared: SharedSetlist): Promise<Setlis
 
 // --- Ta emot ---
 
-/** En delad setlista som väntar på att importeras (visas på importsidan). */
-export const useIncomingShare = create<{ shared: SharedSetlist | null; setShared: (s: SharedSetlist | null) => void }>((set) => ({
+/**
+ * En delad setlista som väntar på att importeras, och filer (PDF, bilder, ChordPro …) som
+ * öppnats med SongList från en annan app och väntar på att läggas i importlistan.
+ */
+export const useIncomingShare = create<{
+  shared: SharedSetlist | null;
+  setShared: (s: SharedSetlist | null) => void;
+  files: File[];
+  addFile: (f: File) => void;
+  takeFiles: () => File[];
+}>((set, get) => ({
   shared: null,
   setShared: (shared) => set({ shared }),
+  files: [],
+  addFile: (f) => set((s) => ({ files: [...s.files, f] })),
+  takeFiles: () => {
+    const files = get().files;
+    if (files.length) set({ files: [] });
+    return files;
+  },
 }));
+
+/** Filer som kan importeras när de öppnas med SongList från en annan app. */
+const IMPORTABLE_FILE = /\.(cho|chopro|chordpro|crd|pro|txt|text|pdf|zip|jpe?g|png|gif|webp|heic|heif|bmp|tiff?)$/i;
 
 /** Läser en .songlist-fil som öppnats i appen; visar ett fel om den inte går att läsa. */
 export async function receiveSharedText(text: string): Promise<boolean> {
@@ -188,8 +207,9 @@ export async function receiveSharedText(text: string): Promise<boolean> {
 }
 
 /**
- * iOS: en .songlist-fil som öppnas med SongList (t.ex. från Mail eller Filer) visas på
- * importsidan, både när appen redan är igång och när den startas av filen.
+ * iOS: en fil som öppnas med SongList (t.ex. från Mail eller Filer) visas på importsidan, både
+ * när appen redan är igång och när den startas av filen. En .songlist-fil blir en setlista att
+ * importera; PDF:er, bilder, ChordPro, text och zip-filer läggs i importlistan.
  */
 export function listenForSharedFiles() {
   if (!Capacitor.isNativePlatform()) return;
@@ -197,14 +217,24 @@ export function listenForSharedFiles() {
   // ur appens inkorg när den lästs, och en startfil som inte finns längre hoppas över tyst.
   const reading = new Set<string>();
   const open = async (url: string | undefined, fromLaunch: boolean) => {
-    if (!url || reading.has(url) || !isSharedSetlistFile(decodeURIComponent(url.split('?')[0]))) return;
+    if (!url || reading.has(url)) return;
+    const name = decodeURIComponent(url.split('?')[0].split('/').pop() ?? '');
+    const setlistFile = isSharedSetlistFile(name);
+    if (!setlistFile && !IMPORTABLE_FILE.test(name)) return;
     reading.add(url);
     try {
       const res = await fetch(Capacitor.convertFileSrc(url));
       if (!res.ok) throw new Error(String(res.status));
-      const text = await res.text();
+      if (setlistFile) {
+        const text = await res.text();
+        if (url.includes('/Inbox/')) await Filesystem.deleteFile({ path: url }).catch(() => undefined);
+        if (await receiveSharedText(text)) window.location.hash = '#/import';
+        return;
+      }
+      const blob = await res.blob();
       if (url.includes('/Inbox/')) await Filesystem.deleteFile({ path: url }).catch(() => undefined);
-      if (await receiveSharedText(text)) window.location.hash = '#/import';
+      useIncomingShare.getState().addFile(new File([blob], name, { type: blob.type }));
+      window.location.hash = '#/import';
     } catch {
       if (!fromLaunch) toast('Filen kunde inte läsas', { error: true });
     } finally {
