@@ -14,6 +14,7 @@ import {
   isChordProFileName,
   looksLikeChordPro,
   suggestSourceFont,
+  availableSourceFonts,
   textToChordPro,
   titleFromFileName,
   type SourceFont,
@@ -40,6 +41,10 @@ import {
 import { formatDate } from './SetlistsPage';
 
 type ImportItem = ImportQueueItem;
+
+/** Typsnitten på enheten, mätta en gång */
+let fontsOnDevice: SourceFont[] | undefined;
+const sourceFonts = () => (fontsOnDevice ??= availableSourceFonts());
 
 /** Kategori och taggar som en låt får vid import. */
 function resolveMeta(it: ImportItem, common: { tags: string[]; categoryId: string }) {
@@ -181,7 +186,7 @@ export function ImportPage() {
     // Filändelsen avgör först (.cho, .chopro …), annars innehållet
     const kind =
       extra.kind ?? (isChordProFileName(fileName) || looksLikeChordPro(raw) ? 'chordpro' : 'text');
-    const font = kind === 'text' ? suggestSourceFont(raw, canvasMeasure) : 'monospace';
+    const font = kind === 'text' ? suggestSourceFont(raw, canvasMeasure, sourceFonts()) : 'monospace';
     setItems((cur) => [...cur, { id: newId(), fileName, raw, font, ...extra, kind }]);
   };
 
@@ -797,8 +802,9 @@ export function ImportPage() {
               </b>
               <p style={{ margin: '6px 0 0' }}>
                 Textfiler där ackorden står på raden ovanför texten konverteras automatiskt till ChordPro. Om filen
-                skrevs i ett typsnitt utan fast teckenbredd (t.ex. Arial i Word) kan du välja typsnittet, så hamnar
-                ackorden där de syntes i originalet – inte efter antal mellanslag.
+                skrevs i ett typsnitt utan fast teckenbredd (t.ex. Arial i Word) försöker appen känna igen typsnittet,
+                så att ackorden hamnar där de syntes i originalet – inte efter antal mellanslag. Blev det fel kan du
+                välja ett annat typsnitt för filen i listan.
               </p>
             </div>
           )}
