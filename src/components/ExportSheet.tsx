@@ -29,18 +29,6 @@ type Prepared = { kind: 'mail'; req: MailRequest } | { kind: 'files'; files: Exp
 /** Vad som exporteras: en setlista, låtar som valts i biblioteket eller en enda låt */
 export type ExportSource = 'setlist' | 'songs' | 'song';
 
-/** Andra steget när PDF är valt */
-const PDF_CHOICES: { value: SetlistExportFormat; label: string; description: string }[] = [
-  { value: 'pdf-annotated', label: 'Med anteckningar', description: 'Med lappar och det du ritat' },
-  { value: 'pdf-clean', label: 'Utan anteckningar', description: 'Utan lappar och ritningar' },
-];
-
-/** Fler låtar som PDF: en fil per låt eller alla i en */
-const FILE_CHOICES = [
-  { value: 'each', label: 'En PDF per låt', description: 'Varje låt blir en egen fil' },
-  { value: 'one', label: 'En samlad PDF', description: 'Alla låtar i en fil, efter ett försättsblad' },
-] as const;
-
 const TITLES: Record<ExportSource, string> = {
   setlist: 'Exportera setlistan',
   songs: 'Dela låtarna',
@@ -255,34 +243,29 @@ export function ExportSheet({ setlist, source = 'setlist', onClose }: { setlist:
             </label>
             {pdf && checked && (
               <div className="check-sub">
-                <div className="check-sub-title">Anteckningar</div>
-                {PDF_CHOICES.map((c) => (
-                  <label key={c.value} className="check-item">
-                    <input type="radio" name="export-pdf" checked={format === c.value} onChange={() => setFormat(c.value)} />
-                    <div>
-                      <div style={{ fontWeight: 600 }}>{c.label}</div>
-                      <div className="muted small-text">{c.description}</div>
-                    </div>
-                  </label>
-                ))}
+                <div className="check-sub-row">
+                  <span>Anteckningar</span>
+                  <Segmented
+                    value={format}
+                    onChange={setFormat}
+                    options={[
+                      { value: 'pdf-annotated', label: 'Med' },
+                      { value: 'pdf-clean', label: 'Utan' },
+                    ]}
+                  />
+                </div>
                 {canCombine && (
-                  <>
-                    <div className="check-sub-title">Filer</div>
-                    {FILE_CHOICES.map((c) => (
-                      <label key={c.value} className="check-item">
-                        <input
-                          type="radio"
-                          name="export-files"
-                          checked={combined === (c.value === 'one')}
-                          onChange={() => setCombined(c.value === 'one')}
-                        />
-                        <div>
-                          <div style={{ fontWeight: 600 }}>{c.label}</div>
-                          <div className="muted small-text">{c.description}</div>
-                        </div>
-                      </label>
-                    ))}
-                  </>
+                  <div className="check-sub-row">
+                    <span>Filer</span>
+                    <Segmented
+                      value={combined ? 'one' : 'each'}
+                      onChange={(v) => setCombined(v === 'one')}
+                      options={[
+                        { value: 'each', label: 'En per låt' },
+                        { value: 'one', label: 'En samlad' },
+                      ]}
+                    />
+                  </div>
                 )}
               </div>
             )}

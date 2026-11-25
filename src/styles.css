@@ -2646,21 +2646,22 @@ label.btn.disabled {
 }
 
 .check-sub {
-  margin-left: 30px;
-  padding-bottom: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-left: 34px;
+  padding: 0 4px 12px;
   border-bottom: 1px solid var(--border);
 }
 
-.check-sub .check-item {
-  padding: 8px 4px;
-  border-bottom: none;
+.check-sub-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.check-sub-title {
-  margin: 8px 4px 0;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+.check-sub-row > span {
   color: var(--text-muted);
+  font-size: 0.9rem;
 }
