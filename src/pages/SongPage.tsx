@@ -78,6 +78,8 @@ const MIN_FONT = 12;
 const MAX_FONT = 44;
 /** Minsta textstorlek när texten krymps för att låten ska rymmas i två spalter */
 const FIT_MIN_FONT = 14;
+/** Kapot innan det stängdes av med ett tryck mitt på, per låt (och setlista), så länge appen är öppen */
+const capoBeforeOff = new Map<string, number>();
 
 function scrollPxPerSecond(level: number): number {
   return 4 + level * level * 1.2;
@@ -668,6 +670,18 @@ export function SongPage() {
     if (setlistItem?.capo !== undefined) setItem({ capo: undefined });
     if (next !== songCapo) void saveSong({ id: song.id, content: upsertDirective(song.content, 'capo', next ? String(next) : '') });
   };
+  // Tryck mitt på: stäng av kapot, nästa tryck sätter tillbaka det som var
+  const capoKey = inSetlist && setlistItem ? `${song.id}:${setlistItem.id}` : song.id;
+  const capoOff = capoBeforeOff.get(capoKey);
+  const toggleCapo = () => {
+    if (capo) {
+      capoBeforeOff.set(capoKey, capo);
+      setCapo(0);
+    } else if (capoOff) {
+      capoBeforeOff.delete(capoKey);
+      setCapo(capoOff);
+    }
+  };
   // Samma val för tonart och kapo; knappen visas vid båda så att det syns vad som gäller
   const scopeButton = setlistItem && (
     <button
@@ -903,7 +917,13 @@ export function SongPage() {
                 <button className="btn icon" aria-label="Kapo ner" disabled={capo <= 0} onClick={() => setCapo(capo - 1)}>
                   <Minus size={18} />
                 </button>
-                <span className="tool-value capo-value" onClick={() => setCapo(0)}>
+                <span
+                  className="tool-value capo-value"
+                  role="button"
+                  aria-label={capo ? 'Stäng av kapot' : capoOff ? `Sätt på kapo ${capoOff} igen` : 'Kapo'}
+                  title={capo ? 'Stäng av kapot' : capoOff ? `Sätt på kapo ${capoOff} igen` : undefined}
+                  onClick={toggleCapo}
+                >
                   {capo ? `Kapo ${capo}` : 'Kapo'}
                 </span>
                 <button className="btn icon" aria-label="Kapo upp" disabled={capo >= 11} onClick={() => setCapo(capo + 1)}>
