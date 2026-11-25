@@ -39,8 +39,10 @@ export function samePiece(prev: string, name: string): boolean {
 
 export interface GroupItem {
   fileName: string;
-  /** Sparas som fil (bara filer kan slås ihop) */
+  /** Sparas som fil (slås ihop med en fil ovanför) */
   isFile: boolean;
+  /** Text tolkad från en bild eller PDF (slås ihop med en sådan ovanför: texten läggs till) */
+  isText?: boolean;
   /** Valt för hand; undefined = förvalet */
   joinPrev?: boolean;
 }
@@ -54,7 +56,7 @@ export function joinsPrevious(items: GroupItem[]): boolean[] {
     const prev = items[i - 1];
     const page = filePageNumber(it.fileName);
     let join = false;
-    if (prev && it.isFile && prev.isFile) {
+    if (prev && ((it.isFile && prev.isFile) || (it.isText && prev.isText))) {
       // Förval: samma noter, och sidan finns inte redan (samma filer valda två gånger)
       join = it.joinPrev ?? (samePiece(prev.fileName, it.fileName) && !pages.has(page));
     }

@@ -46,6 +46,19 @@ describe('sidor av samma noter', () => {
     expect(groupHeads([items[0], { ...items[1], joinPrev: false }])).toEqual([0, 1]);
   });
 
+  it('tolkad text från bilder hör ihop med tolkad text, inte med filer', () => {
+    const items = [
+      { fileName: 'IMG_1201.jpg', isFile: false, isText: true },
+      { fileName: 'IMG_1202.jpg', isFile: false, isText: true, joinPrev: true },
+      { fileName: 'Låt.pdf', isFile: true, joinPrev: true },
+      { fileName: 'IMG_1203.jpg', isFile: false, isText: true, joinPrev: true },
+      { fileName: 'IMG_1204.jpg', isFile: false, isText: true },
+    ];
+    // Bildnamn är inga sidnummer: förvalet är egna låtar, och en fil hör aldrig till tolkad text
+    expect(joinsPrevious(items)).toEqual([false, true, false, false, false]);
+    expect(groupHeads(items)).toEqual([0, 0, 2, 3, 4]);
+  });
+
   it('sorterar filer efter sidnummer när alla har ett', () => {
     expect(sortByPage([file('A (2).pdf'), file('A (1).pdf')]).map((f) => f.name)).toEqual(['A (1).pdf', 'A (2).pdf']);
     // En fil utan nummer bland numrerade är första sidan (som appens egen export "A (sida 2).pdf")

@@ -20,7 +20,7 @@ import {
 } from '../lib/textImport';
 import { newId, songFiles, type Song, type SongAttachment } from '../lib/model';
 import { groupHeads, joinsPrevious, pieceTitle, samePieceTitles, sortByPage } from '../lib/fileGroups';
-import { canUseDocumentScanner, recognizeImageFiles, scanDocument } from '../services/ocr';
+import { canUseDocumentScanner, recognizeImageFile, scanDocument } from '../services/ocr';
 import { pickFiles, readFileAsDataUrl } from '../services/files';
 // Notläsningen (med Anthropics SDK) laddas först när den används
 import type { SheetSource } from '../services/omr';
@@ -109,6 +109,20 @@ function duplicateAction(item: ImportItem, dup: Duplicate | undefined, overlap =
 }
 
 const isFileItem = (it: ImportItem) => it.display === 'file' && !!it.original;
+/** Text och ackord tolkade från en bild eller PDF: kan höra till låten ovanför */
+const isTextPage = (it: ImportItem) => it.display !== 'file' && !!it.original;
+
+/** Texten i en sida som hör till låten ovanför: utan titel, artist och andra uppgifter om låten. */
+function pageBody(content: string): string {
+  return content
+    .split('\n')
+    .filter((line) => {
+      const m = /^\s*\{(\w+)\s*:/.exec(line);
+      return !(m && (FILE_META.includes(m[1]) || ['t', 'st'].includes(m[1])));
+    })
+    .join('\n')
+    .trim();
+}
 
 // Valet för PDF och bilder sparas under sessionen
 const importPrefs = { keepOriginals: true };
@@ -173,7 +187,8 @@ export function ImportPage() {
 
   const chooseFiles = async () => addFiles(await pickFiles({ accept: ACCEPT, multiple: true }));
 
-  const addFiles = async (picked: File[]) => {
+  /** interpret: bilder och PDF:er tolkas till text och ackord, oavsett valet överst (t.ex. foton) */
+  const addFiles = async (picked: File[], { interpret = false }: { interpret?: boolean } = {}) => {
     // En delad setlista (.songlist) importeras för sig
     const shared = picked.filter((f) => isSharedSetlistFile(f.name));
     if (shared.length) await receiveSharedText(await shared[0].text());
@@ -182,7 +197,7 @@ export function ImportPage() {
     setBusy({ message: 'Läser filer…' });
     try {
       const { items: found, skipped } = await expandFiles(files, (message, progress) => setBusy({ message, progress }), {
-        keepOriginals,
+        keepOriginals: interpret ? false : keepOriginals,
       });
       // I namnordning, så att sidor av samma noter ("Låt (1)", "Låt (2)") hamnar efter varandra
       const sorted = [...found].sort((a, b) => a.fileName.localeCompare(b.fileName, 'sv', { numeric: true }));
@@ -237,15 +252,16 @@ export function ImportPage() {
   };
 
   const scanImage = async (capture: boolean) => {
-    // Flera bilder blir sidor i samma låt, som när kameran skannar flera sidor
     const files = await pickFiles({ accept: 'image/*', capture, multiple: !capture });
     if (!files.length) return;
+    // Flera bilder hamnar i importlistan, där man väljer vilka som är samma låt
+    if (files.length > 1) return addFiles(files, { interpret: true });
     try {
       setBusy({ message: 'Förbereder…' });
-      const res = await recognizeImageFiles(files, (message, progress) => setBusy({ message, progress }));
+      const res = await recognizeImageFile(files[0], (message, progress) => setBusy({ message, progress }));
       setBusy(null);
       if (!res.content.trim()) {
-        toast(files.length > 1 ? 'Hittade ingen text i bilderna' : 'Hittade ingen text i bilden', { error: true });
+        toast('Hittade ingen text i bilden', { error: true });
         return;
       }
       openScanResult(res.content, res.imageDataUrl);
@@ -311,12 +327,23 @@ export function ImportPage() {
   };
 
   // Filer som hör till låten ovanför blir fler sidor i den (heads[i] = låtens första post)
-  const groupInput = items.map((it) => ({ fileName: it.fileName, isFile: isFileItem(it), joinPrev: it.joinPrev }));
+  const groupInput = items.map((it) => ({
+    fileName: it.fileName,
+    isFile: isFileItem(it),
+    isText: isTextPage(it),
+    joinPrev: it.joinPrev,
+  }));
   const joins = joinsPrevious(groupInput);
   const heads = groupHeads(groupInput);
   const groupFiles = (head: number): SongAttachment[] =>
     sortByPage(items.flatMap((it, i) => (heads[i] === head && it.original ? [it.original] : [])));
   const groupSize = (head: number) => heads.filter((h) => h === head).length;
+  // Tolkad text: sidorna som hör till låten läggs till efter dess text
+  const groupText = (head: number, text: (it: ImportItem) => string = contentFor): string => {
+    if (!isTextPage(items[head])) return text(items[head]);
+    const rest = items.filter((_, i) => i !== head && heads[i] === head).map((it) => pageBody(text(it)));
+    return [text(items[head]).trimEnd(), ...rest.filter(Boolean)].join('\n\n') + '\n';
+  };
 
   // Låtar som redan finns i biblioteket eller tidigare i importen
   const allDuplicates = useMemo(
@@ -379,7 +406,7 @@ export function ImportPage() {
       .filter(({ i }) => !joins[i] && actions[i] === 'add')
       .map(({ it, i }) => ({
         // Flera sidor: titeln utan sidnummer ("Låt (1)" → "Låt")
-        content: groupSize(i) > 1 ? retitle(contentFor(it), pieceTitle) : contentFor(it),
+        content: groupSize(i) > 1 ? retitle(groupText(i), pieceTitle) : contentFor(it),
         files: isFileItem(it) ? groupFiles(i) : [],
         ...resolveMeta(it, { tags, categoryId }),
       }));
@@ -400,7 +427,7 @@ export function ImportPage() {
         const keep = { tags: [...old.tags, ...meta.tags], categoryId: meta.categoryId || old.categoryId };
         // Ersätt: låtens text eller fil byts, taggar läggs till och kategorin behålls om ingen valts
         if (actions[i] === 'replace') {
-          const content = groupSize(i) > 1 ? retitle(savedContent(it), pieceTitle) : savedContent(it);
+          const content = groupSize(i) > 1 ? retitle(groupText(i, savedContent), pieceTitle) : savedContent(it);
           await saveSong({ id: old.id, content, files: isFileItem(it) ? groupFiles(i) : [], ...keep });
           replaced++;
         } else if (actions[i] === 'merge') {
@@ -538,7 +565,7 @@ export function ImportPage() {
                 {nativeScanner
                   ? 'Kameran hittar papperets kanter och rätar upp det. '
                   : ''}
-                Välj ett eller flera foton eller skärmbilder med text och ackord. Flera bilder blir sidor i samma låt. Texten tolkas direkt på enheten och öppnas i editorn.
+                Välj ett eller flera foton eller skärmbilder med text och ackord. Texten tolkas direkt på enheten. Ett foto öppnas i editorn; flera hamnar i importlistan, där du väljer vilka som är samma låt.
               </p>
             </Sheet>
           )}
@@ -710,7 +737,8 @@ export function ImportPage() {
                   duplicate={duplicates[i]}
                   action={actions[i]}
                   join={
-                    i > 0 && isFileItem(it) && isFileItem(items[i - 1])
+                    i > 0 &&
+                    ((isFileItem(it) && isFileItem(items[i - 1])) || (isTextPage(it) && isTextPage(items[i - 1])))
                       ? { joined: joins[i], onChange: (v) => setItems((cur) => cur.map((x) => (x.id === it.id ? { ...x, joinPrev: v } : x))) }
                       : undefined
                   }

@@ -46,31 +46,6 @@ export async function recognizeImageFile(file: File, onProgress?: ProgressFn): P
   return { content: toChordPro([page]), imageDataUrl };
 }
 
-/**
- * Flera bilder som sidor i samma låt (t.ex. skärmbilder av en lång låt), i den ordning de valdes.
- * Bilden som följer med är den första sidan.
- */
-export async function recognizeImageFiles(files: File[], onProgress?: ProgressFn): Promise<ScanResult> {
-  if (files.length === 1) return recognizeImageFile(files[0], onProgress);
-  const pages: OcrPage[] = [];
-  let imageDataUrl: string | undefined;
-  for (const [i, file] of files.entries()) {
-    const step = `Bild ${i + 1} av ${files.length}`;
-    onProgress?.(`${step}: förbereder…`, i / files.length);
-    const canvas = await loadImageToCanvas(file, 2600);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-    imageDataUrl ??= dataUrl;
-    // Bildens egen förlopp blir en del av hela förloppet
-    const page = await recognizeCanvas(
-      canvas,
-      (message, progress) => onProgress?.(`${step}: ${message.charAt(0).toLowerCase()}${message.slice(1)}`, (i + (progress ?? 0)) / files.length),
-      dataUrl,
-    );
-    pages.push(page);
-  }
-  return { content: toChordPro(pages), imageDataUrl };
-}
-
 /** Läser text från en uppritad bild (t.ex. en PDF-sida): Vision på iOS, Tesseract på webben. */
 export async function recognizeCanvas(
   canvas: HTMLCanvasElement,
