@@ -143,9 +143,9 @@
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<false/>
 	<key>NSCameraUsageDescription</key>
-	<string>SongList använder kameran för att skanna papper med sångtexter och ackord.</string>
+	<string>SongList använder kameran för att skanna papper med låttexter och ackord.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>SongList läser bilder du väljer för att tolka sångtexter och ackord.</string>
+	<string>SongList läser bilder du väljer för att tolka låttexter och ackord.</string>
 	<key>NSUbiquitousContainers</key>
 	<dict>
 		<key>iCloud.se.otimo.songlist</key>

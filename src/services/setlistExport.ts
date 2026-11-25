@@ -41,7 +41,7 @@ import { isCue, itemTitle, itemTranspose, liveItems, withItemCapo } from '../lib
 export type SetlistExportFormat = 'text' | 'pdf-annotated' | 'pdf-clean' | 'chordpro' | 'songlist';
 
 export const EXPORT_FORMATS: { value: SetlistExportFormat; label: string; description: string }[] = [
-  { value: 'text', label: 'Texter', description: 'Sångtexterna utan ackord (.txt)' },
+  { value: 'text', label: 'Texter', description: 'Låttexterna utan ackord (.txt)' },
   { value: 'pdf-annotated', label: 'PDF med anteckningar', description: 'Ackord ovanför texten, med lappar och det du ritat' },
   { value: 'pdf-clean', label: 'PDF utan anteckningar', description: 'Ackord ovanför texten, utan lappar och ritningar' },
   { value: 'chordpro', label: 'ChordPro', description: 'Låtarna som ChordPro, med ackorden i texten (.txt)' },
@@ -131,7 +131,7 @@ function songText(p: PreparedSong, number?: number): string {
     if (sec.label) out.push(sec.label.toUpperCase());
     for (const line of sec.lines) {
       if (line.type === 'lyrics') {
-        // Rader med bara ackord och taktsymboler är inte sångtext
+        // Rader med bara ackord och taktsymboler är inte låttext
         if (isChordRow(line.segments)) continue;
         const text = line.segments.map((s) => s.text).join('').replace(/\s+$/, '');
         if (text.trim()) out.push(text);

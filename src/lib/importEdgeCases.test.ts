@@ -37,7 +37,7 @@ describe('delar med rubrikrad', () => {
     ]);
   });
 
-  it('"Kör två" som sångtext är ingen rubrik, men "Intro two:" och "Last Outro:" är det', () => {
+  it('"Kör två" som låttext är ingen rubrik, men "Intro two:" och "Last Outro:" är det', () => {
     expect(parseHeader('Kör två')).toBeNull();
     expect(parseHeader('Last chorus')).toBeNull();
     expect(parseHeader('Kör två:')?.label).toBe('Kör 2');
@@ -86,7 +86,7 @@ describe('OCR', () => {
     expect(out).toContain('Mor[G]gon [C]dagg');
   });
 
-  it('sångtext som börjar med "Tag" eller "Slut" är ingen rubrik', () => {
+  it('låttext som börjar med "Tag" eller "Slut" är ingen rubrik', () => {
     const out = ocrToChordPro([
       page(
         line(word('G', 300, 100, 15), word('C', 500, 100, 15)),
@@ -157,7 +157,7 @@ describe('PDF:er med text', () => {
   });
 });
 
-describe('OCR av notblad och sångblad', () => {
+describe('OCR av notblad och låtblad', () => {
   it('rättar vanliga felläsningar på ackordrader och tar bort taktnummer', () => {
     const out = ocrToChordPro([
       page(

@@ -123,7 +123,7 @@ export function parseHeader(line: string): Header | null {
   if (m) {
     const [, prefix, word, num, times] = m;
     const kind = HEADER_WORDS.find(([re]) => re.test(word))?.[1];
-    // "Kör två" och "Last chorus" kan vara sångtext: med nummer i ord eller förled krävs kolon
+    // "Kör två" och "Last chorus" kan vara låttext: med nummer i ord eller förled krävs kolon
     const wordy = !!prefix || (!!num && !/^\d+$/.test(num));
     if (kind && (!wordy || /:\s*$/.test(trimmed))) {
       const rest = m[5].trim();

@@ -100,7 +100,7 @@ export interface ParsedSong {
   sections: Section[];
   /** Alla ackord i den ordning de förekommer (unika) */
   chords: string[];
-  /** Sant om sången skrivits med svensk notation (H) */
+  /** Sant om låten skrivits med svensk notation (H) */
   hNotation: boolean;
 }
 

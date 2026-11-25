@@ -555,7 +555,7 @@ export function ImportPage() {
                     <li>
                       <b>Fotografera notbladet</b>
                       {nativeScanner && ' (kameran hittar papperets kanter och rätar upp det)'} eller{' '}
-                      <b>välj bilder eller en PDF</b> som du redan har. Flera sidor av samma stycke kan läsas på en gång.
+                      <b>välj bilder eller en PDF</b> som du redan har. Flera sidor av samma låt kan läsas på en gång.
                     </li>
                     <li>
                       <b>Claude läser noterna</b>, oftast på en till ett par minuter. Kräver internet.
