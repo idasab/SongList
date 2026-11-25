@@ -136,7 +136,8 @@ function songText(p: PreparedSong, number?: number): string {
         const text = line.segments.map((s) => s.text).join('').replace(/\s+$/, '');
         if (text.trim()) out.push(text);
       } else if (line.type === 'comment') {
-        out.push(`(${line.text})`);
+        // Rubriker som "Intro" står som de är, kommentarer inom parentes
+        out.push(line.style === 'label' ? line.text : `(${line.text})`);
       } else if (line.type === 'pre') {
         out.push(line.text);
       } else {
@@ -307,7 +308,8 @@ function drawLine(
       c.y += M.commentGap * EM;
       ensureSpace(c, M.comment * EM);
       tops[ln] = virtualY(c);
-      setFont(doc, line.style === 'italic' ? 'italic' : 'bold', 0.85 * EM, MUTED);
+      // Rubriker (Intro, Solo …) och inramade kommentarer i fetstil, övriga kommentarer kursiva
+      setFont(doc, line.style === 'label' || line.style === 'box' ? 'bold' : 'italic', 0.85 * EM, MUTED);
       const rows = doc.splitTextToSize(line.text, maxX - x0) as string[];
       rows.forEach((r, i) => doc.text(r, x0, c.y + i * 0.85 * EM * 1.3, { baseline: 'top' }));
       c.y += Math.max(M.comment, rows.length * 0.85 * 1.3) * EM + M.commentGap * EM;

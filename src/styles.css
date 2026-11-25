@@ -1334,16 +1334,19 @@ textarea.note-text {
   height: 0.7em;
 }
 
+/* Kommentarer kursiva; rubriker som Intro och Solo (label) och inramade i fetstil */
 .comment {
   margin: 0.3em 0;
   font-size: 0.85em;
   color: var(--text-muted);
-  font-weight: 600;
-}
-
-.comment.italic {
   font-style: italic;
   font-weight: 400;
+}
+
+.comment.label,
+.comment.box {
+  font-style: normal;
+  font-weight: 600;
 }
 
 .comment.box {

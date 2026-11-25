@@ -529,7 +529,7 @@ Refräng
 
   it('Intro: med ackord blir kommentar och ackordrad', () => {
     const intro = p.sections.find((s) => s.lines.some((l) => l.type === 'comment'))!;
-    expect(intro.lines[0]).toEqual({ type: 'comment', text: 'Intro', style: 'normal' });
+    expect(intro.lines[0]).toEqual({ type: 'comment', text: 'Intro', style: 'label' });
     expect(p.chords.slice(0, 3)).toEqual(['G', 'C', 'D']);
   });
 

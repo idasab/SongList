@@ -296,7 +296,8 @@ export function assembleChordPro(rows: SourceRow[], opts: AssembleOptions = {}):
       closeEnv();
       const next = rows[i + 1];
       if (header.kind === 'comment') {
-        out.push(`{comment: ${header.label}}`);
+        // "[Något]" står kvar som rubrik; {comment: Intro} visas också som rubrik
+        out.push(/^\[.*\]$/.test(text) ? text : `{comment: ${header.label}}`);
       } else if (header.kind === 'chorus' && !header.trailing && (next === null || next === undefined)) {
         // "Refräng" ensamt följt av tomrad = upprepa refrängen
         out.push(header.label.toLowerCase().startsWith('ref') ? '{chorus}' : `{chorus: ${header.label}}`);

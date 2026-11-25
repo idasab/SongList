@@ -20,7 +20,8 @@ export interface Segment {
 
 export type Line =
   | { type: 'lyrics'; segments: Segment[] }
-  | { type: 'comment'; text: string; style: 'normal' | 'italic' | 'box' }
+  /** label = en rubrik som "Intro:" eller "Solo:" (inte en egen del), övriga är kommentarer */
+  | { type: 'comment'; text: string; style: 'normal' | 'italic' | 'box' | 'label' }
   | { type: 'empty' }
   | { type: 'pre'; text: string };
 
@@ -82,6 +83,12 @@ function midText(header: Header, line: string, prev: string | undefined, prevHea
   if (!p || prevHeader || /^[{#]/.test(p) || /^\(.*\)$/.test(p)) return false;
   const words = p.replace(/\[[^\]]*\]/g, ' ').split(/\s+/).filter(Boolean);
   return words.some((w) => /\p{L}/u.test(w) && !isChordLike(w) && !/^\(?(x\d+|\d+x)\)?$/i.test(w));
+}
+
+/** Kommentaren är namnet på en del, t.ex. "Intro", "Solo x2" eller "Outro (lugnt)". */
+function isLabelComment(text: string): boolean {
+  const h = parseHeader(text.trim());
+  return !!h && h.kind === 'comment' && !h.trailing && !text.trim().startsWith('[');
 }
 
 /** Ackorden efter en rubrik ("G C D" eller "[G] [C]") som en ChordPro-rad. */
@@ -327,7 +334,9 @@ export function parseChordPro(source: string): ParsedSong {
         continue;
       }
       if (dir.name === 'comment' || dir.name === 'comment_italic' || dir.name === 'comment_box') {
-        const style = dir.name === 'comment' ? 'normal' : dir.name === 'comment_italic' ? 'italic' : 'box';
+        // {comment: Intro} (som importen skriver rubriker) är en rubrik, inte en kommentar
+        const style =
+          dir.name === 'comment' ? (isLabelComment(dir.value) ? 'label' : 'normal') : dir.name === 'comment_italic' ? 'italic' : 'box';
         current.lines.push({ type: 'comment', text: dir.value, style });
         continue;
       }
@@ -376,7 +385,7 @@ export function parseChordPro(source: string): ParsedSong {
       if (header.kind === 'comment') {
         // "Outro:" efter en tomrad hör inte till delen ovanför
         if (current.implicit && current.lines[current.lines.length - 1]?.type === 'empty') closeSection();
-        current.lines.push({ type: 'comment', text: header.label, style: 'normal' });
+        current.lines.push({ type: 'comment', text: header.label, style: 'label' });
       } else {
         const next = lines[li + 1]?.trim();
         // "Refräng:" med kolon (eller "[Chorus]") följd av tomrad och text är en refräng med

@@ -40,3 +40,19 @@ describe('en rubrik kan inte ligga mitt i en text', () => {
     expect(out).toContain('{start_of_chorus: Refräng}');
   });
 });
+
+describe('rubriker och kommentarer skiljs åt', () => {
+  const styles = (src: string) =>
+    parseChordPro(src).sections.flatMap((s) => s.lines.flatMap((l) => (l.type === 'comment' ? [`${l.text}=${l.style}`] : [])));
+
+  it('rubriker som Intro och Solo är rubriker, kommentarer är kommentarer', () => {
+    const src = ['Intro:', '[G] [C]', '', '{comment: Intro x2}', '{comment: Spela lugnt här}', '(Upprepa)', '', 'Avslutning:', 'Text'].join('\n');
+    expect(styles(src)).toEqual(['Intro=label', 'Intro x2=label', 'Spela lugnt här=normal', 'Upprepa=normal', 'Avslutning=label']);
+  });
+
+  it('importen behåller [Något] som rubrik', () => {
+    const out = textToChordPro(['[Something else]', 'G', 'Text här'].join('\n'));
+    expect(out).toContain('[Something else]');
+    expect(styles(out)).toEqual(['Something else=label']);
+  });
+});
