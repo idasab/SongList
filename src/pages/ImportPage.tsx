@@ -145,6 +145,8 @@ export function ImportPage() {
   /** cancel: kan avbrytas; omr: notläsning (inget om språkdata för textigenkänning) */
   const [busy, setBusy] = useState<{ message: string; progress?: number; cancel?: () => void; omr?: boolean } | null>(null);
   const [readingNotes, setReadingNotes] = useState(false);
+  /** Välj foto: kameran eller bildbiblioteket */
+  const [choosingPhoto, setChoosingPhoto] = useState(false);
   /** Varför notläsningen misslyckades; visas i rutan, som är öppen under hela läsningen */
   const [notesError, setNotesError] = useState('');
   const apiKey = useStore((s) => s.settings.anthropicApiKey);
@@ -486,15 +488,10 @@ export function ImportPage() {
               <b>Klistra in text</b>
               <span>Från en webbsida, ett dokument eller ett mejl</span>
             </button>
-            <button className="big-action" onClick={nativeScanner ? scanWithCamera : () => scanImage(true)}>
+            <button className="big-action" onClick={() => setChoosingPhoto(true)}>
               <Camera size={22} />
-              <b>Skanna papper</b>
-              <span>Fotografera ett papper med text och ackord – texten tolkas direkt på enheten</span>
-            </button>
-            <button className="big-action" onClick={() => scanImage(false)}>
-              <ImageIcon size={22} />
-              <b>Läs från bild</b>
-              <span>Välj ett foto eller en skärmbild med text och ackord</span>
+              <b>Välj foto</b>
+              <span>Fotografera ett papper eller välj en bild med text och ackord – texten tolkas direkt på enheten</span>
             </button>
             <button
               className="big-action"
@@ -513,6 +510,37 @@ export function ImportPage() {
               </span>
             </button>
           </div>
+
+          {choosingPhoto && (
+            <Sheet title="Välj foto" onClose={() => setChoosingPhoto(false)}>
+              <div className="notes-actions">
+                <button
+                  className="btn primary"
+                  onClick={() => {
+                    setChoosingPhoto(false);
+                    void (nativeScanner ? scanWithCamera() : scanImage(true));
+                  }}
+                >
+                  <Camera size={18} /> Kameran
+                </button>
+                <button
+                  className="btn"
+                  onClick={() => {
+                    setChoosingPhoto(false);
+                    void scanImage(false);
+                  }}
+                >
+                  <ImageIcon size={18} /> Bildbiblioteket
+                </button>
+              </div>
+              <p className="muted small-text" style={{ marginBottom: 0 }}>
+                {nativeScanner
+                  ? 'Kameran hittar papperets kanter och rätar upp det. '
+                  : ''}
+                Ett foto eller en skärmbild med text och ackord. Texten tolkas direkt på enheten och öppnas i editorn.
+              </p>
+            </Sheet>
+          )}
 
           {readingNotes && (
             <Sheet
