@@ -35,6 +35,12 @@ const PDF_CHOICES: { value: SetlistExportFormat; label: string; description: str
   { value: 'pdf-clean', label: 'Utan anteckningar', description: 'Utan lappar och ritningar' },
 ];
 
+/** Fler låtar som PDF: en fil per låt eller alla i en */
+const FILE_CHOICES = [
+  { value: 'each', label: 'En PDF per låt', description: 'Varje låt blir en egen fil' },
+  { value: 'one', label: 'En samlad PDF', description: 'Alla låtar i en fil, efter ett försättsblad' },
+] as const;
+
 const TITLES: Record<ExportSource, string> = {
   setlist: 'Exportera setlistan',
   songs: 'Dela låtarna',
@@ -249,6 +255,7 @@ export function ExportSheet({ setlist, source = 'setlist', onClose }: { setlist:
             </label>
             {pdf && checked && (
               <div className="check-sub">
+                <div className="check-sub-title">Anteckningar</div>
                 {PDF_CHOICES.map((c) => (
                   <label key={c.value} className="check-item">
                     <input type="radio" name="export-pdf" checked={format === c.value} onChange={() => setFormat(c.value)} />
@@ -259,16 +266,23 @@ export function ExportSheet({ setlist, source = 'setlist', onClose }: { setlist:
                   </label>
                 ))}
                 {canCombine && (
-                  <div className="check-sub-row">
-                    <Segmented
-                      value={combined ? 'one' : 'each'}
-                      onChange={(v) => setCombined(v === 'one')}
-                      options={[
-                        { value: 'each', label: 'En fil per låt' },
-                        { value: 'one', label: 'En samlad PDF' },
-                      ]}
-                    />
-                  </div>
+                  <>
+                    <div className="check-sub-title">Filer</div>
+                    {FILE_CHOICES.map((c) => (
+                      <label key={c.value} className="check-item">
+                        <input
+                          type="radio"
+                          name="export-files"
+                          checked={combined === (c.value === 'one')}
+                          onChange={() => setCombined(c.value === 'one')}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600 }}>{c.label}</div>
+                          <div className="muted small-text">{c.description}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </>
                 )}
               </div>
             )}

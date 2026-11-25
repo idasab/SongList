@@ -2640,24 +2640,27 @@ label.btn.disabled {
     0 0 0 4px var(--text);
 }
 
-/* Exporten: andra steget under ett val (PDF med eller utan anteckningar) */
+/* Exporten: andra steget under ett val (PDF med eller utan anteckningar, en eller flera filer) */
 .check-item.open {
   border-bottom: none;
 }
 
 .check-sub {
   margin-left: 30px;
+  padding-bottom: 6px;
   border-bottom: 1px solid var(--border);
 }
 
 .check-sub .check-item {
   padding: 8px 4px;
-}
-
-.check-sub .check-item:last-of-type {
   border-bottom: none;
 }
 
-.check-sub-row {
-  padding: 4px 4px 12px;
+.check-sub-title {
+  margin: 8px 4px 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
