@@ -511,15 +511,15 @@ export function ImportPage() {
               <b>Välj filer</b>
               <span>ChordPro, textfiler, PDF, bilder eller en zip-fil med flera</span>
             </button>
-            <button className="big-action" onClick={() => setPasting(true)}>
-              <ClipboardPaste size={22} />
-              <b>Klistra in text</b>
-              <span>Från en webbsida, ett dokument eller ett mejl</span>
-            </button>
             <button className="big-action" onClick={() => setChoosingPhoto(true)}>
               <Camera size={22} />
               <b>Välj foto</b>
               <span>Fotografera ett papper eller välj en bild med text och ackord – texten tolkas direkt på enheten</span>
+            </button>
+            <button className="big-action" onClick={() => setPasting(true)}>
+              <ClipboardPaste size={22} />
+              <b>Klistra in text</b>
+              <span>Från en webbsida, ett dokument eller ett mejl</span>
             </button>
             <button
               className="big-action"
