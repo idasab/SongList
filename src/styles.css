@@ -1841,7 +1841,10 @@ textarea.note-text {
 .big-action {
   display: grid;
   grid-template-columns: auto 1fr;
-  align-items: center;
+  /* Korten är lika höga i raden, men texten börjar alltid uppifrån; ikonen står vid rubrikens
+     första rad även när rubriken bryts (t.ex. Läs in noter med Beta) */
+  align-items: start;
+  align-content: start;
   gap: 6px 10px;
   padding: 16px;
   border-radius: var(--radius);
