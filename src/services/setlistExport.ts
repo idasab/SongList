@@ -813,6 +813,10 @@ export async function buildPdfExport(
 
 // --- En fil per låt ---
 
+export function isPdfFormat(format: SetlistExportFormat): boolean {
+  return format === 'pdf-annotated' || format === 'pdf-clean';
+}
+
 export type ExportFile = FileToSave;
 
 /**
@@ -824,13 +828,19 @@ export async function buildSongFiles(
   setlist: Setlist,
   songs: Record<string, Song>,
   notation: Notation,
-  { numbered = true }: { numbered?: boolean } = {},
+  { numbered = true, combined = false }: { numbered?: boolean; combined?: boolean } = {},
 ): Promise<ExportFile[]> {
   // En enda fil med setlistan och alla låtar
   if (format === 'songlist') {
     return [{ name: `${fileBase(setlist)}${SHARE_EXTENSION}`, mime: 'application/json', blob: sharedFile(setlist, songs) }];
   }
   const list = prepare(setlist, songs, notation);
+  // En samlad PDF: försättsblad med låtlistan och sedan alla låtar (även bilder och PDF:er)
+  if (combined && isPdfFormat(format)) {
+    if (!list.length) return [];
+    const blob = await buildPdfExport(setlist, songs, notation, format === 'pdf-annotated');
+    return [{ name: `${fileBase(setlist)}.pdf`, mime: 'application/pdf', blob }];
+  }
   const width = String(list.length).length < 2 ? 2 : String(list.length).length;
   const files: ExportFile[] = [];
   // Två låtar med samma namn får inte skriva över varandras filer
@@ -878,14 +888,24 @@ export function mailSubject(setlist: Setlist): string {
 }
 
 /** Mejlets text: hela setlistan med titel och artist. */
-export function mailBody(setlist: Setlist, songs: Record<string, Song>, notation: Notation, format?: SetlistExportFormat): string {
+export function mailBody(
+  setlist: Setlist,
+  songs: Record<string, Song>,
+  notation: Notation,
+  format?: SetlistExportFormat,
+  combined = false,
+): string {
   const list = prepare(setlist, songs, notation);
   const out = setlistOverview(setlist, songs, list);
   out.push(
     '',
     format === 'songlist'
       ? 'Setlistan och alla låtar finns i den bifogade filen. Öppna den i SongList, så läggs setlistan till.'
-      : 'Varje låt finns bifogad som en egen fil.',
+      : combined && format && isPdfFormat(format)
+        ? 'Alla låtar finns i den bifogade PDF:en.'
+        : list.length === 1
+          ? 'Låten finns bifogad.'
+          : 'Varje låt finns bifogad som en egen fil.',
     '',
     'Skickat från SongList',
   );

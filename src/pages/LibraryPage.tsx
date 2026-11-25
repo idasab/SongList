@@ -389,7 +389,7 @@ export function LibraryPage() {
       )}
       {sheet === 'share' && (
         <ExportSheet
-          songs
+          source="songs"
           setlist={{
             id: 'valda',
             name: 'Låtar från SongList',
