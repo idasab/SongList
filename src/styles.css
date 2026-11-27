@@ -469,8 +469,24 @@ a {
   gap: 0 12px;
 }
 
-.grid-2.grid-meta {
-  grid-template-columns: 2fr 1fr 1fr 1fr;
+/* Redigera låt: tempo, takt och längd på en rad; kategorin för sig längst ned */
+.grid-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 12px;
+  max-width: 480px;
+}
+
+.field-category {
+  max-width: 320px;
+}
+
+/* Tonart och kapo delar en plats i rutnätet */
+.key-capo {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 0 12px;
 }
 
 .grid-4 {
@@ -480,7 +496,7 @@ a {
 }
 
 .grid-4.grid-5 {
-  grid-template-columns: 2fr 2fr 2fr 1fr 1fr;
+  grid-template-columns: 2fr 2fr 2fr 2fr;
 }
 
 @media (max-width: 640px) {
