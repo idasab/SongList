@@ -41,7 +41,7 @@ import { isCue, itemTitle, itemTranspose, liveItems, withItemCapo } from '../lib
 export type SetlistExportFormat = 'text' | 'pdf-annotated' | 'pdf-clean' | 'chordpro' | 'songlist';
 
 export const EXPORT_FORMATS: { value: SetlistExportFormat; label: string; description: string }[] = [
-  { value: 'text', label: 'Texter', description: 'Sångtexterna utan ackord (.txt)' },
+  { value: 'text', label: 'Texter', description: 'Låttexterna utan ackord (.txt)' },
   { value: 'pdf-annotated', label: 'PDF med anteckningar', description: 'Ackord ovanför texten, med lappar och det du ritat' },
   { value: 'pdf-clean', label: 'PDF utan anteckningar', description: 'Ackord ovanför texten, utan lappar och ritningar' },
   { value: 'chordpro', label: 'ChordPro', description: 'Låtarna som ChordPro, med ackorden i texten (.txt)' },
@@ -131,12 +131,13 @@ function songText(p: PreparedSong, number?: number): string {
     if (sec.label) out.push(sec.label.toUpperCase());
     for (const line of sec.lines) {
       if (line.type === 'lyrics') {
-        // Rader med bara ackord och taktsymboler är inte sångtext
+        // Rader med bara ackord och taktsymboler är inte låttext
         if (isChordRow(line.segments)) continue;
         const text = line.segments.map((s) => s.text).join('').replace(/\s+$/, '');
         if (text.trim()) out.push(text);
       } else if (line.type === 'comment') {
-        out.push(`(${line.text})`);
+        // Rubriker som "Intro" står som de är, kommentarer inom parentes
+        out.push(line.style === 'label' ? line.text : `(${line.text})`);
       } else if (line.type === 'pre') {
         out.push(line.text);
       } else {
@@ -307,7 +308,8 @@ function drawLine(
       c.y += M.commentGap * EM;
       ensureSpace(c, M.comment * EM);
       tops[ln] = virtualY(c);
-      setFont(doc, line.style === 'italic' ? 'italic' : 'bold', 0.85 * EM, MUTED);
+      // Rubriker (Intro, Solo …) och inramade kommentarer i fetstil, övriga kommentarer kursiva
+      setFont(doc, line.style === 'label' || line.style === 'box' ? 'bold' : 'italic', 0.85 * EM, MUTED);
       const rows = doc.splitTextToSize(line.text, maxX - x0) as string[];
       rows.forEach((r, i) => doc.text(r, x0, c.y + i * 0.85 * EM * 1.3, { baseline: 'top' }));
       c.y += Math.max(M.comment, rows.length * 0.85 * 1.3) * EM + M.commentGap * EM;
@@ -813,6 +815,10 @@ export async function buildPdfExport(
 
 // --- En fil per låt ---
 
+export function isPdfFormat(format: SetlistExportFormat): boolean {
+  return format === 'pdf-annotated' || format === 'pdf-clean';
+}
+
 export type ExportFile = FileToSave;
 
 /**
@@ -824,13 +830,19 @@ export async function buildSongFiles(
   setlist: Setlist,
   songs: Record<string, Song>,
   notation: Notation,
-  { numbered = true }: { numbered?: boolean } = {},
+  { numbered = true, combined = false }: { numbered?: boolean; combined?: boolean } = {},
 ): Promise<ExportFile[]> {
   // En enda fil med setlistan och alla låtar
   if (format === 'songlist') {
     return [{ name: `${fileBase(setlist)}${SHARE_EXTENSION}`, mime: 'application/json', blob: sharedFile(setlist, songs) }];
   }
   const list = prepare(setlist, songs, notation);
+  // En samlad PDF: försättsblad med låtlistan och sedan alla låtar (även bilder och PDF:er)
+  if (combined && isPdfFormat(format)) {
+    if (!list.length) return [];
+    const blob = await buildPdfExport(setlist, songs, notation, format === 'pdf-annotated');
+    return [{ name: `${fileBase(setlist)}.pdf`, mime: 'application/pdf', blob }];
+  }
   const width = String(list.length).length < 2 ? 2 : String(list.length).length;
   const files: ExportFile[] = [];
   // Två låtar med samma namn får inte skriva över varandras filer
@@ -878,14 +890,24 @@ export function mailSubject(setlist: Setlist): string {
 }
 
 /** Mejlets text: hela setlistan med titel och artist. */
-export function mailBody(setlist: Setlist, songs: Record<string, Song>, notation: Notation, format?: SetlistExportFormat): string {
+export function mailBody(
+  setlist: Setlist,
+  songs: Record<string, Song>,
+  notation: Notation,
+  format?: SetlistExportFormat,
+  combined = false,
+): string {
   const list = prepare(setlist, songs, notation);
   const out = setlistOverview(setlist, songs, list);
   out.push(
     '',
     format === 'songlist'
       ? 'Setlistan och alla låtar finns i den bifogade filen. Öppna den i SongList, så läggs setlistan till.'
-      : 'Varje låt finns bifogad som en egen fil.',
+      : combined && format && isPdfFormat(format)
+        ? 'Alla låtar finns i den bifogade PDF:en.'
+        : list.length === 1
+          ? 'Låten finns bifogad.'
+          : 'Varje låt finns bifogad som en egen fil.',
     '',
     'Skickat från SongList',
   );

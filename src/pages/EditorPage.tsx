@@ -56,7 +56,10 @@ export function EditorPage() {
   // Med noter är det noterna man vill se och rätta: Visa, med uppgifterna dolda från början
   const notesFirst = (!id && !!draft?.preview) || hasAbc(initial.current.content);
   const [view, setView] = useState<'edit' | 'preview'>(notesFirst ? 'preview' : 'edit');
-  const [showMeta, setShowMeta] = useState(!notesFirst);
+  // På telefonen tar uppgifterna för mycket plats: dolda från början när låten redan finns
+  const [showMeta, setShowMeta] = useState(
+    () => !notesFirst && !(existing && window.matchMedia('(max-width: 640px), (max-height: 500px)').matches),
+  );
   const [showImage, setShowImage] = useState(true);
   const [saved, setSaved] = useState(false);
   /** Så många halvtoner låten har transponerats här (sedan editorn öppnades) */
@@ -443,44 +446,36 @@ export function EditorPage() {
                 <span>Artist</span>
                 <DirectiveInput value={meta.artist ?? ''} onChange={(v) => setMeta('artist', v)} />
               </label>
-              <label className="field">
-                <span>Tonart</span>
-                <select className="select" value={meta.key ?? ''} onChange={(e) => setMeta('key', e.target.value)}>
-                  {!KEY_OPTIONS.includes(meta.key ?? '') && <option value={meta.key}>{meta.key}</option>}
-                  {KEY_OPTIONS.map((k) => (
-                    <option key={k} value={k}>
-                      {k || '–'}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {/* Kapo gäller ackordspel, inte noter */}
-              {!hasNotes && (
+              {/* Tonart och kapo delar en plats, så att de står på samma rad även på telefonen */}
+              <div className="key-capo">
                 <label className="field">
-                  <span>Kapo</span>
-                  <select className="select" value={meta.capo ?? ''} onChange={(e) => setMeta('capo', e.target.value === '0' ? '' : e.target.value)}>
-                    <option value="">–</option>
-                    {Array.from({ length: 11 }, (_, i) => i + 1).map((n) => (
-                      <option key={n} value={String(n)}>
-                        {n}
+                  <span>Tonart</span>
+                  <select className="select" value={meta.key ?? ''} onChange={(e) => setMeta('key', e.target.value)}>
+                    {!KEY_OPTIONS.includes(meta.key ?? '') && <option value={meta.key}>{meta.key}</option>}
+                    {KEY_OPTIONS.map((k) => (
+                      <option key={k} value={k}>
+                        {k || '–'}
                       </option>
                     ))}
                   </select>
                 </label>
-              )}
+                {/* Kapo gäller ackordspel, inte noter */}
+                {!hasNotes && (
+                  <label className="field">
+                    <span>Kapo</span>
+                    <select className="select" value={meta.capo ?? ''} onChange={(e) => setMeta('capo', e.target.value === '0' ? '' : e.target.value)}>
+                      <option value="">–</option>
+                      {Array.from({ length: 11 }, (_, i) => i + 1).map((n) => (
+                        <option key={n} value={String(n)}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
             </div>
-            <div className="grid-2 grid-meta">
-              <label className="field">
-                <span>Kategori</span>
-                <select className="select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-                  <option value="">Ingen</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            <div className="grid-meta">
               <div className="field">
                 <span className="field-label-row">
                   Tempo
@@ -501,6 +496,17 @@ export function EditorPage() {
               <span>Taggar</span>
               <TagInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
             </div>
+            <label className="field field-category">
+              <span>Kategori</span>
+              <select className="select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                <option value="">Ingen</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
           </>
         )}
         <div style={{ textAlign: 'center' }}>

@@ -123,7 +123,7 @@ export function parseHeader(line: string): Header | null {
   if (m) {
     const [, prefix, word, num, times] = m;
     const kind = HEADER_WORDS.find(([re]) => re.test(word))?.[1];
-    // "Kör två" och "Last chorus" kan vara sångtext: med nummer i ord eller förled krävs kolon
+    // "Kör två" och "Last chorus" kan vara låttext: med nummer i ord eller förled krävs kolon
     const wordy = !!prefix || (!!num && !/^\d+$/.test(num));
     if (kind && (!wordy || /:\s*$/.test(trimmed))) {
       const rest = m[5].trim();
@@ -270,6 +270,7 @@ export function assembleChordPro(rows: SourceRow[], opts: AssembleOptions = {}):
     }
   };
 
+  const headerRows = new Set<number>();
   for (; i < rows.length; i++) {
     const row = rows[i];
     if (row === null) {
@@ -284,12 +285,19 @@ export function assembleChordPro(rows: SourceRow[], opts: AssembleOptions = {}):
       continue;
     }
 
-    const header = chordFlags[i] ? null : parseHeader(text);
+    const candidate = chordFlags[i] ? null : parseHeader(text);
+    // En rubrik kan inte ligga mitt i en text: direkt under en textrad är "Sa hon:" en textrad
+    const prev = rows[i - 1];
+    const afterText =
+      i > 0 && !!prev && !chordFlags[i - 1] && !headerRows.has(i - 1) && !/^\{.*\}$|^\(.*\)$/.test(prev.text.trim());
+    const header = candidate && (candidate.trailing || /^\[.*\]$/.test(text) || !afterText) ? candidate : null;
+    if (header) headerRows.add(i);
     if (header) {
       closeEnv();
       const next = rows[i + 1];
       if (header.kind === 'comment') {
-        out.push(`{comment: ${header.label}}`);
+        // "[Något]" står kvar som rubrik; {comment: Intro} visas också som rubrik
+        out.push(/^\[.*\]$/.test(text) ? text : `{comment: ${header.label}}`);
       } else if (header.kind === 'chorus' && !header.trailing && (next === null || next === undefined)) {
         // "Refräng" ensamt följt av tomrad = upprepa refrängen
         out.push(header.label.toLowerCase().startsWith('ref') ? '{chorus}' : `{chorus: ${header.label}}`);

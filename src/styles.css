@@ -469,8 +469,24 @@ a {
   gap: 0 12px;
 }
 
-.grid-2.grid-meta {
-  grid-template-columns: 2fr 1fr 1fr 1fr;
+/* Redigera låt: tempo, takt och längd på en rad; kategorin för sig längst ned */
+.grid-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 12px;
+  max-width: 480px;
+}
+
+.field-category {
+  max-width: 320px;
+}
+
+/* Tonart och kapo delar en plats i rutnätet */
+.key-capo {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 0 12px;
 }
 
 .grid-4 {
@@ -480,7 +496,7 @@ a {
 }
 
 .grid-4.grid-5 {
-  grid-template-columns: 2fr 2fr 2fr 1fr 1fr;
+  grid-template-columns: 2fr 2fr 2fr 2fr;
 }
 
 @media (max-width: 640px) {
@@ -893,7 +909,7 @@ a {
   font-weight: 600;
 }
 
-/* --- Sångvisning --- */
+/* --- Låtvisning --- */
 
 .song-toolbar {
   display: flex;
@@ -1334,16 +1350,19 @@ textarea.note-text {
   height: 0.7em;
 }
 
+/* Kommentarer kursiva; rubriker som Intro och Solo (label) och inramade i fetstil */
 .comment {
   margin: 0.3em 0;
   font-size: 0.85em;
   color: var(--text-muted);
-  font-weight: 600;
-}
-
-.comment.italic {
   font-style: italic;
   font-weight: 400;
+}
+
+.comment.label,
+.comment.box {
+  font-style: normal;
+  font-weight: 600;
 }
 
 .comment.box {
@@ -1806,17 +1825,45 @@ textarea.note-text {
 
 /* --- Import --- */
 
+/* Importsidan mäts själv, så att korten följer ytan och inte hela fönstret */
+.import-page {
+  container-type: inline-size;
+}
+
+/* En, två eller fyra kolumner, aldrig tre (fyra kort) */
 .import-actions {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   margin-bottom: 16px;
+}
+
+@container (min-width: 440px) {
+  .import-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 680px) {
+  .import-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Liggande iPhone: två kolumner (pekskärm och låg höjd; iPad är aldrig så låg) */
+@media (pointer: coarse) and (max-height: 500px) {
+  .import-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .big-action {
   display: grid;
   grid-template-columns: auto 1fr;
-  align-items: center;
+  /* Korten är lika höga i raden, men texten börjar alltid uppifrån; ikonen står vid rubrikens
+     första rad även när rubriken bryts (t.ex. Läs in noter med Beta) */
+  align-items: start;
+  align-content: start;
   gap: 6px 10px;
   padding: 16px;
   border-radius: var(--radius);
@@ -2036,6 +2083,14 @@ textarea.note-text {
 .badge.review {
   background: var(--accent-soft);
   color: var(--accent-ink);
+}
+
+/* Funktioner som inte är helt klara, t.ex. Läs in noter */
+.badge.beta,
+.big-action .badge.beta {
+  margin-left: 6px;
+  font-size: calc(11px * var(--ui));
+  vertical-align: middle;
 }
 
 .progress {
@@ -2638,4 +2693,31 @@ label.btn.disabled {
   box-shadow:
     0 0 0 2px var(--surface),
     0 0 0 4px var(--text);
+}
+
+/* Exporten: andra steget under ett val (PDF med eller utan anteckningar, en eller flera filer) */
+.check-item.open {
+  border-bottom: none;
+}
+
+.check-sub {
+  /* Rubrikerna i en kolumn och knapparna direkt efter, i linje med varandra */
+  display: grid;
+  grid-template-columns: max-content max-content;
+  align-items: center;
+  /* Knapparna i sin egen bredd, inte utsträckta till den bredaste */
+  justify-items: start;
+  gap: 8px 16px;
+  margin-left: 34px;
+  padding: 0 4px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.check-sub-row {
+  display: contents;
+}
+
+.check-sub-row > span {
+  color: var(--text-muted);
+  font-size: 0.9rem;
 }

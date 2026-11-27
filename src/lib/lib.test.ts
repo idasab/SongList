@@ -470,6 +470,15 @@ describe('export av setlista', () => {
     expect(files[2].mime).toBe('image/png');
   });
 
+  it('en samlad PDF: en fil med setlistans namn, bara för PDF-format', async () => {
+    const pdf = await buildSongFiles('pdf-clean', setlist, songs, 'international', { combined: true });
+    expect(pdf.map((f) => f.name)).toEqual(['Spelning.pdf']);
+    expect(pdf[0].mime).toBe('application/pdf');
+    const cho = await buildSongFiles('chordpro', setlist, songs, 'international', { combined: true });
+    expect(cho).toHaveLength(2);
+    expect(mailBody(setlist, songs, 'international', 'pdf-clean', true)).toContain('Alla låtar finns i den bifogade PDF:en.');
+  });
+
   it('kontrollerar e-postadresser', () => {
     expect(isValidEmail('namn@exempel.se')).toBe(true);
     expect(isValidEmail('namn@exempel')).toBe(false);
@@ -520,7 +529,7 @@ Refräng
 
   it('Intro: med ackord blir kommentar och ackordrad', () => {
     const intro = p.sections.find((s) => s.lines.some((l) => l.type === 'comment'))!;
-    expect(intro.lines[0]).toEqual({ type: 'comment', text: 'Intro', style: 'normal' });
+    expect(intro.lines[0]).toEqual({ type: 'comment', text: 'Intro', style: 'label' });
     expect(p.chords.slice(0, 3)).toEqual(['G', 'C', 'D']);
   });
 

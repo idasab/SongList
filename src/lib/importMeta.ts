@@ -102,7 +102,7 @@ export function extractImportMeta(chordPro: string): string {
     }
     // En rad som upprepar titeln (bara om låten har ackord; annars kan det vara en textrad)
     if (title && firstChord >= 0 && text.toLowerCase() === title.toLowerCase()) return;
-    // Utan titel: första raden i huvudet, om låten har ackord (annars kan det vara sångtext)
+    // Utan titel: första raden i huvudet, om låten har ackord (annars kan det vara låttext)
     if (!title && firstChord >= 0) {
       title = text;
       return;

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Camera, Check, ChevronDown, ChevronUp, ClipboardPaste, FileMusic, FileUp, Image as ImageIcon, Lightbulb, Loader2, Pencil, X } from 'lucide-react';
 import { SongRenderer } from '../components/SongRenderer';
@@ -14,13 +14,14 @@ import {
   isChordProFileName,
   looksLikeChordPro,
   suggestSourceFont,
+  availableSourceFonts,
   textToChordPro,
   titleFromFileName,
   type SourceFont,
 } from '../lib/textImport';
 import { newId, songFiles, type Song, type SongAttachment } from '../lib/model';
 import { groupHeads, joinsPrevious, pieceTitle, samePieceTitles, sortByPage } from '../lib/fileGroups';
-import { canUseDocumentScanner, recognizeImageFile, scanDocument } from '../services/ocr';
+import { canUseDocumentScanner, recognizeImageFile } from '../services/ocr';
 import { pickFiles, readFileAsDataUrl } from '../services/files';
 // Notläsningen (med Anthropics SDK) laddas först när den används
 import type { SheetSource } from '../services/omr';
@@ -40,6 +41,10 @@ import {
 import { formatDate } from './SetlistsPage';
 
 type ImportItem = ImportQueueItem;
+
+/** Typsnitten på enheten, mätta en gång */
+let fontsOnDevice: SourceFont[] | undefined;
+const sourceFonts = () => (fontsOnDevice ??= availableSourceFonts());
 
 /** Kategori och taggar som en låt får vid import. */
 function resolveMeta(it: ImportItem, common: { tags: string[]; categoryId: string }) {
@@ -109,6 +114,20 @@ function duplicateAction(item: ImportItem, dup: Duplicate | undefined, overlap =
 }
 
 const isFileItem = (it: ImportItem) => it.display === 'file' && !!it.original;
+/** Text och ackord tolkade från en bild eller PDF: kan höra till låten ovanför */
+const isTextPage = (it: ImportItem) => it.display !== 'file' && !!it.original;
+
+/** Texten i en sida som hör till låten ovanför: utan titel, artist och andra uppgifter om låten. */
+function pageBody(content: string): string {
+  return content
+    .split('\n')
+    .filter((line) => {
+      const m = /^\s*\{(\w+)\s*:/.exec(line);
+      return !(m && (FILE_META.includes(m[1]) || ['t', 'st'].includes(m[1])));
+    })
+    .join('\n')
+    .trim();
+}
 
 // Valet för PDF och bilder sparas under sessionen
 const importPrefs = { keepOriginals: true };
@@ -145,6 +164,8 @@ export function ImportPage() {
   /** cancel: kan avbrytas; omr: notläsning (inget om språkdata för textigenkänning) */
   const [busy, setBusy] = useState<{ message: string; progress?: number; cancel?: () => void; omr?: boolean } | null>(null);
   const [readingNotes, setReadingNotes] = useState(false);
+  /** Välj foto: kameran eller bildbiblioteket */
+  const [choosingPhoto, setChoosingPhoto] = useState(false);
   /** Varför notläsningen misslyckades; visas i rutan, som är öppen under hela läsningen */
   const [notesError, setNotesError] = useState('');
   const apiKey = useStore((s) => s.settings.anthropicApiKey);
@@ -165,12 +186,17 @@ export function ImportPage() {
     // Filändelsen avgör först (.cho, .chopro …), annars innehållet
     const kind =
       extra.kind ?? (isChordProFileName(fileName) || looksLikeChordPro(raw) ? 'chordpro' : 'text');
-    const font = kind === 'text' ? suggestSourceFont(raw, canvasMeasure) : 'monospace';
+    const font = kind === 'text' ? suggestSourceFont(raw, canvasMeasure, sourceFonts()) : 'monospace';
     setItems((cur) => [...cur, { id: newId(), fileName, raw, font, ...extra, kind }]);
   };
 
-  const chooseFiles = async () => {
-    const picked = await pickFiles({ accept: ACCEPT, multiple: true });
+  const chooseFiles = async () => addFiles(await pickFiles({ accept: ACCEPT, multiple: true }));
+
+  /**
+   * interpret: bilder och PDF:er tolkas till text och ackord, oavsett valet överst (t.ex. foton).
+   * oneSong: förvalt är att alla hör till samma låt (sidor av ett papper); kan ändras i listan.
+   */
+  const addFiles = async (picked: File[], { interpret = false, oneSong = false }: { interpret?: boolean; oneSong?: boolean } = {}) => {
     // En delad setlista (.songlist) importeras för sig
     const shared = picked.filter((f) => isSharedSetlistFile(f.name));
     if (shared.length) await receiveSharedText(await shared[0].text());
@@ -179,12 +205,13 @@ export function ImportPage() {
     setBusy({ message: 'Läser filer…' });
     try {
       const { items: found, skipped } = await expandFiles(files, (message, progress) => setBusy({ message, progress }), {
-        keepOriginals,
+        keepOriginals: interpret ? false : keepOriginals,
       });
       // I namnordning, så att sidor av samma noter ("Låt (1)", "Låt (2)") hamnar efter varandra
       const sorted = [...found].sort((a, b) => a.fileName.localeCompare(b.fileName, 'sv', { numeric: true }));
-      for (const c of sorted)
+      for (const [k, c] of sorted.entries())
         addRaw(c.fileName, c.raw, {
+          joinPrev: oneSong && k > 0 ? true : undefined,
           kind: c.kind,
           origin: c.origin,
           imageDataUrl: c.imageDataUrl,
@@ -198,6 +225,8 @@ export function ImportPage() {
         toast(`${skipped.length} ${skipped.length === 1 ? 'fil' : 'filer'} hoppades över: ${list}${skipped.length > 3 ? ' …' : ''}`, {
           error: true,
         });
+      } else if (found.length > 1 && oneSong) {
+        toast(`${found.length} sidor lades till i listan som en låt. Du kan dela upp dem i listan.`);
       } else if (found.length > 1) {
         toast(`${found.length} låtar lades till i listan`);
       }
@@ -208,29 +237,51 @@ export function ImportPage() {
     }
   };
 
+  // Filer som öppnats med SongList från en annan app (t.ex. Mail eller Filer)
+  const incoming = useIncomingShare((s) => s.files.length);
+  useEffect(() => {
+    if (!incoming) return;
+    const files = useIncomingShare.getState().takeFiles();
+    if (files.length) void addFiles(files);
+  }, [incoming]);
+
   const openScanResult = (content: string, imageDataUrl?: string) => {
     setDraft({ content, imageDataUrl, tags });
     navigate('/new');
   };
 
+  // Kameran (iOS): alla sidor som bilder. En sida öppnas i editorn; flera hamnar i importlistan
+  // som samma låt, och kan delas upp där.
   const scanWithCamera = async () => {
     try {
-      setBusy({ message: 'Läser text…' });
-      const res = await scanDocument();
-      setBusy(null);
-      if (res) openScanResult(res.content, res.imageDataUrl);
+      const res = await SongListNative.scanDocument({ readText: false });
+      const images = res.images ?? [];
+      if (!images.length) return;
+      const files = await Promise.all(
+        images.map(
+          async (url, i) =>
+            new File([await (await fetch(url)).blob()], `Sida ${String(i + 1).padStart(2, '0')}.jpg`, { type: 'image/jpeg' }),
+        ),
+      );
+      await readPhotos(files);
     } catch (e) {
       setBusy(null);
-      toastError(e, 'Skanningen misslyckades');
+      if ((e as { code?: string }).code !== 'CANCELLED') toastError(e, 'Kameran kunde inte läsa sidorna');
     }
   };
 
   const scanImage = async (capture: boolean) => {
-    const [file] = await pickFiles({ accept: 'image/*', capture });
-    if (!file) return;
+    const files = await pickFiles({ accept: 'image/*', capture, multiple: !capture });
+    await readPhotos(files);
+  };
+
+  // Ett foto öppnas i editorn. Flera hamnar i importlistan som samma låt, och kan delas upp där.
+  const readPhotos = async (files: File[]) => {
+    if (!files.length) return;
+    if (files.length > 1) return addFiles(files, { interpret: true, oneSong: true });
     try {
       setBusy({ message: 'Förbereder…' });
-      const res = await recognizeImageFile(file, (message, progress) => setBusy({ message, progress }));
+      const res = await recognizeImageFile(files[0], (message, progress) => setBusy({ message, progress }));
       setBusy(null);
       if (!res.content.trim()) {
         toast('Hittade ingen text i bilden', { error: true });
@@ -299,12 +350,23 @@ export function ImportPage() {
   };
 
   // Filer som hör till låten ovanför blir fler sidor i den (heads[i] = låtens första post)
-  const groupInput = items.map((it) => ({ fileName: it.fileName, isFile: isFileItem(it), joinPrev: it.joinPrev }));
+  const groupInput = items.map((it) => ({
+    fileName: it.fileName,
+    isFile: isFileItem(it),
+    isText: isTextPage(it),
+    joinPrev: it.joinPrev,
+  }));
   const joins = joinsPrevious(groupInput);
   const heads = groupHeads(groupInput);
   const groupFiles = (head: number): SongAttachment[] =>
     sortByPage(items.flatMap((it, i) => (heads[i] === head && it.original ? [it.original] : [])));
   const groupSize = (head: number) => heads.filter((h) => h === head).length;
+  // Tolkad text: sidorna som hör till låten läggs till efter dess text
+  const groupText = (head: number, text: (it: ImportItem) => string = contentFor): string => {
+    if (!isTextPage(items[head])) return text(items[head]);
+    const rest = items.filter((_, i) => i !== head && heads[i] === head).map((it) => pageBody(text(it)));
+    return [text(items[head]).trimEnd(), ...rest.filter(Boolean)].join('\n\n') + '\n';
+  };
 
   // Låtar som redan finns i biblioteket eller tidigare i importen
   const allDuplicates = useMemo(
@@ -367,7 +429,7 @@ export function ImportPage() {
       .filter(({ i }) => !joins[i] && actions[i] === 'add')
       .map(({ it, i }) => ({
         // Flera sidor: titeln utan sidnummer ("Låt (1)" → "Låt")
-        content: groupSize(i) > 1 ? retitle(contentFor(it), pieceTitle) : contentFor(it),
+        content: groupSize(i) > 1 ? retitle(groupText(i), pieceTitle) : contentFor(it),
         files: isFileItem(it) ? groupFiles(i) : [],
         ...resolveMeta(it, { tags, categoryId }),
       }));
@@ -388,7 +450,7 @@ export function ImportPage() {
         const keep = { tags: [...old.tags, ...meta.tags], categoryId: meta.categoryId || old.categoryId };
         // Ersätt: låtens text eller fil byts, taggar läggs till och kategorin behålls om ingen valts
         if (actions[i] === 'replace') {
-          const content = groupSize(i) > 1 ? retitle(savedContent(it), pieceTitle) : savedContent(it);
+          const content = groupSize(i) > 1 ? retitle(groupText(i, savedContent), pieceTitle) : savedContent(it);
           await saveSong({ id: old.id, content, files: isFileItem(it) ? groupFiles(i) : [], ...keep });
           replaced++;
         } else if (actions[i] === 'merge') {
@@ -447,7 +509,7 @@ export function ImportPage() {
     <div className="screen">
       <Header title="Importera" />
       <div className="content narrow" ref={scrollRef}>
-        <div>
+        <div className="import-page">
           <div className="toggle-row choice-row import-mode">
             <div>
               <div>PDF och bilder</div>
@@ -470,22 +532,17 @@ export function ImportPage() {
             <button className="big-action" onClick={chooseFiles}>
               <FileUp size={22} />
               <b>Välj filer</b>
-              <span>ChordPro, textfiler, PDF, bilder eller en zip-fil med flera</span>
+              <span>ChordPro, textfiler, PDF, bilder eller en zip-fil med flera.</span>
+            </button>
+            <button className="big-action" onClick={() => setChoosingPhoto(true)}>
+              <Camera size={22} />
+              <b>Välj foto</b>
+              <span>Fotografera ett papper eller välj en bild med text och ackord – texten tolkas direkt på enheten.</span>
             </button>
             <button className="big-action" onClick={() => setPasting(true)}>
               <ClipboardPaste size={22} />
               <b>Klistra in text</b>
-              <span>Från en webbsida, ett dokument eller ett mejl</span>
-            </button>
-            <button className="big-action" onClick={nativeScanner ? scanWithCamera : () => scanImage(true)}>
-              <Camera size={22} />
-              <b>Skanna papper</b>
-              <span>Fotografera ett papper med text och ackord – texten tolkas direkt på enheten</span>
-            </button>
-            <button className="big-action" onClick={() => scanImage(false)}>
-              <ImageIcon size={22} />
-              <b>Läs från bild</b>
-              <span>Välj ett foto eller en skärmbild med text och ackord</span>
+              <span>Från en webbsida, ett dokument eller ett mejl.</span>
             </button>
             <button
               className="big-action"
@@ -495,17 +552,51 @@ export function ImportPage() {
               }}
             >
               <FileMusic size={22} />
-              <b>Läs in noter</b>
-              <span>Fotografera noter, även flerstämmiga, och få dem som noter som går att transponera och spela upp</span>
-              <span>
-                <i>OBS! Detta är en grov inläsning, justeringar kan behövas.</i>
-              </span>
+              <b>
+                Läs in noter <span className="badge review beta">Beta</span>
+              </b>
+              <span>Fotografera noter, även flerstämmiga, och få dem som noter som går att transponera och spela upp.</span>
             </button>
           </div>
 
+          {choosingPhoto && (
+            <Sheet title="Välj foto" onClose={() => setChoosingPhoto(false)}>
+              <div className="notes-actions">
+                <button
+                  className="btn primary"
+                  onClick={() => {
+                    setChoosingPhoto(false);
+                    void (nativeScanner ? scanWithCamera() : scanImage(true));
+                  }}
+                >
+                  <Camera size={18} /> Kameran
+                </button>
+                <button
+                  className="btn"
+                  onClick={() => {
+                    setChoosingPhoto(false);
+                    void scanImage(false);
+                  }}
+                >
+                  <ImageIcon size={18} /> Bildbiblioteket
+                </button>
+              </div>
+              <p className="muted small-text" style={{ marginBottom: 0 }}>
+                {nativeScanner
+                  ? 'Kameran hittar papperets kanter och rätar upp det. '
+                  : ''}
+                Ett eller flera foton eller skärmbilder med text och ackord. Texten tolkas direkt på enheten. Ett foto öppnas i editorn; flera hamnar i importlistan som samma låt, och där kan du dela upp dem i flera låtar.
+              </p>
+            </Sheet>
+          )}
+
           {readingNotes && (
             <Sheet
-              title="Läs in noter"
+              title={
+                <>
+                  Läs in noter <span className="badge review beta">Beta</span>
+                </>
+              }
               onClose={() => {
                 // Att stänga rutan avbryter läsningen
                 busy?.cancel?.();
@@ -546,7 +637,7 @@ export function ImportPage() {
                     <li>
                       <b>Fotografera notbladet</b>
                       {nativeScanner && ' (kameran hittar papperets kanter och rätar upp det)'} eller{' '}
-                      <b>välj bilder eller en PDF</b> som du redan har. Flera sidor av samma stycke kan läsas på en gång.
+                      <b>välj bilder eller en PDF</b> som du redan har. Flera sidor av samma låt kan läsas på en gång.
                     </li>
                     <li>
                       <b>Claude läser noterna</b>, oftast på en till ett par minuter. Kräver internet.
@@ -666,7 +757,8 @@ export function ImportPage() {
                   duplicate={duplicates[i]}
                   action={actions[i]}
                   join={
-                    i > 0 && isFileItem(it) && isFileItem(items[i - 1])
+                    i > 0 &&
+                    ((isFileItem(it) && isFileItem(items[i - 1])) || (isTextPage(it) && isTextPage(items[i - 1])))
                       ? { joined: joins[i], onChange: (v) => setItems((cur) => cur.map((x) => (x.id === it.id ? { ...x, joinPrev: v } : x))) }
                       : undefined
                   }
@@ -707,8 +799,9 @@ export function ImportPage() {
               </b>
               <p style={{ margin: '6px 0 0' }}>
                 Textfiler där ackorden står på raden ovanför texten konverteras automatiskt till ChordPro. Om filen
-                skrevs i ett typsnitt utan fast teckenbredd (t.ex. Arial i Word) kan du välja typsnittet, så hamnar
-                ackorden där de syntes i originalet – inte efter antal mellanslag.
+                skrevs i ett typsnitt utan fast teckenbredd (t.ex. Arial i Word) försöker appen känna igen typsnittet,
+                så att ackorden hamnar där de syntes i originalet – inte efter antal mellanslag. Blev det fel kan du
+                välja ett annat typsnitt för filen i listan.
               </p>
             </div>
           )}

@@ -158,35 +158,76 @@ export function hasChordLines(text: string): boolean {
 }
 
 /**
- * Försöker gissa om texten skrevs med proportionellt typsnitt. I proportionella typsnitt är
- * mellanslag smala, så ackorden står "för långt till höger" om man räknar tecken – ofta
- * efter textradens slut.
+ * Typsnitten i listan som finns på enheten. Ett typsnitt som saknas mäts med ett
+ * ersättningstypsnitt och går då inte att skilja från andra.
  */
-export function suggestSourceFont(text: string, measureFor: (f: SourceFont) => Measure): SourceFont {
-  const overflow = (measure: Measure) => {
-    const rows = textToRows(text, measure);
-    let total = 0;
-    let over = 0;
-    for (let i = 0; i < rows.length - 1; i++) {
-      const r = rows[i];
-      const n = rows[i + 1];
-      if (!r || !n) continue;
-      if (!isChordLine(r.tokens.map((t) => t.text))) continue;
-      if (isChordLine(n.tokens.map((t) => t.text))) continue;
-      const end = n.charX[n.text.length];
-      for (const t of r.tokens) {
-        if (!isChordToken(t.text)) continue;
-        total++;
-        if (t.x > end + n.spaceWidth) over++;
-      }
-    }
-    return { total, over };
+export function availableSourceFonts(): SourceFont[] {
+  const all = SOURCE_FONTS.map((f) => f.value);
+  if (typeof document === 'undefined') return ['monospace'];
+  const ctx = document.createElement('canvas').getContext('2d');
+  if (!ctx) return ['monospace'];
+  const sample = 'mmmmmmmmmmlli WAV ÅÄÖ 0123456789';
+  const width = (font: string) => {
+    ctx.font = `100px ${font}`;
+    return ctx.measureText(sample).width;
   };
-  const mono = overflow(monospaceMeasure);
-  if (mono.total === 0) return 'monospace';
-  const prop = overflow(measureFor('Arial'));
-  if (mono.over >= 2 && mono.over > mono.total * 0.1 && prop.over < mono.over) return 'Arial';
-  return 'monospace';
+  const mono = width('monospace');
+  const serif = width('serif');
+  // Finns typsnittet blir bredden en annan än ersättningstypsnittets med minst ett av dem
+  return all.filter((f) => f === 'monospace' || width(`"${f}", monospace`) !== mono || width(`"${f}", serif`) !== serif);
+}
+
+/**
+ * Hur väl ackorden passar över texten med en mätfunktion: andelen ackord som står precis över
+ * början av ett ord, minus ackord som hamnar efter textradens slut (de räknas dubbelt).
+ */
+export function chordFit(text: string, measure: Measure): { chords: number; score: number } {
+  const rows = textToRows(text, measure);
+  let chords = 0;
+  let onWord = 0;
+  let over = 0;
+  for (let i = 0; i < rows.length - 1; i++) {
+    const r = rows[i];
+    const n = rows[i + 1];
+    if (!r || !n) continue;
+    if (!isChordLine(r.tokens.map((t) => t.text))) continue;
+    if (isChordLine(n.tokens.map((t) => t.text))) continue;
+    const end = n.charX[n.text.length];
+    // Ett halvt mellanslag åt vardera hållet räknas som samma ställe
+    const near = n.spaceWidth / 2;
+    for (const t of r.tokens) {
+      if (!isChordToken(t.text)) continue;
+      chords++;
+      if (t.x > end + n.spaceWidth) over++;
+      else if (n.tokens.some((w) => Math.abs(w.x - t.x) <= near)) onWord++;
+    }
+  }
+  return { chords, score: chords ? (onWord - 2 * over) / chords : 0 };
+}
+
+/**
+ * Gissar typsnittet som texten skrevs med: det där ackorden passar bäst över texten. Ett
+ * proportionellt typsnitt väljs bara när det passar klart bättre än fast teckenbredd; lika bra
+ * typsnitt (t.ex. Arial och Helvetica) avgörs av ordningen i listan.
+ */
+export function suggestSourceFont(
+  text: string,
+  measureFor: (f: SourceFont) => Measure,
+  fonts: SourceFont[] = SOURCE_FONTS.map((f) => f.value),
+): SourceFont {
+  const mono = chordFit(text, monospaceMeasure);
+  if (mono.chords === 0) return 'monospace';
+  let best: SourceFont = 'monospace';
+  let bestScore = mono.score;
+  for (const font of fonts) {
+    if (font === 'monospace') continue;
+    const { score } = chordFit(text, measureFor(font));
+    if (score > bestScore + 1e-9) {
+      best = font;
+      bestScore = score;
+    }
+  }
+  return best !== 'monospace' && bestScore >= mono.score + 0.15 ? best : 'monospace';
 }
 
 /** Gissar om text utan BOM är UTF-16 genom att räkna nollbyte på jämna och udda platser. */

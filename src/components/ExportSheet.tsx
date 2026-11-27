@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Segmented, Sheet, toast, toastError } from './ui';
 import { EmailInput, rememberEmails } from './EmailInput';
-import { EXPORT_FORMATS, buildSongFiles, mailBody, mailSubject, type ExportFile, type SetlistExportFormat } from '../services/setlistExport';
+import { EXPORT_FORMATS, buildSongFiles, isPdfFormat, mailBody, mailSubject, type ExportFile, type SetlistExportFormat } from '../services/setlistExport';
 import {
   canComposeNatively,
   composeNativeMail,
@@ -26,12 +26,23 @@ const MAIL_MESSAGES: Record<MailOutcome, string> = {
 /** Webben: färdiga filer som väntar på ett nytt tryck (Safari delar bara direkt från ett tryck) */
 type Prepared = { kind: 'mail'; req: MailRequest } | { kind: 'files'; files: ExportFile[] };
 
+/** Vad som exporteras: en setlista, låtar som valts i biblioteket eller en enda låt */
+export type ExportSource = 'setlist' | 'songs' | 'song';
+
+const TITLES: Record<ExportSource, string> = {
+  setlist: 'Exportera setlistan',
+  songs: 'Dela låtarna',
+  song: 'Dela låten',
+};
+
 /**
- * Exportera eller dela låtar, en fil per låt (låtar som är bilder eller PDF:er blir originalfilen).
- * Låtarna är en setlista, eller (songs) låtar som valts i biblioteket: då numreras filerna inte
- * och det finns ingen SongList-fil.
+ * Exportera eller dela låtar, en fil per låt (låtar som är bilder eller PDF:er blir originalfilen),
+ * eller alla i en samlad PDF. Låtarna är en setlista, eller låtar som valts i biblioteket eller en
+ * enda låt (då i setlist, med setlistans transponering när låten visas i en): de numreras inte och
+ * det finns ingen SongList-fil.
  */
-export function ExportSheet({ setlist, songs: selection, onClose }: { setlist: Setlist; songs?: boolean; onClose: () => void }) {
+export function ExportSheet({ setlist, source = 'setlist', onClose }: { setlist: Setlist; source?: ExportSource; onClose: () => void }) {
+  const selection = source !== 'setlist';
   const songs = useStore((s) => s.songs);
   const notation = useStore((s) => s.settings.notation);
   const recentEmails = useStore((s) => s.settings.recentEmails);
@@ -41,7 +52,13 @@ export function ExportSheet({ setlist, songs: selection, onClose }: { setlist: S
   const [to, setTo] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [prepared, setPrepared] = useState<Prepared | null>(null);
-  const formats = selection ? EXPORT_FORMATS.filter((f) => f.value !== 'songlist') : EXPORT_FORMATS;
+  // En samlad PDF i stället för en fil per låt (inte för en enda låt)
+  const [combinedChoice, setCombined] = useState(false);
+  const canCombine = source !== 'song' && isPdfFormat(format);
+  const combined = canCombine && combinedChoice;
+  // En enda låt som är en bild eller PDF delas alltid som originalfilen: formatet spelar ingen roll
+  const singleFile = source === 'song' && !!songs[setlist.items[0]?.songId]?.attachment;
+  const formats = singleFile ? [] : selection ? EXPORT_FORMATS.filter((f) => f.value !== 'songlist') : EXPORT_FORMATS;
 
   const finish = (outcome: MailOutcome) => {
     if (MAIL_MESSAGES[outcome]) toast(MAIL_MESSAGES[outcome]);
@@ -57,7 +74,7 @@ export function ExportSheet({ setlist, songs: selection, onClose }: { setlist: S
   const run = async () => {
     setBusy(true);
     try {
-      const files = await buildSongFiles(format, setlist, songs, notation, { numbered: !selection });
+      const files = await buildSongFiles(format, setlist, songs, notation, { numbered: !selection, combined });
       if (!files.length) {
         toast('Det finns inga låtar att exportera', { error: true });
         return;
@@ -70,7 +87,7 @@ export function ExportSheet({ setlist, songs: selection, onClose }: { setlist: S
         return;
       }
       void updateSettings({ recentEmails: rememberEmails(recentEmails, to) });
-      const req: MailRequest = { to, subject: mailSubject(setlist), body: mailBody(setlist, songs, notation, format), files };
+      const req: MailRequest = { to, subject: mailSubject(setlist), body: mailBody(setlist, songs, notation, format, combined), files };
       if (canComposeNatively()) finish(await composeNativeMail(req));
       else setPrepared({ kind: 'mail', req });
     } catch (e) {
@@ -102,7 +119,11 @@ export function ExportSheet({ setlist, songs: selection, onClose }: { setlist: S
         }
       >
         <p style={{ marginTop: 0 }}>
-          {files.length} {files.length === 1 ? 'fil' : 'filer'}, en för varje låt.
+          {combined
+            ? 'En PDF med alla låtar.'
+            : files.length === 1
+              ? '1 fil.'
+              : `${files.length} filer, en för varje låt.`}
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <button className="btn primary" onClick={() => webAction(async () => ((await shareFilesInBrowser(files)) ? 'shared' : 'cancelled'))}>
@@ -159,7 +180,7 @@ export function ExportSheet({ setlist, songs: selection, onClose }: { setlist: S
             Ladda ner filerna och öppna mejl
           </button>
           <p className="muted small-text" style={{ margin: 0 }}>
-            Mejlet öppnas med mottagare, ämne och {selection ? 'låtarna' : 'setlistan'} ifyllda. Bifoga sedan de nedladdade filerna.
+            Mejlet öppnas med mottagare, ämne och {selection ? (source === 'song' ? 'låten' : 'låtarna') : 'setlistan'} ifyllda. Bifoga sedan de nedladdade filerna.
           </p>
         </div>
       </Sheet>
@@ -170,7 +191,7 @@ export function ExportSheet({ setlist, songs: selection, onClose }: { setlist: S
 
   return (
     <Sheet
-      title={selection ? 'Dela låtarna' : 'Exportera setlistan'}
+      title={TITLES[source]}
       onClose={onClose}
       footer={
         <>
@@ -201,21 +222,70 @@ export function ExportSheet({ setlist, songs: selection, onClose }: { setlist: S
         </div>
       )}
 
-      {formats.map((f) => (
-        <label key={f.value} className="check-item">
-          <input type="radio" name="export-format" checked={format === f.value} onChange={() => setFormat(f.value)} />
-          <div>
-            <div style={{ fontWeight: 600 }}>{f.label}</div>
-            <div className="muted small-text">{f.description}</div>
+      {formats.map((f) => {
+        // PDF är ett val, med eller utan anteckningar som andra steg
+        if (f.value === 'pdf-clean') return null;
+        const pdf = f.value === 'pdf-annotated';
+        const checked = pdf ? isPdfFormat(format) : format === f.value;
+        return (
+          <div key={f.value}>
+            <label className={`check-item${pdf && checked ? ' open' : ''}`}>
+              <input
+                type="radio"
+                name="export-format"
+                checked={checked}
+                onChange={() => setFormat(pdf ? 'pdf-annotated' : f.value)}
+              />
+              <div>
+                <div style={{ fontWeight: 600 }}>{pdf ? 'PDF' : f.label}</div>
+                <div className="muted small-text">{pdf ? 'Ackord ovanför texten, som i appen' : f.description}</div>
+              </div>
+            </label>
+            {pdf && checked && (
+              <div className="check-sub">
+                <div className="check-sub-row">
+                  <span>Anteckningar</span>
+                  <Segmented
+                    value={format}
+                    onChange={setFormat}
+                    options={[
+                      { value: 'pdf-annotated', label: 'Med' },
+                      { value: 'pdf-clean', label: 'Utan' },
+                    ]}
+                  />
+                </div>
+                {canCombine && (
+                  <div className="check-sub-row">
+                    <span>Filer</span>
+                    <Segmented
+                      value={combined ? 'one' : 'each'}
+                      onChange={(v) => setCombined(v === 'one')}
+                      options={[
+                        { value: 'each', label: 'En per låt' },
+                        { value: 'one', label: 'En samlad' },
+                      ]}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        </label>
-      ))}
+        );
+      })}
       <p className="muted small-text" style={{ marginBottom: 0 }}>
         {format === 'songlist'
           ? 'Setlistan och alla låtar i en fil. '
-          : 'Varje låt blir en egen fil. Låtar som är sparade som bild eller PDF följer med som originalfilen. '}
-        {mode === 'mail' && format !== 'songlist' ? `${selection ? 'Låtarna' : 'Hela setlistan'} med titel och artist står i mejlet. ` : ''}
-        Ackorden exporteras med låtarnas transponering, precis som de visas i appen.
+          : combined
+            ? `Alla låtar i en PDF, efter ett försättsblad med ${selection ? 'låtlistan' : 'setlistan'}. Låtar som är sparade som bild eller PDF kommer med som sidor. `
+            : singleFile
+              ? 'Låten är sparad som bild eller PDF och delas som originalfilen. '
+              : source === 'song'
+                ? ''
+                : 'Varje låt blir en egen fil. Låtar som är sparade som bild eller PDF följer med som originalfilen. '}
+        {mode === 'mail' && format !== 'songlist' && source !== 'song'
+          ? `${selection ? 'Låtarna' : 'Hela setlistan'} med titel och artist står i mejlet. `
+          : ''}
+        {!singleFile && 'Ackorden exporteras med låtarnas transponering, precis som de visas i appen.'}
       </p>
     </Sheet>
   );

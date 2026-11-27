@@ -246,7 +246,7 @@ export function normalizeTranspose(n: number): number {
   return t;
 }
 
-/** Ser om en sång använder svensk H-notation (innehåller H-ackord). */
+/** Ser om en låt använder svensk H-notation (innehåller H-ackord). */
 export function detectHNotation(chords: string[]): boolean {
   return chords.some((c) => /^[(\[]*H(?![a-z]{2})/.test(c) && parseChord(c) !== null);
 }
