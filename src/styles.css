@@ -1222,11 +1222,10 @@ textarea.note-text {
   margin: 0 0 1.7em;
 }
 
+/* Rubriker med vanliga bokstäver (långa rubriker blir otydliga i versaler), som Intro och Solo */
 .sec-label {
-  font-size: 0.75em;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: 0.85em;
+  font-weight: 600;
   color: var(--text-muted);
   margin-bottom: 0.1em;
 }

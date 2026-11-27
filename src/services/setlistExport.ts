@@ -128,7 +128,7 @@ function songText(p: PreparedSong, number?: number): string {
     return tidy(out.join('\n'));
   }
   for (const sec of p.parsed.sections) {
-    if (sec.label) out.push(sec.label.toUpperCase());
+    if (sec.label) out.push(sec.label);
     for (const line of sec.lines) {
       if (line.type === 'lyrics') {
         // Rader med bara ackord och taktsymboler är inte låttext
@@ -424,8 +424,8 @@ function drawSection(c: PdfCtx, sec: Section, start: number, ctx: ChordContext, 
   if (sec.label) {
     ensureSpace(c, M.label * EM + M.plain * EM);
     tops[ln] = virtualY(c);
-    setFont(doc, 'bold', 0.75 * EM, MUTED);
-    doc.text(sec.label.toUpperCase() + (sec.isRepeat ? '  (upprepning)' : ''), x0, c.y, { baseline: 'top' });
+    setFont(doc, 'bold', 0.85 * EM, MUTED);
+    doc.text(sec.label + (sec.isRepeat ? '  (upprepning)' : ''), x0, c.y, { baseline: 'top' });
     c.y += M.label * EM;
     ln++;
     if (barTop.page !== c.page) {
@@ -456,8 +456,8 @@ async function drawAbcSection(c: PdfCtx, sec: Section, start: number, p: Prepare
   if (sec.label) {
     ensureSpace(c, M.label * EM + M.plain * EM);
     tops[ln] = virtualY(c);
-    setFont(doc, 'bold', 0.75 * EM, MUTED);
-    doc.text(sec.label.toUpperCase(), MARGIN_X, c.y, { baseline: 'top' });
+    setFont(doc, 'bold', 0.85 * EM, MUTED);
+    doc.text(sec.label, MARGIN_X, c.y, { baseline: 'top' });
     c.y += M.label * EM;
     ln++;
   }

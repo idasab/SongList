@@ -442,7 +442,7 @@ describe('export av setlista', () => {
   it('ren text utan ackord', () => {
     const t = buildTextExport(setlist, songs, 'international');
     expect(t).toContain('1. a – Test');
-    expect(t).toContain('VERS 1');
+    expect(t).toContain('\nVers 1\n');
     expect(t).toContain('Solen går upp');
     expect(t).not.toContain('[G]');
   });
